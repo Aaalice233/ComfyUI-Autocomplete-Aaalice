@@ -1,12 +1,25 @@
 # ComfyUI-Autocomplete-Plus
 
-## English •  [日本語](docs/README_jp.md)
+## English • [简体中文](docs/README_zh.md) • [日本語](docs/README_jp.md)
 
 ![ss01](https://github.com/user-attachments/assets/45dd0598-4c04-49ab-85f7-33fc9026921c)
 
 ## Overview
 
 **ComfyUI-Autocomplete-Plus** is a custom node that provides multiple input assistance features for any text area in [ComfyUI](https://github.com/comfyanonymous/ComfyUI). Currently, it supports Danbooru and e621 tags (e621 does not support some functions).
+
+## Why This Fork?
+
+This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plus](https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus). The upstream project has been inactive for an extended period and has not kept pace with recent ComfyUI frontend changes. This fork was created to keep the extension usable on current ComfyUI versions and to continue compatibility fixes.
+
+### Differences from Upstream
+
+- Ongoing maintenance for current ComfyUI frontend versions.
+- Support for text inputs rendered by **Nodes 2.0**.
+- Support for promoted text inputs on **subgraph nodes**, including resolving the original inner node and widget.
+- Simplified Chinese documentation and continued localization maintenance.
+
+The original project remains the foundation of this fork. Existing features and credits are preserved wherever possible.
 
 ## Features
 
@@ -20,6 +33,7 @@
     - Natural tag insertion that considers cursor position and existing text.
 - **:art:Design**: Supports both light and dark themes of ComfyUI.
 - **:pencil:User CSV**: Allows users to add their own CSV files for autocomplete suggestions.
+- **:twisted_rightwards_arrows:Modern ComfyUI Compatibility**: Supports Nodes 2.0 and promoted text inputs on subgraph nodes.
 
 ## Installation
 
@@ -31,7 +45,7 @@
 ### Manual
 
 1. Clone or copy this repository into the `custom_nodes` folder of ComfyUI.
-   `git clone https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus.git`
+   `git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git`
 2. Launch ComfyUI. The necessary CSV data will be automatically downloaded from HuggingFace upon startup.
 
 ## Autocomplete

@@ -1,5 +1,7 @@
 # ComfyUI-Autocomplete-Plus
 
+## [English](../README.md) • [简体中文](README_zh.md) • 日本語
+
 ![ss01](https://github.com/user-attachments/assets/45dd0598-4c04-49ab-85f7-33fc9026921c)
 
 ## 概要
@@ -29,7 +31,7 @@
 ### マニュアル
 
 1. このリポジトリを ComfyUI の `custom_nodes` フォルダにクローンまたはコピーします  
-    `git clone https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus.git`
+    `git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git`
 2. ComfyUI を起動します。起動時に必要な CSV データが HuggingFace から自動的にダウンロードされます
 
 ## オートコンプリート

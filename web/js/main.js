@@ -7,7 +7,7 @@ import { TagSource, loadDataAsync } from "./data.js";
 import { AutocompleteEventHandler } from "./autocomplete.js";
 import { RelatedTagsEventHandler } from "./related-tags.js";
 import { AutoFormatterEventHandler } from "./auto-formatter.js";
-import { NodeInfo } from "./node-info.js";
+import { NodeInfo, VUE_NODE_TEXTAREA_SELECTOR, getVueTextareaNodeInfo } from "./node-info.js";
 
 // --- Constants ---
 const id = "AutocompletePlus";
@@ -26,7 +26,11 @@ const attachedElementNodeInfoMap = new WeakMap(); // Map to track attached eleme
 function initializeEventHandlers() {
     // Function to attach listeners
     function attachListeners(element, nodeInfo) {
-        if (attachedElementNodeInfoMap.has(element)) return; // Prevent double attachment
+        if (element.tagName !== 'TEXTAREA' || element.readOnly) return;
+        if (attachedElementNodeInfoMap.has(element)) {
+            if (nodeInfo) attachedElementNodeInfoMap.set(element, nodeInfo);
+            return;
+        }
 
         element.addEventListener('input', handleInput);
         element.addEventListener('focus', handleFocus);
@@ -68,42 +72,43 @@ function initializeEventHandlers() {
         };
     }
 
+    const targetSelectors = [VUE_NODE_TEXTAREA_SELECTOR];
     if (settingValues._useFallbackAttachmentForEventListener) {
-        // Fallback and for dynamically added elements not caught by widget override: MutationObserver
-        const targetSelectors = [
-            '.comfy-multiline-input',
-            // Add other selectors if needed
-        ];
-
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        targetSelectors.forEach(selector => {
-                            // Check if the added node itself matches or contains matching elements
-                            if (node.matches(selector)) {
-                                attachListeners(node, new NodeInfo('Fallback', 'unknown'));
-                            } else {
-                                node.querySelectorAll(selector).forEach(el => {
-                                    attachListeners(el, new NodeInfo('Fallback', 'unknown'));
-                                });
-                            }
-                        });
-                    }
-                });
-            });
-        });
-
-        // Initial scan for existing elements
-        targetSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => {
-                attachListeners(el, new NodeInfo('Fallback', 'unknown'));
-            });
-        });
-
-        // Start observing the document body for changes
-        observer.observe(document.body, { childList: true, subtree: true });
+        targetSelectors.push('.comfy-multiline-input');
     }
+
+    function attachDiscoveredTextarea(element) {
+        const nodeInfo = getVueTextareaNodeInfo(element, app.canvas?.graph)
+            ?? new NodeInfo('Fallback', 'unknown');
+        attachListeners(element, nodeInfo);
+    }
+
+    // Nodes 2.0 renders a separate Vue textarea instead of the widget's DOM element.
+    // Observe those elements so regular and promoted subgraph inputs use the same handlers.
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    targetSelectors.forEach(selector => {
+                        // Check if the added node itself matches or contains matching elements
+                        if (node.matches(selector)) {
+                            attachDiscoveredTextarea(node);
+                        } else {
+                            node.querySelectorAll(selector).forEach(attachDiscoveredTextarea);
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    // Initial scan for existing elements
+    targetSelectors.forEach(selector => {
+        document.querySelectorAll(selector).forEach(attachDiscoveredTextarea);
+    });
+
+    // Start observing the document body for changes
+    observer.observe(document.body, { childList: true, subtree: true });
 
     /**
      * Get NodeInfo for the event target element
@@ -111,7 +116,8 @@ function initializeEventHandlers() {
      * @returns {Object|null} NodeInfo object or undefined if not found
      */
     function getNodeInfo(event) {
-        const nodeInfo = attachedElementNodeInfoMap.get(event.target);
+        const nodeInfo = getVueTextareaNodeInfo(event.target, app.canvas?.graph)
+            ?? attachedElementNodeInfoMap.get(event.target);
         if (!nodeInfo) {
             console.warn('[Autocomplete-Plus] Node info not found for element in ', event.target);
             return null;
@@ -292,7 +298,8 @@ app.registerExtension({
                     return;
                 }
 
-                const nodeInfo = attachedElementNodeInfoMap.get(activeEl);
+                const nodeInfo = getVueTextareaNodeInfo(activeEl, app.canvas?.graph)
+                    ?? attachedElementNodeInfoMap.get(activeEl);
                 if (!nodeInfo) {
                     console.warn('[Autocomplete-Plus] Format command: Node info not found for focused textarea');
                     // Use fallback NodeInfo
