@@ -559,6 +559,38 @@ export function getCurrentTagRange(text, cursorPos) {
 }
 
 /**
+ * Gets the tag at the cursor, or the preceding tag when the cursor is placed
+ * after a trailing comma and optional horizontal whitespace.
+ * @param {string} text The entire text content.
+ * @param {number} cursorPos The current cursor position in the text.
+ * @returns {{start: number, end: number, tag: string} | null}
+ */
+export function getTagRangeForRelatedTags(text, cursorPos) {
+    const currentTagRange = getCurrentTagRange(text, cursorPos);
+    if (currentTagRange) {
+        return currentTagRange;
+    }
+
+    if (!text || typeof text !== 'string') {
+        return null;
+    }
+
+    let lookupPos = Math.min(Math.max(cursorPos, 0), text.length);
+
+    // A trailing comma still belongs to the completed tag before it. Do not
+    // cross line breaks, because a new line represents a new prompt segment.
+    while (lookupPos > 0 && (text[lookupPos - 1] === ' ' || text[lookupPos - 1] === '\t')) {
+        lookupPos--;
+    }
+
+    if (lookupPos > 0 && text[lookupPos - 1] === ',') {
+        return getCurrentTagRange(text, lookupPos - 1);
+    }
+
+    return null;
+}
+
+/**
  * Adds weight to a lora tag if it doesn't already have one.
  * @param {string} loraTag The model tag string (e.g., "<lora:my_style01>"
  * @param {number} defaultWeight The default weight to add if not present

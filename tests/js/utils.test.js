@@ -4,6 +4,7 @@ import {
     normalizeTagToSearch,
     normalizeTagToInsert,
     getCurrentTagRange,
+    getTagRangeForRelatedTags,
     findAllTagPositions,
     addWeightToLora
 } from '../../web/js/utils.js';
@@ -355,6 +356,28 @@ describe('getCurrentTagRange', () => {
         const result = getCurrentTagRange(text, cursorPos);
         expect(result).not.toBeNull();
         expect(result.tag).toBe('from behind');
+    });
+});
+
+describe('getTagRangeForRelatedTags', () => {
+    test('should return the current partial tag at the cursor', () => {
+        const text = '1girl, 1g';
+        expect(getTagRangeForRelatedTags(text, text.length)).toEqual({ start: 7, end: 9, tag: '1g' });
+    });
+
+    test('should return the previous tag after a trailing comma', () => {
+        const text = '1girl,';
+        expect(getTagRangeForRelatedTags(text, text.length)).toEqual({ start: 0, end: 5, tag: '1girl' });
+    });
+
+    test('should return the previous tag after a trailing comma and spaces', () => {
+        const text = '1girl,   ';
+        expect(getTagRangeForRelatedTags(text, text.length)).toEqual({ start: 0, end: 5, tag: '1girl' });
+    });
+
+    test('should not cross a line break', () => {
+        const text = '1girl,\n';
+        expect(getTagRangeForRelatedTags(text, text.length)).toBeNull();
     });
 });
 

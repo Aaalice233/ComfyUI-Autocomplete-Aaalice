@@ -17,6 +17,7 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 - Ongoing maintenance for current ComfyUI frontend versions.
 - Support for text inputs rendered by **Nodes 2.0**.
 - Support for promoted text inputs on **subgraph nodes**, including resolving the original inner node and widget.
+- Improved autocomplete/related-tags handoff: partial tags reopen autocomplete, accepting a completed tag immediately shows related tags, trailing commas resolve to the preceding tag, and empty related-tags panels no longer replace useful completion suggestions.
 - Simplified Chinese documentation and continued localization maintenance.
 
 The original project remains the foundation of this fork. Existing features and credits are preserved wherever possible.
@@ -64,6 +65,11 @@ When you type in a text input area, tags that partially match the text are displ
 ![ss02](https://github.com/user-attachments/assets/854571cd-01eb-4e92-a118-2303bec0b175)
 
 When you select any tag in a text input area, a list of highly related tags is displayed. You can insert a tag by clicking it or by selecting it with the up/down arrow keys and then pressing Enter or Tab. The UI's position and size are automatically adjusted based on the text area being edited.
+
+- Clicking a partial tag reopens autocomplete. Related tags are shown only when the clicked tag has co-occurrence data, so an empty related-tags panel does not replace useful completion suggestions.
+- Accepting an autocomplete suggestion with Enter, Tab, or a mouse click immediately displays related tags for the completed tag when co-occurrence data is available.
+- Clicking immediately after a tag's trailing comma or the spaces following that comma displays the related tags for the preceding tag.
+- When clicking switches between autocomplete and related tags, opening one closes the other (except when the related-tags panel is pinned).
 
 - The display position is primarily at the bottom of the text area and automatically adjusts vertically based on available space.
   - You can switch between vertical and horizontal display positions using the "↕️|↔️" button in the header.

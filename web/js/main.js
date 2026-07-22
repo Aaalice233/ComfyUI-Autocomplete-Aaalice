@@ -4,7 +4,7 @@ import { ComfyWidgets } from "/scripts/widgets.js";
 import { settingValues } from "./settings.js";
 import { loadCSS } from "./utils.js";
 import { TagSource, loadDataAsync } from "./data.js";
-import { AutocompleteEventHandler } from "./autocomplete.js";
+import { AUTOCOMPLETE_TAG_INSERTED_EVENT, AutocompleteEventHandler } from "./autocomplete.js";
 import { RelatedTagsEventHandler } from "./related-tags.js";
 import { AutoFormatterEventHandler } from "./auto-formatter.js";
 import { NodeInfo, VUE_NODE_TEXTAREA_SELECTOR, getVueTextareaNodeInfo } from "./node-info.js";
@@ -37,6 +37,7 @@ function initializeEventHandlers() {
         element.addEventListener('blur', handleBlur);
         element.addEventListener('keydown', handleKeyDown);
         element.addEventListener('keyup', handleKeyUp);
+        element.addEventListener(AUTOCOMPLETE_TAG_INSERTED_EVENT, handleAutocompleteTagInserted);
         // element.addEventListener('keypress', handleKeyPress); // keypress is deprecated
 
         // Add new event listeners for related tags feature
@@ -148,7 +149,10 @@ function initializeEventHandlers() {
 
     function handleKeyDown(event) {
         autocompleteEventHandler.handleKeyDown(event);
-        relatedTagsEventHandler.handleKeyDown(event);
+        const relatedTagsShown = relatedTagsEventHandler.handleKeyDown(event);
+        if (relatedTagsShown) {
+            autocompleteEventHandler.hide();
+        }
         autoFormatterEventHandler.handleKeyDown(event);
     }
 
@@ -165,9 +169,18 @@ function initializeEventHandlers() {
     }
 
     function handleClick(event) {
-        autocompleteEventHandler.handleClick(event);
-        relatedTagsEventHandler.handleClick(event);
+        const relatedTagsShown = relatedTagsEventHandler.handleClick(event);
+        if (relatedTagsShown) {
+            autocompleteEventHandler.hide();
+        } else {
+            autocompleteEventHandler.handleClick(event);
+        }
         autoFormatterEventHandler.handleClick(event);
+    }
+
+    function handleAutocompleteTagInserted(event) {
+        autocompleteEventHandler.hide();
+        relatedTagsEventHandler.handleAutocompleteTagInserted(event);
     }
 }
 

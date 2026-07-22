@@ -1,4 +1,5 @@
 import {
+    AUTOCOMPLETE_TAG_INSERTED_EVENT,
     __test__
 } from "../../web/js/autocomplete.js";
 import {
@@ -383,6 +384,18 @@ describe('Autocomplete Functions', () => {
             insertTagToTextArea(textarea, tagData);
 
             expect(textarea.value).toBe(':d, ');
+        });
+
+        test('should notify handlers after autocomplete insertion finishes', async () => {
+            const textarea = createMockTextarea('1g', 2);
+            const dispatchedEventTypes = [];
+            textarea.dispatchEvent = event => dispatchedEventTypes.push(event.type);
+
+            insertTagToTextArea(textarea, { tag: '1girl', source: 'danbooru' });
+
+            expect(dispatchedEventTypes).not.toContain(AUTOCOMPLETE_TAG_INSERTED_EVENT);
+            await Promise.resolve();
+            expect(dispatchedEventTypes).toContain(AUTOCOMPLETE_TAG_INSERTED_EVENT);
         });
 
     });

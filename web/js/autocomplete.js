@@ -23,6 +23,8 @@ import {
 } from './utils.js';
 import { settingValues } from './settings.js';
 
+export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
+
 // --- Autocomplete Logic ---
 
 /**
@@ -380,6 +382,12 @@ function insertTagToTextArea(inputElement, tagDataToInsert) {
         // Trigger input event manually as a fallback
         inputElement.dispatchEvent(new Event('input', { bubbles: true }));
     }
+
+    // Let the related-tags handler display co-occurrences for the completed
+    // tag regardless of whether it was accepted by keyboard or mouse.
+    queueMicrotask(() => {
+        inputElement.dispatchEvent(new Event(AUTOCOMPLETE_TAG_INSERTED_EVENT));
+    });
 }
 
 // --- Autocomplete UI Class ---
@@ -1102,6 +1110,19 @@ export class AutocompleteEventHandler {
      * @returns 
      */
     handleClick(event) {
+        if (!settingValues.enabled) {
+            this.autocompleteUI.hide();
+            return false;
+        }
+
+        this.autocompleteUI.updateDisplay(event.target);
+        return this.autocompleteUI.isVisible();
+    }
+
+    hide() {
+        clearTimeout(this._debounceTimer);
+        this._debounceTimer = null;
+        this.autocompleteUI.hide();
     }
 }
 

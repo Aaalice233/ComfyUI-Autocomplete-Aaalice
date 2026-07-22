@@ -3,7 +3,7 @@ import { settingValues } from './settings.js';
 import {
     extractTagsFromTextArea,
     findAllTagPositions,
-    getCurrentTagRange,
+    getTagRangeForRelatedTags,
     getScrollbarWidth,
     getViewportMargin,
     isLongText,
@@ -51,8 +51,9 @@ export function getTagFromCursorPosition(inputElement) {
     const text = inputElement.value;
     const cursorPos = inputElement.selectionStart;
 
-    // Use getCurrentTagRange to get the tag at the cursor position
-    const tagRange = getCurrentTagRange(text, cursorPos);
+    // Treat a trailing comma and its following horizontal whitespace as part
+    // of the completed tag before it.
+    const tagRange = getTagRangeForRelatedTags(text, cursorPos);
 
     // If no tag was found at the cursor position
     if (!tagRange) return null;
@@ -324,11 +325,13 @@ class RelatedTagsUI {
      * Display
      * @param {HTMLTextAreaElement} textareaElement The textarea being used
      */
-    show(textareaElement) {
+    show(textareaElement, showEmptyState = true) {
         if (!settingValues.enableRelatedTags) {
             this.hide();
-            return;
+            return false;
         }
+
+        this.showEmptyState = showEmptyState;
 
         // Get the tag at current cursor position
         const currentTag = getTagFromCursorPosition(textareaElement);
@@ -338,13 +341,21 @@ class RelatedTagsUI {
                 this.currentTag = currentTag
             } else {
                 this.hide();
-                return;
+                return false;
             }
         }
 
         this.target = textareaElement;
 
         this.relatedTags = searchRelatedTags(this.currentTag);
+
+        // Click-triggered related tags should not replace useful autocomplete
+        // suggestions with an empty panel. Manual triggers keep the empty-state
+        // feedback so the user can tell that the command was handled.
+        if (!showEmptyState && autoCompleteData[TagSource.Danbooru].initialized && this.relatedTags.length === 0) {
+            this.hide();
+            return false;
+        }
 
         this.#updateHeader();
         this.#updateContent();
@@ -365,6 +376,8 @@ class RelatedTagsUI {
                 this.#refresh();
             }, 500);
         }
+
+        return true;
     }
 
     /**
@@ -438,7 +451,7 @@ class RelatedTagsUI {
      */
     #refresh() {
         if (this.target) {
-            this.show(this.target);
+            this.show(this.target, this.showEmptyState);
         }
     }
 
@@ -809,7 +822,7 @@ export class RelatedTagsEventHandler {
                 event.preventDefault();
                 this.relatedTagsUI.hide();
             }
-            return;
+            return false;
         }
 
         // Handle key events for related tags UI
@@ -850,9 +863,11 @@ export class RelatedTagsEventHandler {
         if (settingValues.enableRelatedTags) {
             if (event.key === ' ' && event.ctrlKey && event.shiftKey) {
                 event.preventDefault();
-                this.relatedTagsUI.show(event.target);
+                return this.relatedTagsUI.show(event.target);
             }
         }
+
+        return false;
     }
 
     /**
@@ -881,10 +896,15 @@ export class RelatedTagsEventHandler {
         // Hide related tags UI if not Ctrl+Click and not pinned when trigger mode is 'ctrl+Click'
         if (settingValues.relatedTagsTriggerMode === 'ctrl+Click' && !event.ctrlKey && !this.relatedTagsUI.isPinned) {
             this.relatedTagsUI.hide();
-            return;
+            return false;
         }
 
         const textareaElement = event.target;
-        this.relatedTagsUI.show(textareaElement);
+        return this.relatedTagsUI.show(textareaElement, false);
     }
+
+    handleAutocompleteTagInserted(event) {
+        return this.relatedTagsUI.show(event.target, false);
+    }
+
 }
