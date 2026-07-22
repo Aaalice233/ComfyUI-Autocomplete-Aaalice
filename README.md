@@ -20,6 +20,7 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 - Improved autocomplete/related-tags handoff and shared insertion formatting: partial tags reopen autocomplete, accepting a completed tag immediately shows related tags, trailing commas resolve to the preceding tag, and accepting a related tag reuses existing separators without creating empty comma slots.
 - Optional Danbooru live-tag scanning with per-category popularity filters, plus resumable DeepSeek translation and a persistent local cache.
 - Alias previews are filtered to the current ComfyUI language while the complete alias set remains searchable.
+- Live-tag network, authentication, CSV, and translation errors are localized to the current ComfyUI language while unknown diagnostics remain visible.
 - Optional LoRA Manager compatibility layer that supplements results through its local tag, LoRA, Embedding, and Wildcard APIs while avoiding duplicate autocomplete inside LoRA Manager inputs.
 - Category-specific emoji markers with localized hover labels for general, artist, copyright, character, meta, model, and other tag types.
 - Unified relevance ranking across Danbooru, e621, and LoRA Manager results instead of grouping suggestions by source.

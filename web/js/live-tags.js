@@ -61,6 +61,22 @@ const TEXT = {
         rangeError: "{field} must be between {minimum} and {maximum}",
         modelRequired: "Model cannot be empty",
         promptRequired: "System prompt cannot be empty",
+        errorMessages: {
+            danbooruCloudflareBlocked: "Danbooru access was blocked by Cloudflare. Configure a Danbooru login and API key, or try another network.",
+            danbooruAuthFailed: "Danbooru authentication failed. Check the configured login and API key.",
+            danbooruRequestFailed: "The Danbooru request failed. Check the network, authentication, and service status.",
+            danbooruInvalidResponse: "Danbooru returned invalid data. Please try again later.",
+            danbooruPaginationFailed: "Danbooru pagination stopped unexpectedly. Please retry the scan.",
+            deepseekAuthFailed: "DeepSeek rejected the API key. Check the configured key.",
+            deepseekRequestFailed: "The DeepSeek request failed. Check the network, account balance, and service status.",
+            deepseekInvalidResponse: "DeepSeek returned an invalid response. Please retry the failed items.",
+            deepseekKeyMissing: "Configure a DeepSeek API key before starting translation.",
+            baseCsvReadFailed: "The base Danbooru CSV could not be read.",
+            baseCsvInvalid: "The base Danbooru CSV contains invalid data.",
+            jobConflict: "Another scan or translation task is already running.",
+            englishTranslationNotRequired: "English does not require translation.",
+            translationModeInvalid: "The selected translation mode is invalid.",
+        },
         jobStates: {
             queued: "Queued", running: "Running", cancelling: "Cancelling", loading_base: "Loading base CSV",
             scanning: "Scanning tags", committing: "Saving scan results", translating: "Translating tags",
@@ -124,6 +140,22 @@ const TEXT = {
         rangeError: "{field} 必须在 {minimum} 到 {maximum} 之间",
         modelRequired: "模型不能为空",
         promptRequired: "System Prompt 不能为空",
+        errorMessages: {
+            danbooruCloudflareBlocked: "Danbooru 访问被 Cloudflare 拦截。请配置 Danbooru 用户名和 API Key，或更换网络后重试。",
+            danbooruAuthFailed: "Danbooru 认证失败，请检查用户名和 API Key。",
+            danbooruRequestFailed: "Danbooru 请求失败，请检查网络、认证配置和服务状态。",
+            danbooruInvalidResponse: "Danbooru 返回了无效数据，请稍后重试。",
+            danbooruPaginationFailed: "Danbooru 分页异常中断，请重新扫描。",
+            deepseekAuthFailed: "DeepSeek 拒绝了 API Key，请检查密钥配置。",
+            deepseekRequestFailed: "DeepSeek 请求失败，请检查网络、账户余额和服务状态。",
+            deepseekInvalidResponse: "DeepSeek 返回了无效响应，请重试失败项。",
+            deepseekKeyMissing: "请先配置 DeepSeek API Key，再开始翻译。",
+            baseCsvReadFailed: "无法读取 Danbooru 基础 CSV。",
+            baseCsvInvalid: "Danbooru 基础 CSV 中存在无效数据。",
+            jobConflict: "已有扫描或翻译任务正在运行。",
+            englishTranslationNotRequired: "英文标签不需要翻译。",
+            translationModeInvalid: "所选翻译模式无效。",
+        },
         jobStates: {
             queued: "等待开始", running: "正在运行", cancelling: "正在取消", loading_base: "正在读取基础 CSV",
             scanning: "正在扫描标签", committing: "正在保存扫描结果", translating: "正在翻译标签",
@@ -187,6 +219,22 @@ const TEXT = {
         rangeError: "{field} 必須介於 {minimum} 與 {maximum} 之間",
         modelRequired: "模型不能為空",
         promptRequired: "System Prompt 不能為空",
+        errorMessages: {
+            danbooruCloudflareBlocked: "Danbooru 存取被 Cloudflare 阻擋。請設定 Danbooru 使用者名稱和 API Key，或更換網路後再試。",
+            danbooruAuthFailed: "Danbooru 驗證失敗，請檢查使用者名稱和 API Key。",
+            danbooruRequestFailed: "Danbooru 請求失敗，請檢查網路、驗證設定和服務狀態。",
+            danbooruInvalidResponse: "Danbooru 傳回了無效資料，請稍後再試。",
+            danbooruPaginationFailed: "Danbooru 分頁異常中斷，請重新掃描。",
+            deepseekAuthFailed: "DeepSeek 拒絕了 API Key，請檢查金鑰設定。",
+            deepseekRequestFailed: "DeepSeek 請求失敗，請檢查網路、帳戶餘額和服務狀態。",
+            deepseekInvalidResponse: "DeepSeek 傳回了無效回應，請重試失敗項目。",
+            deepseekKeyMissing: "請先設定 DeepSeek API Key，再開始翻譯。",
+            baseCsvReadFailed: "無法讀取 Danbooru 基礎 CSV。",
+            baseCsvInvalid: "Danbooru 基礎 CSV 中包含無效資料。",
+            jobConflict: "已有掃描或翻譯工作正在執行。",
+            englishTranslationNotRequired: "英文標籤不需要翻譯。",
+            translationModeInvalid: "所選翻譯模式無效。",
+        },
         jobStates: {
             queued: "等待開始", running: "執行中", cancelling: "正在取消", loading_base: "正在讀取基礎 CSV",
             scanning: "正在掃描標籤", committing: "正在儲存掃描結果", translating: "正在翻譯標籤",
@@ -250,6 +298,22 @@ const TEXT = {
         rangeError: "{field} は {minimum} から {maximum} の範囲で指定してください",
         modelRequired: "モデルを入力してください",
         promptRequired: "System Prompt を入力してください",
+        errorMessages: {
+            danbooruCloudflareBlocked: "Danbooru へのアクセスが Cloudflare にブロックされました。Danbooru のログイン名と API Key を設定するか、別のネットワークで再試行してください。",
+            danbooruAuthFailed: "Danbooru の認証に失敗しました。ログイン名と API Key を確認してください。",
+            danbooruRequestFailed: "Danbooru へのリクエストに失敗しました。ネットワーク、認証設定、サービス状態を確認してください。",
+            danbooruInvalidResponse: "Danbooru から無効なデータが返されました。しばらくしてから再試行してください。",
+            danbooruPaginationFailed: "Danbooru のページ取得が異常終了しました。もう一度スキャンしてください。",
+            deepseekAuthFailed: "DeepSeek が API Key を拒否しました。キーの設定を確認してください。",
+            deepseekRequestFailed: "DeepSeek へのリクエストに失敗しました。ネットワーク、残高、サービス状態を確認してください。",
+            deepseekInvalidResponse: "DeepSeek から無効な応答が返されました。失敗項目を再試行してください。",
+            deepseekKeyMissing: "翻訳を開始する前に DeepSeek API Key を設定してください。",
+            baseCsvReadFailed: "Danbooru の基本 CSV を読み込めませんでした。",
+            baseCsvInvalid: "Danbooru の基本 CSV に無効なデータがあります。",
+            jobConflict: "別のスキャンまたは翻訳タスクが実行中です。",
+            englishTranslationNotRequired: "英語タグは翻訳不要です。",
+            translationModeInvalid: "選択した翻訳モードは無効です。",
+        },
         jobStates: {
             queued: "開始待ち", running: "実行中", cancelling: "キャンセル中", loading_base: "基本 CSV を読み込み中",
             scanning: "タグをスキャン中", committing: "スキャン結果を保存中", translating: "タグを翻訳中",
@@ -269,6 +333,43 @@ export function normalizeLiveTagsLocale(locale) {
 function formatText(template, parameters = {}) {
     return String(template).replace(/\{(\w+)\}/g, (match, name) =>
         Object.hasOwn(parameters, name) ? String(parameters[name]) : match);
+}
+
+const ERROR_MESSAGE_KEYS = {
+    danbooru_cloudflare_blocked: "danbooruCloudflareBlocked",
+    danbooru_auth_failed: "danbooruAuthFailed",
+    danbooru_request_failed: "danbooruRequestFailed",
+    danbooru_invalid_response: "danbooruInvalidResponse",
+    danbooru_pagination_failed: "danbooruPaginationFailed",
+    deepseek_auth_failed: "deepseekAuthFailed",
+    deepseek_request_failed: "deepseekRequestFailed",
+    deepseek_invalid_response: "deepseekInvalidResponse",
+    deepseek_key_missing: "deepseekKeyMissing",
+    base_csv_read_failed: "baseCsvReadFailed",
+    base_csv_invalid: "baseCsvInvalid",
+    job_conflict: "jobConflict",
+    english_translation_not_required: "englishTranslationNotRequired",
+    translation_mode_invalid: "translationModeInvalid",
+};
+
+const LEGACY_ERROR_CODES = [
+    [/^Danbooru access was blocked by Cloudflare\b/u, "danbooru_cloudflare_blocked"],
+    [/^Danbooru returned HTTP 403\b/u, "danbooru_auth_failed"],
+    [/^Danbooru (?:request failed|returned HTTP)\b/u, "danbooru_request_failed"],
+    [/^Danbooru returned (?:invalid JSON|an unexpected response|a page without valid tag records)\b/u, "danbooru_invalid_response"],
+    [/^Danbooru pagination cursor did not advance\b/u, "danbooru_pagination_failed"],
+    [/^DeepSeek rejected the API key\b/u, "deepseek_auth_failed"],
+    [/^DeepSeek returned HTTP\b/u, "deepseek_request_failed"],
+    [/^DeepSeek returned an invalid response envelope\b/u, "deepseek_invalid_response"],
+    [/^Unable to read the base Danbooru CSV\b/u, "base_csv_read_failed"],
+    [/^Invalid base Danbooru CSV row\b/u, "base_csv_invalid"],
+];
+
+export function localizeLiveTagsError(errorCode, fallback, locale = "en") {
+    const text = TEXT[normalizeLiveTagsLocale(locale)];
+    const legacyCode = LEGACY_ERROR_CODES.find(([pattern]) => pattern.test(String(fallback || "")))?.[1];
+    const messageKey = ERROR_MESSAGE_KEYS[errorCode] || ERROR_MESSAGE_KEYS[legacyCode];
+    return text.errorMessages?.[messageKey] || fallback || text.jobStates.failed;
 }
 
 function getLocalizedJobState(job, text) {
@@ -368,7 +469,7 @@ export async function openLiveTagsManager(app) {
     try {
         config = await requestJson(`${API_ROOT}/config`);
     } catch (error) {
-        message.textContent = error.message;
+        message.textContent = localizeLiveTagsError(error.errorCode, error.message, locale);
         dialog.showModal();
         dialog.focus();
         return;
@@ -536,14 +637,15 @@ export async function openLiveTagsManager(app) {
         startPolling();
     };
 
-    saveButton.onclick = () => runAction(save, message);
-    scanButton.onclick = () => runAction(() => start("scan"), message);
-    translateButton.onclick = () => runAction(() => start("translate", { locale, mode: "missing" }), message);
-    failedButton.onclick = () => runAction(() => start("translate", { locale, mode: "failed" }), message);
-    allButton.onclick = () => runAction(() => start("translate", { locale, mode: "all" }), message);
+    saveButton.onclick = () => runAction(save, message, locale);
+    scanButton.onclick = () => runAction(() => start("scan"), message, locale);
+    translateButton.onclick = () => runAction(() => start("translate", { locale, mode: "missing" }), message, locale);
+    failedButton.onclick = () => runAction(() => start("translate", { locale, mode: "failed" }), message, locale);
+    allButton.onclick = () => runAction(() => start("translate", { locale, mode: "all" }), message, locale);
     cancelButton.onclick = () => runAction(
         () => requestJson(`${API_ROOT}/cancel`, { method: "POST" }).then(updateStatus),
         message,
+        locale,
     );
     refreshButton.onclick = () => window.location.reload();
 
@@ -564,7 +666,9 @@ export async function openLiveTagsManager(app) {
         for (const button of [translateButton, failedButton, allButton]) button.disabled = active || locale === "en";
         cancelButton.disabled = !active;
         if (job) {
-            message.textContent = job.error || getLocalizedJobState(job, text);
+            message.textContent = job.error
+                ? localizeLiveTagsError(job.error_code, job.error, locale)
+                : getLocalizedJobState(job, text);
             jobCounters.textContent = [
                 `${text.completed}: ${job.completed || 0}/${job.total || "?"}`,
                 `${text.cached}: ${job.cached || 0}`,
@@ -596,7 +700,7 @@ export async function openLiveTagsManager(app) {
         return status;
     };
     const startPolling = () => {
-        if (pollTimer === null) pollTimer = setInterval(() => runAction(updateStatus, message), 500);
+        if (pollTimer === null) pollTimer = setInterval(() => runAction(updateStatus, message, locale), 500);
     };
 
     dialog.addEventListener("close", () => {
@@ -626,15 +730,19 @@ async function requestJson(url, options = {}) {
     } catch {
         throw new Error(`HTTP ${response.status}`);
     }
-    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    if (!response.ok) {
+        const error = new Error(payload.error || `HTTP ${response.status}`);
+        error.errorCode = payload.error_code;
+        throw error;
+    }
     return payload;
 }
 
-async function runAction(action, message) {
+async function runAction(action, message, locale) {
     try {
         await action();
     } catch (error) {
-        message.textContent = error.message;
+        message.textContent = localizeLiveTagsError(error.errorCode, error.message, locale);
     }
 }
 

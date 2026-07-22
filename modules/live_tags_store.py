@@ -117,12 +117,16 @@ class LiveTagsStore:
                     retrying INTEGER NOT NULL DEFAULT 0,
                     message TEXT,
                     error TEXT,
+                    error_code TEXT,
                     locale TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
                 """
             )
+            job_columns = {row["name"] for row in connection.execute("PRAGMA table_info(jobs)")}
+            if "error_code" not in job_columns:
+                connection.execute("ALTER TABLE jobs ADD COLUMN error_code TEXT")
             now = utc_now()
             connection.execute(
                 """
@@ -157,6 +161,7 @@ class LiveTagsStore:
             "retrying",
             "message",
             "error",
+            "error_code",
         }
         updates = {key: value for key, value in values.items() if key in allowed}
         if not updates:

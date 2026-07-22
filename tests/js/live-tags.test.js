@@ -2,6 +2,7 @@
 
 import { jest } from "@jest/globals";
 import {
+    localizeLiveTagsError,
     normalizeLiveTagsLocale,
     openLiveTagsManager,
     validateLiveTagsConfig,
@@ -37,6 +38,28 @@ describe("live tags locale mapping", () => {
         ["fr-FR", "en"],
     ])("maps %s to %s", (input, expected) => {
         expect(normalizeLiveTagsLocale(input)).toBe(expected);
+    });
+});
+
+describe("live tags error localization", () => {
+    test.each([
+        ["en", "Danbooru access was blocked by Cloudflare."],
+        ["zh-CN", "Danbooru 访问被 Cloudflare 拦截。"],
+        ["zh-TW", "Danbooru 存取被 Cloudflare 阻擋。"],
+        ["ja-JP", "Danbooru へのアクセスが Cloudflare にブロックされました。"],
+    ])("localizes backend error codes for %s", (locale, expectedStart) => {
+        expect(localizeLiveTagsError("danbooru_cloudflare_blocked", "raw error", locale)
+            .startsWith(expectedStart)).toBe(true);
+    });
+
+    test("preserves unknown backend details", () => {
+        expect(localizeLiveTagsError("unknown_error", "SocketError", "zh-CN")).toBe("SocketError");
+    });
+
+    test("localizes failed jobs created before error codes were added", () => {
+        const legacyError = "Danbooru access was blocked by Cloudflare. Configure a Danbooru login and API key.";
+        expect(localizeLiveTagsError(null, legacyError, "zh-CN"))
+            .toBe("Danbooru 访问被 Cloudflare 拦截。请配置 Danbooru 用户名和 API Key，或更换网络后重试。");
     });
 });
 

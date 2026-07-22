@@ -24,11 +24,15 @@ SUPPORTED_LOCALES = {
 
 
 class LiveTagsError(RuntimeError):
-    pass
+    code = "live_tags_error"
+
+    def __init__(self, message, code=None):
+        super().__init__(message)
+        self.code = code or self.code
 
 
 class JobConflictError(LiveTagsError):
-    pass
+    code = "job_conflict"
 
 
 class RequestCancelled(LiveTagsError):
@@ -78,7 +82,10 @@ class DanbooruClient:
 
             payload = await self._request_json(params)
             if not isinstance(payload, list):
-                raise LiveTagsError("Danbooru returned an unexpected response instead of a tag list")
+                raise LiveTagsError(
+                    "Danbooru returned an unexpected response instead of a tag list",
+                    "danbooru_invalid_response",
+                )
             if not payload:
                 return
 
@@ -98,12 +105,12 @@ class DanbooruClient:
                 except (KeyError, TypeError, ValueError):
                     continue
             if not parsed:
-                raise LiveTagsError("Danbooru returned a page without valid tag records")
+                raise LiveTagsError("Danbooru returned a page without valid tag records", "danbooru_invalid_response")
             yield parsed
 
             next_cursor = min(tag["id"] for tag in parsed)
             if cursor is not None and next_cursor >= cursor:
-                raise LiveTagsError("Danbooru pagination cursor did not advance")
+                raise LiveTagsError("Danbooru pagination cursor did not advance", "danbooru_pagination_failed")
             cursor = next_cursor
             if len(payload) < 200:
                 return
@@ -122,28 +129,39 @@ class DanbooruClient:
                         if "cloudflare" in body.lower() or "just a moment" in body.lower():
                             raise LiveTagsError(
                                 "Danbooru access was blocked by Cloudflare. Configure a Danbooru login and API key, "
-                                "or try another network."
+                                "or try another network.",
+                                "danbooru_cloudflare_blocked",
                             )
-                        raise LiveTagsError("Danbooru returned HTTP 403. Check the configured login and API key.")
+                        raise LiveTagsError(
+                            "Danbooru returned HTTP 403. Check the configured login and API key.",
+                            "danbooru_auth_failed",
+                        )
                     if response.status == 429 or 500 <= response.status < 600:
                         if attempt >= self.max_retries:
-                            raise LiveTagsError(f"Danbooru returned HTTP {response.status} after retries")
+                            raise LiveTagsError(
+                                f"Danbooru returned HTTP {response.status} after retries",
+                                "danbooru_request_failed",
+                            )
                         await self._backoff(attempt, response.headers.get("Retry-After"))
                         continue
                     if response.status != 200:
                         safe_url = f"{DANBOORU_TAGS_URL}?{urlencode(_without_secrets(params))}"
-                        raise LiveTagsError(f"Danbooru returned HTTP {response.status} for {safe_url}")
+                        raise LiveTagsError(
+                            f"Danbooru returned HTTP {response.status} for {safe_url}",
+                            "danbooru_request_failed",
+                        )
                     try:
                         return json.loads(body)
                     except json.JSONDecodeError as error:
-                        raise LiveTagsError("Danbooru returned invalid JSON") from error
+                        raise LiveTagsError("Danbooru returned invalid JSON", "danbooru_invalid_response") from error
             except (aiohttp.ClientError, asyncio.TimeoutError) as error:
                 if attempt >= self.max_retries:
                     raise LiveTagsError(
-                        f"Danbooru request failed after retries ({type(error).__name__})"
+                        f"Danbooru request failed after retries ({type(error).__name__})",
+                        "danbooru_request_failed",
                     ) from error
                 await self._backoff(attempt, None)
-        raise LiveTagsError("Danbooru request failed")
+        raise LiveTagsError("Danbooru request failed", "danbooru_request_failed")
 
     async def _backoff(self, attempt, retry_after):
         try:
@@ -267,14 +285,14 @@ class DeepSeekClient:
         async with self.session.post(DEEPSEEK_CHAT_URL, json=payload, headers=headers) as response:
             body = await response.text()
             if response.status == 401:
-                raise LiveTagsError("DeepSeek rejected the API key")
+                raise LiveTagsError("DeepSeek rejected the API key", "deepseek_auth_failed")
             if response.status == 429 or 500 <= response.status < 600:
                 raise RetryableDeepSeekError(
                     f"DeepSeek returned retryable HTTP {response.status}",
                     response.headers.get("Retry-After"),
                 )
             if response.status != 200:
-                raise LiveTagsError(f"DeepSeek returned HTTP {response.status}")
+                raise LiveTagsError(f"DeepSeek returned HTTP {response.status}", "deepseek_request_failed")
             try:
                 result = json.loads(body)
                 choice = result["choices"][0]
@@ -283,7 +301,10 @@ class DeepSeekClient:
                     "finish_reason": choice.get("finish_reason"),
                 }
             except (json.JSONDecodeError, KeyError, IndexError, TypeError) as error:
-                raise LiveTagsError("DeepSeek returned an invalid response envelope") from error
+                raise LiveTagsError(
+                    "DeepSeek returned an invalid response envelope",
+                    "deepseek_invalid_response",
+                ) from error
 
     async def _retry_delay(self, attempt, retry_after=None):
         try:
@@ -348,13 +369,16 @@ class LiveTagsManager:
         self._ensure_idle()
         locale = normalize_locale(locale)
         if locale == "en":
-            raise ValueError("English does not require translation")
+            raise LiveTagsError("English does not require translation", "english_translation_not_required")
         if mode not in {"missing", "failed", "all"}:
-            raise ValueError("Translation mode must be missing, failed, or all")
+            raise LiveTagsError("Translation mode must be missing, failed, or all", "translation_mode_invalid")
         self._load_base_names()
         config = self.config_store.load()
         if not config["deepseek"]["api_key"]:
-            raise ValueError("Configure a DeepSeek API key before starting translation")
+            raise LiveTagsError(
+                "Configure a DeepSeek API key before starting translation",
+                "deepseek_key_missing",
+            )
         job_id = self.store.create_job("translate", locale)
         self._cancel_event = asyncio.Event()
         self._task = asyncio.create_task(self._run_translation(job_id, locale, mode))
@@ -428,6 +452,7 @@ class LiveTagsManager:
                 phase="failed",
                 message="Scan failed; the previous CSV was preserved",
                 error=str(error)[:2000],
+                error_code=getattr(error, "code", "live_tags_error"),
             )
 
     async def _run_translation(self, job_id, locale, mode):
@@ -565,13 +590,17 @@ class LiveTagsManager:
                 retrying=retries,
                 message="Translation stopped; completed results were saved",
                 error=str(error)[:2000],
+                error_code=getattr(error, "code", "live_tags_error"),
             )
 
     def _load_base_names(self):
         try:
             mtime_ns = os.stat(self.base_csv_path).st_mtime_ns
         except OSError as error:
-            raise LiveTagsError(f"Unable to read the base Danbooru CSV: {error}") from error
+            raise LiveTagsError(
+                f"Unable to read the base Danbooru CSV: {error}",
+                "base_csv_read_failed",
+            ) from error
         if self._base_names is not None and self._base_mtime_ns == mtime_ns:
             return self._base_names
 
@@ -588,7 +617,10 @@ class LiveTagsManager:
                             category = int(row.get("category") or 0)
                             post_count = int(row.get("count") or 0)
                         except ValueError as error:
-                            raise LiveTagsError(f"Invalid base Danbooru CSV row for {name}: {error}") from error
+                            raise LiveTagsError(
+                                f"Invalid base Danbooru CSV row for {name}: {error}",
+                                "base_csv_invalid",
+                            ) from error
                         aliases = [alias.strip() for alias in (row.get("alias") or "").split(",") if alias.strip()]
                         tags.append(
                             {
@@ -599,7 +631,10 @@ class LiveTagsManager:
                             }
                         )
         except OSError as error:
-            raise LiveTagsError(f"Unable to read the base Danbooru CSV: {error}") from error
+            raise LiveTagsError(
+                f"Unable to read the base Danbooru CSV: {error}",
+                "base_csv_read_failed",
+            ) from error
         self.store.sync_base_tags(tags)
         self._base_names = names
         self._base_count = len(names)
