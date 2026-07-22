@@ -2,7 +2,7 @@ import { TagCategory, TagData, TagSource, autoCompleteData, getEnabledTagSourceI
 import { settingValues } from './settings.js';
 import { getTagCategoryLabel, renderTagNameWithCategoryIcon } from './tag-presentation.js';
 import { applyTextInsertionEdit, buildRelatedTagInsertionEdit } from './tag-insertion.js';
-import { getInterfaceText } from './localization.js';
+import { filterAliasesForLocale, getInterfaceText } from './localization.js';
 import {
     extractTagsFromTextArea,
     findAllTagPositions,
@@ -434,7 +434,7 @@ class RelatedTagsUI {
         }
 
         const categoryText = TagCategory[tagData.source][tagData.category] || "unknown";
-        const aliasText = tagData.alias.join(', ');
+        const aliasText = filterAliasesForLocale(tagData.alias).join(', ');
 
         // Update header text with current tag
         this.headerText.innerHTML = ''; // Clear previous content
@@ -530,7 +530,7 @@ class RelatedTagsUI {
      */
     #createTagElement(tagData, isExisting) {
         const categoryText = tagData.categoryText;
-        const aliasText = tagData.alias.join(', ');
+        const aliasText = filterAliasesForLocale(tagData.alias).join(', ');
 
         const tagRow = document.createElement('div');
         tagRow.classList.add('related-tag-item', tagData.source);

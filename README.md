@@ -19,8 +19,9 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 - Support for promoted text inputs on **subgraph nodes**, including resolving the original inner node and widget.
 - Improved autocomplete/related-tags handoff and shared insertion formatting: partial tags reopen autocomplete, accepting a completed tag immediately shows related tags, trailing commas resolve to the preceding tag, and accepting a related tag reuses existing separators without creating empty comma slots.
 - Optional Danbooru live-tag scanning with per-category popularity filters, plus resumable DeepSeek translation and a persistent local cache.
+- Alias previews are filtered to the current ComfyUI language while the complete alias set remains searchable.
 - Optional LoRA Manager compatibility layer that supplements results through its local tag, LoRA, Embedding, and Wildcard APIs while avoiding duplicate autocomplete inside LoRA Manager inputs.
-- Category-specific suggestion icons with localized hover labels for general, artist, copyright, character, meta, model, and other tag types.
+- Category-specific emoji markers with localized hover labels for general, artist, copyright, character, meta, model, and other tag types.
 - Unified relevance ranking across Danbooru, e621, and LoRA Manager results instead of grouping suggestions by source.
 - Simplified Chinese documentation and continued localization maintenance.
 - Runtime autocomplete and related-tag labels, loading/empty states, controls, Wiki links, and detail tooltips are localized in English, Simplified Chinese, Traditional Chinese, and Japanese.
@@ -62,7 +63,7 @@ When you type in a text input area, tags that partially match the text are displ
 
 - Tag aliases are also included in the search. Japanese hiragana and katakana are searched without distinction.
 - Tags are color-coded by category. The color-coding rules are the same as Danbooru.
-- Each suggestion uses a distinct category icon; hover the icon to see the category and source.
+- Each suggestion uses a distinct category emoji; hover it to see the category and source.
 - Suggestions are ranked globally by exact tag, tag prefix, exact alias, tag substring, and alias substring. Popularity is normalized within each source before it is used as the next tie-breaker.
 - The active suggestion uses a persistent accent highlight, including the initially selected first row and while the pointer is hovering it.
 - Tags that have already been entered are displayed grayed out.
@@ -193,7 +194,7 @@ For example, by preparing the following CSV, you can quickly insert correspondin
 
 - **Autocomplete Tag Source**: The tag source to display in the autocomplete suggestions. Select "all" to display all loaded tag sources.
 - **Primary source for 'all' Source**: When `Autocomplete Tag Source` is set to "all", the tag source specified here will be displayed with priority.
-- **Tag category icon position**: Where to display the category icon. Hover it for the localized category and source; select "hidden" to hide it.
+- **Tag category icon position**: Where to display the category emoji. Hover it for the localized category and source; select "hidden" to hide it.
 
 ### Autocomplete
 
@@ -235,10 +236,12 @@ Open **Autocomplete Plus → Live Tags → Manage Danbooru Live Tags** to use th
 
 1. Choose `Do not fetch`, `Fetch all`, or `Minimum post count` independently for each Danbooru category.
 2. Optionally configure a Danbooru login and API key, then click **Scan tags**. Only tags missing from `danbooru_tags.csv` are written to `data/danbooru_tags_live.csv`.
-3. Review the candidate and estimated request counts before starting DeepSeek translation. Translation follows the current ComfyUI language; English does not require translation.
+3. Review new candidates, base tags missing a translation, and the estimated request count before starting DeepSeek translation. Translation follows the current ComfyUI language; English does not require translation.
 4. Refresh the page after the CSV changes so the autocomplete index is rebuilt.
 
-DeepSeek translation uses configurable batches, concurrency, retries, model, and system prompt. Successful translations are cached by tag and language in SQLite, so later runs only send uncached or explicitly retried tags. Interrupted and cancelled jobs keep completed results.
+DeepSeek translation covers both newly scanned tags and rows in the base CSV whose aliases do not contain the current interface language. Successful translations are cached by tag and language in SQLite, so later runs only send uncached or explicitly retried tags. The generated live CSV preserves each base row's category, count, and existing aliases while adding cached translations; the original base CSV is never changed. Interrupted and cancelled jobs keep completed results.
+
+Autocomplete and related-tag panels only preview aliases matching the current ComfyUI language. This is display filtering only: all aliases remain in the search index.
 
 Configuration and cache files are stored under the ComfyUI user directory in `autocomplete-plus/`. API keys are never returned by the backend or written to logs. Treat this as a local/private-instance feature: any user who can access the ComfyUI server can start a translation job and incur API charges.
 

@@ -1,4 +1,8 @@
+/** @jest-environment jsdom */
+
 import {
+    createTagCategoryIcon,
+    getTagCategoryEmoji,
     getTagCategoryIconKey,
     getTagCategoryLabel,
     normalizeInterfaceLocale,
@@ -24,6 +28,21 @@ describe('tag category presentation', () => {
 
     test('falls back to the unknown icon for an unsupported category', () => {
         expect(getTagCategoryIconKey({ categoryText: 'future-category' })).toBe('unknown');
+        expect(getTagCategoryEmoji({ categoryText: 'future-category' })).toBe('❔');
+    });
+
+    test.each([
+        ['general', '🏷️'],
+        ['artist', '🎨'],
+        ['copyright', '🎞️'],
+        ['character', '👤'],
+        ['meta', '⚙️'],
+        ['lora', '🧩'],
+    ])('renders the %s category as an emoji with an accessible tooltip', (categoryText, emoji) => {
+        const icon = createTagCategoryIcon({ categoryText, source: 'danbooru' });
+        expect(icon.textContent).toBe(emoji);
+        expect(icon.title).toContain('danbooru');
+        expect(icon.getAttribute('aria-label')).toBe(icon.title);
     });
 
     test('keeps the English category and appends a localized note', () => {

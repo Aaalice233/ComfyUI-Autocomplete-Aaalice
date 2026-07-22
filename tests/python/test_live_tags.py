@@ -99,6 +99,32 @@ class LiveTagsStoreTests(unittest.TestCase):
         failed, _cached = self.store.translation_work("ja", "failed")
         self.assertEqual([row["name"] for row in failed], ["failed_tag"])
 
+    def test_base_tags_missing_current_locale_enter_translation_work(self):
+        self.store.sync_base_tags(
+            [
+                {"name": "already_zh", "category": 0, "post_count": 100, "aliases": ["已有翻译"]},
+                {"name": "missing_zh", "category": 4, "post_count": 80, "aliases": ["English alias"]},
+                {"name": "japanese_only", "category": 0, "post_count": 60, "aliases": ["ロングヘアー"]},
+            ]
+        )
+
+        pending, cached = self.store.translation_work("zh", "missing")
+
+        self.assertEqual([row["name"] for row in pending], ["missing_zh", "japanese_only"])
+        self.assertEqual(cached, 0)
+        self.assertEqual(self.store.statistics("zh")["base_missing"], 2)
+
+    def test_export_preserves_base_row_when_adding_cached_translation(self):
+        self.store.sync_base_tags(
+            [{"name": "base_tag", "category": 3, "post_count": 123, "aliases": ["existing alias"]}]
+        )
+        self.store.save_translation_successes("zh", {"base_tag": "基础标签"}, "model", "prompt", 1)
+
+        self.assertEqual(self.store.export_csv(), 1)
+        with open(self.csv_path, encoding="utf-8", newline="") as csv_file:
+            row = next(csv.DictReader(csv_file))
+        self.assertEqual(row, {"tag": "base_tag", "category": "3", "count": "123", "alias": "existing alias,基础标签"})
+
 
 class TranslationValidationTests(unittest.TestCase):
     def test_accepts_valid_subset_and_returns_missing_tags(self):
@@ -144,6 +170,7 @@ class LiveTagsManagerTests(unittest.TestCase):
             manager = LiveTagsManager(os.path.join(directory, "config.json"), store, base_csv)
             self.assertEqual(manager._load_base_names(), {"existing_tag", "another_tag"})
             self.assertEqual(manager.status("zh")["statistics"]["base_tags"], 2)
+            self.assertEqual(manager.status("zh")["statistics"]["base_missing"], 2)
 
     def test_locale_mapping(self):
         self.assertEqual(normalize_locale("zh_CN"), "zh")

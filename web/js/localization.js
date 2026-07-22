@@ -85,6 +85,27 @@ export function getCurrentInterfaceLocale() {
     return normalizeInterfaceLocale(locale);
 }
 
+export function filterAliasesForLocale(aliases, locale = getCurrentInterfaceLocale()) {
+    if (!Array.isArray(aliases)) return [];
+
+    const normalizedLocale = normalizeInterfaceLocale(locale);
+    const normalizedAliases = [...new Set(aliases.map(alias => String(alias).trim()).filter(Boolean))];
+    const hasLatin = value => /[A-Za-z]/u.test(value);
+    const hasHan = value => /\p{Script=Han}/u.test(value);
+    const hasKana = value => /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value);
+    const hasHangul = value => /\p{Script=Hangul}/u.test(value);
+    if (normalizedLocale === 'en') {
+        return normalizedAliases.filter(value => hasLatin(value) && !hasHan(value) && !hasKana(value) && !hasHangul(value));
+    }
+    if (normalizedLocale === 'ja') {
+        const kanaAliases = normalizedAliases.filter(hasKana);
+        return kanaAliases.length > 0
+            ? kanaAliases
+            : normalizedAliases.filter(value => hasHan(value) && !hasLatin(value) && !hasHangul(value));
+    }
+    return normalizedAliases.filter(value => hasHan(value) && !hasKana(value) && !hasHangul(value));
+}
+
 export function getInterfaceText(key, parameters = {}, locale = getCurrentInterfaceLocale()) {
     const normalizedLocale = normalizeInterfaceLocale(locale);
     const template = UI_TEXT[normalizedLocale]?.[key] ?? UI_TEXT.en[key] ?? key;

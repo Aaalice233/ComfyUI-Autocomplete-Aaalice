@@ -1,6 +1,7 @@
 /** @jest-environment jsdom */
 
 import {
+    filterAliasesForLocale,
     getInterfaceText,
     normalizeInterfaceLocale,
     setInterfaceLocalizationApp,
@@ -34,6 +35,17 @@ describe('runtime UI localization', () => {
         setInterfaceLocalizationApp({ extensionManager: { setting: { get: () => 'zh-CN' } } });
         expect(getInterfaceText('noRelatedTags')).toBe('未找到相关标签');
         setInterfaceLocalizationApp(null);
+    });
+
+    test.each([
+        ['en', ['long hair', 'blue_eyes']],
+        ['zh', ['长发', '藍眼睛', '長髪']],
+        ['zh-TW', ['长发', '藍眼睛', '長髪']],
+        ['ja', ['ロングヘアー']],
+    ])('filters displayed aliases for %s without changing the source list', (locale, expected) => {
+        const aliases = ['long hair', '长发', '藍眼睛', 'ロングヘアー', '長髪', '긴 머리', 'blue_eyes'];
+        expect(filterAliasesForLocale(aliases, locale)).toEqual(expected);
+        expect(aliases).toHaveLength(7);
     });
 
     test.each(['en', 'zh', 'zh-TW', 'ja'])('contains every runtime key for %s', locale => {

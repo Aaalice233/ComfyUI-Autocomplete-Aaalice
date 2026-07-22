@@ -309,6 +309,11 @@ class LiveTagsManager:
         self._writer_lock = asyncio.Lock()
         self._base_names = None
         self._base_count = 0
+        self._base_mtime_ns = None
+        try:
+            self._load_base_names()
+        except LiveTagsError:
+            pass
         self._rebuild_csv_if_stale()
 
     def get_config(self):
@@ -320,8 +325,9 @@ class LiveTagsManager:
     def status(self, locale=None):
         config = self.config_store.load()
         normalized_locale = normalize_locale(locale)
+        self._load_base_names_count()
         statistics = self.store.statistics(normalized_locale, config["deepseek"]["batch_size"])
-        statistics["base_tags"] = self._load_base_names_count()
+        statistics["base_tags"] = self._base_count
         job = self.store.latest_job()
         return {
             "active": bool(self._task and not self._task.done()),
@@ -345,6 +351,7 @@ class LiveTagsManager:
             raise ValueError("English does not require translation")
         if mode not in {"missing", "failed", "all"}:
             raise ValueError("Translation mode must be missing, failed, or all")
+        self._load_base_names()
         config = self.config_store.load()
         if not config["deepseek"]["api_key"]:
             raise ValueError("Configure a DeepSeek API key before starting translation")
@@ -561,7 +568,15 @@ class LiveTagsManager:
             )
 
     def _load_base_names(self):
+        try:
+            mtime_ns = os.stat(self.base_csv_path).st_mtime_ns
+        except OSError as error:
+            raise LiveTagsError(f"Unable to read the base Danbooru CSV: {error}") from error
+        if self._base_names is not None and self._base_mtime_ns == mtime_ns:
+            return self._base_names
+
         names = set()
+        tags = []
         try:
             with open(self.base_csv_path, encoding="utf-8-sig", newline="") as csv_file:
                 reader = csv.DictReader(csv_file)
@@ -569,10 +584,26 @@ class LiveTagsManager:
                     name = (row.get("tag") or "").strip()
                     if name:
                         names.add(name)
+                        try:
+                            category = int(row.get("category") or 0)
+                            post_count = int(row.get("count") or 0)
+                        except ValueError as error:
+                            raise LiveTagsError(f"Invalid base Danbooru CSV row for {name}: {error}") from error
+                        aliases = [alias.strip() for alias in (row.get("alias") or "").split(",") if alias.strip()]
+                        tags.append(
+                            {
+                                "name": name,
+                                "category": category,
+                                "post_count": post_count,
+                                "aliases": aliases,
+                            }
+                        )
         except OSError as error:
             raise LiveTagsError(f"Unable to read the base Danbooru CSV: {error}") from error
+        self.store.sync_base_tags(tags)
         self._base_names = names
         self._base_count = len(names)
+        self._base_mtime_ns = mtime_ns
         return names
 
     def _load_base_names_count(self):
@@ -584,7 +615,7 @@ class LiveTagsManager:
         return self._base_count
 
     def _rebuild_csv_if_stale(self):
-        if self.store.candidate_count() <= 0:
+        if self.store.exportable_count() <= 0:
             return
         database_times = [
             os.path.getmtime(path)

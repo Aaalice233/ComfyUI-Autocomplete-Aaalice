@@ -27,7 +27,7 @@ import {
 import { getTagCategoryLabel, renderTagNameWithCategoryIcon } from './tag-presentation.js';
 import { rankCompletionCandidates } from './candidate-ranking.js';
 import { applyTextInsertionEdit, buildAutocompleteInsertionEdit } from './tag-insertion.js';
-import { getInterfaceText } from './localization.js';
+import { filterAliasesForLocale, getInterfaceText } from './localization.js';
 
 export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
 
@@ -532,7 +532,7 @@ class AutocompleteUI {
      */
     #createTagElement(tagData, tagDataIndex, isExisting) {
         const categoryText = tagData.categoryText;
-        const aliasText = tagData.alias.join(', ');
+        const aliasText = filterAliasesForLocale(tagData.alias).join(', ');
 
         const tagRow = document.createElement('div');
         tagRow.classList.add('autocomplete-plus-item', tagData.source);

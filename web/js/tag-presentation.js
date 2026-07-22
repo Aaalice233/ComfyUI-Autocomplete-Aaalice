@@ -20,6 +20,22 @@ const CATEGORY_ICON_KEYS = new Set([
     'wildcard',
 ]);
 
+const CATEGORY_EMOJIS = {
+    general: '🏷️',
+    artist: '🎨',
+    unused: '🗃️',
+    copyright: '🎞️',
+    character: '👤',
+    meta: '⚙️',
+    species: '🐾',
+    invalid: '⛔',
+    lore: '📖',
+    lora: '🧩',
+    embeddings: '🧠',
+    wildcard: '🎲',
+    unknown: '❔',
+};
+
 const ENGLISH_CATEGORY_LABELS = {
     general: 'general',
     artist: 'artist',
@@ -69,9 +85,12 @@ export function getTagCategoryIconKey(tagData) {
     return CATEGORY_ICON_KEYS.has(category) ? category : 'unknown';
 }
 
+export function getTagCategoryEmoji(tagData) {
+    return CATEGORY_EMOJIS[getTagCategoryIconKey(tagData)];
+}
+
 export function createTagCategoryIcon(tagData, className = '') {
     const category = String(tagData?.categoryText || 'unknown').toLowerCase();
-    const iconKey = getTagCategoryIconKey(tagData);
     const label = getTagCategoryLabel(category);
     const source = String(tagData?.source || '').trim();
     const tooltip = source ? `${label} · ${source}` : label;
@@ -82,13 +101,7 @@ export function createTagCategoryIcon(tagData, className = '') {
     container.title = tooltip;
     container.setAttribute('role', 'img');
     container.setAttribute('aria-label', tooltip);
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('aria-hidden', 'true');
-    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-    use.setAttribute('href', `#autocomplete-plus-category-icon-${iconKey}`);
-    svg.appendChild(use);
-    container.appendChild(svg);
+    container.textContent = getTagCategoryEmoji(tagData);
     return container;
 }
 

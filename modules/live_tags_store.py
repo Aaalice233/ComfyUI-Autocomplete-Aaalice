@@ -1,6 +1,8 @@
 import csv
 import hashlib
+import json
 import os
+import re
 import sqlite3
 import tempfile
 from contextlib import contextmanager
@@ -8,6 +10,28 @@ from datetime import datetime, timezone
 
 
 LOCALE_ORDER = ("zh", "zh-TW", "ja")
+LOCALE_ALIAS_COLUMNS = {
+    "zh": "has_zh_alias",
+    "zh-TW": "has_zh_tw_alias",
+    "ja": "has_ja_alias",
+}
+
+HAN_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+KANA_PATTERN = re.compile(r"[\u3040-\u30ff\u31f0-\u31ff]")
+HANGUL_PATTERN = re.compile(r"[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]")
+
+
+def has_alias_for_locale(aliases, locale):
+    for alias in aliases:
+        value = str(alias).strip()
+        has_han = bool(HAN_PATTERN.search(value))
+        has_kana = bool(KANA_PATTERN.search(value))
+        has_hangul = bool(HANGUL_PATTERN.search(value))
+        if locale in {"zh", "zh-TW"} and has_han and not has_kana and not has_hangul:
+            return True
+        if locale == "ja" and has_kana:
+            return True
+    return False
 
 
 def utc_now():
@@ -48,6 +72,16 @@ class LiveTagsStore:
                 );
                 CREATE INDEX IF NOT EXISTS tags_active_count_idx
                     ON tags(active, post_count DESC, name ASC);
+
+                CREATE TABLE IF NOT EXISTS base_tags (
+                    name TEXT PRIMARY KEY,
+                    category INTEGER NOT NULL,
+                    post_count INTEGER NOT NULL,
+                    aliases_json TEXT NOT NULL,
+                    has_zh_alias INTEGER NOT NULL DEFAULT 0,
+                    has_zh_tw_alias INTEGER NOT NULL DEFAULT 0,
+                    has_ja_alias INTEGER NOT NULL DEFAULT 0
+                );
 
                 CREATE TABLE IF NOT EXISTS scan_staging (
                     job_id INTEGER NOT NULL,
@@ -190,6 +224,50 @@ class LiveTagsStore:
         with self._connect() as connection:
             return connection.execute("SELECT COUNT(*) FROM tags WHERE active = 1").fetchone()[0]
 
+    def exportable_count(self):
+        with self._connect() as connection:
+            return connection.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM tags WHERE active = 1)
+                    +
+                    (SELECT COUNT(*) FROM base_tags b
+                      WHERE EXISTS (
+                          SELECT 1 FROM translations tr
+                           WHERE tr.tag_name = b.name AND tr.status = 'success' AND tr.text IS NOT NULL
+                      )
+                        AND NOT EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = b.name))
+                """
+            ).fetchone()[0]
+
+    def sync_base_tags(self, tags):
+        rows = []
+        for tag in tags:
+            aliases = list(dict.fromkeys(alias for alias in tag["aliases"] if alias))
+            rows.append(
+                (
+                    tag["name"],
+                    tag["category"],
+                    tag["post_count"],
+                    json.dumps(aliases, ensure_ascii=False),
+                    int(has_alias_for_locale(aliases, "zh")),
+                    int(has_alias_for_locale(aliases, "zh-TW")),
+                    int(has_alias_for_locale(aliases, "ja")),
+                )
+            )
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("DELETE FROM base_tags")
+            connection.executemany(
+                """
+                INSERT INTO base_tags(
+                    name, category, post_count, aliases_json,
+                    has_zh_alias, has_zh_tw_alias, has_ja_alias
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+
     def translation_work(self, locale, mode):
         if mode not in {"missing", "failed", "all"}:
             raise ValueError(f"Invalid translation mode: {mode}")
@@ -198,21 +276,34 @@ class LiveTagsStore:
             "failed": "tr.status = 'failed'",
             "all": "1 = 1",
         }
+        locale_column = LOCALE_ALIAS_COLUMNS.get(locale)
+        if not locale_column:
+            return [], 0
+        eligible = f"""
+            SELECT name, category, post_count FROM tags WHERE active = 1
+            UNION ALL
+            SELECT b.name, b.category, b.post_count
+              FROM base_tags b
+             WHERE b.{locale_column} = 0
+               AND NOT EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = b.name)
+        """
         query = f"""
-            SELECT t.name, t.category, t.post_count, tr.status
-              FROM tags t
-         LEFT JOIN translations tr ON tr.tag_name = t.name AND tr.locale = ?
-             WHERE t.active = 1 AND {conditions[mode]}
-          ORDER BY t.post_count DESC, t.name ASC
+            WITH eligible AS ({eligible})
+            SELECT e.name, e.category, e.post_count, tr.status
+              FROM eligible e
+         LEFT JOIN translations tr ON tr.tag_name = e.name AND tr.locale = ?
+             WHERE {conditions[mode]}
+          ORDER BY e.post_count DESC, e.name ASC
         """
         with self._connect() as connection:
             rows = connection.execute(query, (locale,)).fetchall()
             cached = connection.execute(
-                """
+                f"""
+                WITH eligible AS ({eligible})
                 SELECT COUNT(*)
-                  FROM tags t
-                  JOIN translations tr ON tr.tag_name = t.name
-                 WHERE t.active = 1 AND tr.locale = ? AND tr.status = 'success'
+                  FROM eligible e
+                  JOIN translations tr ON tr.tag_name = e.name
+                 WHERE tr.locale = ? AND tr.status = 'success'
                 """,
                 (locale,),
             ).fetchone()[0]
@@ -271,11 +362,38 @@ class LiveTagsStore:
 
     def statistics(self, locale=None, batch_size=100):
         with self._connect() as connection:
-            base = connection.execute("SELECT COUNT(*) FROM tags WHERE active = 1").fetchone()[0]
+            candidates = connection.execute("SELECT COUNT(*) FROM tags WHERE active = 1").fetchone()[0]
+            base_missing = 0
+            live_translated = 0
             translated = 0
             failed = 0
-            if locale:
+            locale_column = LOCALE_ALIAS_COLUMNS.get(locale)
+            if locale_column:
+                base_missing = connection.execute(
+                    f"""
+                    SELECT COUNT(*)
+                      FROM base_tags b
+                 LEFT JOIN translations tr ON tr.tag_name = b.name AND tr.locale = ?
+                     WHERE b.{locale_column} = 0
+                       AND COALESCE(tr.status, '') != 'success'
+                       AND NOT EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = b.name)
+                    """,
+                    (locale,),
+                ).fetchone()[0]
+                eligible = f"""
+                    SELECT name FROM tags WHERE active = 1
+                    UNION
+                    SELECT name FROM base_tags WHERE {locale_column} = 0
+                """
                 translated = connection.execute(
+                    f"""
+                    WITH eligible AS ({eligible})
+                    SELECT COUNT(*) FROM eligible e JOIN translations tr ON tr.tag_name = e.name
+                     WHERE tr.locale = ? AND tr.status = 'success'
+                    """,
+                    (locale,),
+                ).fetchone()[0]
+                live_translated = connection.execute(
                     """
                     SELECT COUNT(*) FROM tags t JOIN translations tr ON tr.tag_name = t.name
                      WHERE t.active = 1 AND tr.locale = ? AND tr.status = 'success'
@@ -283,15 +401,17 @@ class LiveTagsStore:
                     (locale,),
                 ).fetchone()[0]
                 failed = connection.execute(
-                    """
-                    SELECT COUNT(*) FROM tags t JOIN translations tr ON tr.tag_name = t.name
-                     WHERE t.active = 1 AND tr.locale = ? AND tr.status = 'failed'
+                    f"""
+                    WITH eligible AS ({eligible})
+                    SELECT COUNT(*) FROM eligible e JOIN translations tr ON tr.tag_name = e.name
+                     WHERE tr.locale = ? AND tr.status = 'failed'
                     """,
                     (locale,),
                 ).fetchone()[0]
-        untranslated = max(base - translated, 0)
+        untranslated = max(candidates - live_translated + base_missing, 0)
         return {
-            "candidates": base,
+            "candidates": candidates,
+            "base_missing": base_missing,
             "translated": translated,
             "untranslated": untranslated,
             "failed": failed,
@@ -322,18 +442,28 @@ class LiveTagsStore:
         with self._connect() as connection:
             tag_rows = connection.execute(
                 """
-                SELECT name, category, post_count
+                SELECT name, category, post_count, '[]' AS aliases_json, 0 AS is_base
                   FROM tags
                  WHERE active = 1
-              ORDER BY post_count DESC, name ASC
+                UNION ALL
+                SELECT b.name, b.category, b.post_count, b.aliases_json, 1 AS is_base
+                  FROM base_tags b
+                 WHERE EXISTS (
+                    SELECT 1 FROM translations tr
+                     WHERE tr.tag_name = b.name AND tr.status = 'success' AND tr.text IS NOT NULL
+                 )
+                   AND NOT EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = b.name)
                 """
             ).fetchall()
             translation_rows = connection.execute(
                 """
                 SELECT tr.tag_name, tr.locale, tr.text
                   FROM translations tr
-                  JOIN tags t ON t.name = tr.tag_name
-                 WHERE t.active = 1 AND tr.status = 'success' AND tr.text IS NOT NULL
+                 WHERE tr.status = 'success' AND tr.text IS NOT NULL
+                   AND (
+                       EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = tr.tag_name)
+                       OR EXISTS (SELECT 1 FROM base_tags b WHERE b.name = tr.tag_name)
+                   )
                 """
             ).fetchall()
 
@@ -343,13 +473,16 @@ class LiveTagsStore:
 
         result = []
         for row in tag_rows:
-            aliases = []
-            seen = {row["name"]}
+            aliases = json.loads(row["aliases_json"])
+            seen = {row["name"], *aliases}
+            added_translation = False
             localized = translations.get(row["name"], {})
             for locale in LOCALE_ORDER:
                 translation = localized.get(locale, "").strip()
                 if translation and translation not in seen:
                     aliases.append(translation)
                     seen.add(translation)
-            result.append((row["name"], row["category"], row["post_count"], ",".join(aliases)))
-        return result
+                    added_translation = True
+            if not row["is_base"] or added_translation:
+                result.append((row["name"], row["category"], row["post_count"], ",".join(aliases)))
+        return sorted(result, key=lambda row: (-row[2], row[0]))
