@@ -12,6 +12,8 @@
   --autocomplete-plus-text-color-disabled: var(--p-gray-400);
   --autocomplete-plus-list-color-even: var(--p-neutral-300);
   --autocomplete-plus-list-color-odd: var(--p-neutral-400);
+  --autocomplete-plus-list-color-selected: color-mix(in srgb, var(--p-blue-500) 30%, var(--p-neutral-200));
+  --autocomplete-plus-list-selection-accent: var(--p-blue-600);
   --wiki-icon-text-color: var(--input-text);
   --wiki-icon-opacity-normal: 0.7;
   --wiki-icon-opacity-hover: 1.0;
@@ -32,6 +34,8 @@ body.dark-theme {
   --autocomplete-plus-text-color-disabled: var(--p-gray-500);
   --autocomplete-plus-list-color-even: var(--p-neutral-800);
   --autocomplete-plus-list-color-odd: var(--p-neutral-900);
+  --autocomplete-plus-list-color-selected: color-mix(in srgb, var(--p-blue-500) 32%, var(--p-neutral-800));
+  --autocomplete-plus-list-selection-accent: var(--p-blue-400);
   --wiki-icon-text-color: var(--input-text);
   --wiki-icon-opacity-normal: 0.5;
   --wiki-icon-opacity-hover: 0.9;
@@ -139,11 +143,13 @@ body.dark-theme {
   background-color: var(--autocomplete-plus-list-color-odd);
 }
 
-.autocomplete-plus-item.selected {
-  background-color: var(--border-color);
+.autocomplete-plus-item.selected,
+.autocomplete-plus-item.selected:hover {
+  background-color: var(--autocomplete-plus-list-color-selected);
+  box-shadow: inset 3px 0 0 var(--autocomplete-plus-list-selection-accent);
 }
 
-.autocomplete-plus-item:hover {
+.autocomplete-plus-item:not(.selected):hover {
   background-color: var(--comfy-hover-bg);
 }
 

@@ -9,10 +9,12 @@ import { AutoFormatterEventHandler } from "./auto-formatter.js";
 import { NodeInfo, VUE_NODE_TEXTAREA_SELECTOR, getVueTextareaNodeInfo } from "./node-info.js";
 import { createLiveTagsSetting } from "./live-tags.js";
 import { isInputOwnedByAnotherExtension } from "./integrations/input-compatibility.js";
+import { getInterfaceText, setInterfaceLocalizationApp } from "./localization.js";
 
 // --- Constants ---
 const id = "AutocompletePlus";
 const name = "Autocomplete Plus";
+setInterfaceLocalizationApp(app);
 
 // --- Module-level variables ---
 const autocompleteEventHandler = new AutocompleteEventHandler();
@@ -243,7 +245,7 @@ app.registerExtension({
     commands: [
         {
             id: id + ".formatPrompt",
-            label: name + ": Format Prompt",
+            label: `${name}: ${getInterfaceText('formatPromptCommand')}`,
             function: () => {
                 const activeEl = document.activeElement;
 

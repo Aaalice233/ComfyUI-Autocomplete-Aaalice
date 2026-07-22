@@ -23,6 +23,7 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 - Category-specific suggestion icons with localized hover labels for general, artist, copyright, character, meta, model, and other tag types.
 - Unified relevance ranking across Danbooru, e621, and LoRA Manager results instead of grouping suggestions by source.
 - Simplified Chinese documentation and continued localization maintenance.
+- Runtime autocomplete and related-tag labels, loading/empty states, controls, Wiki links, and detail tooltips are localized in English, Simplified Chinese, Traditional Chinese, and Japanese.
 
 The original project remains the foundation of this fork. Existing features and credits are preserved wherever possible.
 
@@ -63,6 +64,7 @@ When you type in a text input area, tags that partially match the text are displ
 - Tags are color-coded by category. The color-coding rules are the same as Danbooru.
 - Each suggestion uses a distinct category icon; hover the icon to see the category and source.
 - Suggestions are ranked globally by exact tag, tag prefix, exact alias, tag substring, and alias substring. Popularity is normalized within each source before it is used as the next tie-breaker.
+- The active suggestion uses a persistent accent highlight, including the initially selected first row and while the pointer is hovering it.
 - Tags that have already been entered are displayed grayed out.
 - You can display Danbooru and e621 tags at the same time. You can also change the priority from the settings.
 - Supports autocomplete for Lora and Embedding inputs. You can enable/disable this feature in the settings.
@@ -78,6 +80,7 @@ When you select any tag in a text input area, a list of highly related tags is d
 - Accepting an autocomplete suggestion with Enter, Tab, or a mouse click immediately displays related tags for the completed tag when co-occurrence data is available.
 - Clicking immediately after a tag's trailing comma or the spaces following that comma displays the related tags for the preceding tag.
 - Inserting a related tag reuses and normalizes nearby separators, so it works consistently at the end of a prompt, between existing tags, and next to line breaks without producing duplicate commas.
+- After a related tag is inserted, the panel immediately switches to that tag's co-occurrences, allowing related tags to be selected continuously. A pinned panel intentionally stays on its pinned tag.
 - When clicking switches between autocomplete and related tags, opening one closes the other (except when the related-tags panel is pinned).
 
 - The display position is primarily at the bottom of the text area and automatically adjusts vertically based on available space.

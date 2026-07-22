@@ -64,6 +64,17 @@ describe("live tags configuration validation", () => {
             "System prompt cannot be empty",
         ]));
     });
+
+    test("localizes validation errors for the current interface language", () => {
+        const config = validConfig();
+        config.categories.general.threshold = -1;
+        config.deepseek.model = "";
+
+        expect(validateLiveTagsConfig(config, "zh-CN")).toEqual(expect.arrayContaining([
+            "general（通用） 的最低热度无效",
+            "模型不能为空",
+        ]));
+    });
 });
 
 describe("live tags manager UI", () => {

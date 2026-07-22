@@ -1,7 +1,8 @@
 import { TagCategory, TagData, TagSource, autoCompleteData, getEnabledTagSourceInPriorityOrder } from './data.js';
 import { settingValues } from './settings.js';
-import { renderTagNameWithCategoryIcon } from './tag-presentation.js';
+import { getTagCategoryLabel, renderTagNameWithCategoryIcon } from './tag-presentation.js';
 import { applyTextInsertionEdit, buildRelatedTagInsertionEdit } from './tag-insertion.js';
+import { getInterfaceText } from './localization.js';
 import {
     extractTagsFromTextArea,
     findAllTagPositions,
@@ -177,7 +178,7 @@ class RelatedTagsUI {
         // Create header text div for the left side
         this.headerText = document.createElement('div');
         this.headerText.className = 'related-tags-header-tag-text';
-        this.headerText.textContent = 'Related Tags';
+        this.headerText.textContent = getInterfaceText('relatedTags');
         this.headerTextContainer.appendChild(this.headerText);
 
         // Create header alias div for the 2nd line
@@ -192,7 +193,8 @@ class RelatedTagsUI {
         // Create layout toggle button
         this.toggleLayoutBtn = document.createElement('button');
         this.toggleLayoutBtn.className = 'related-tags-layout-toggle';
-        this.toggleLayoutBtn.title = 'Toggle between vertical and horizontal layout';
+        this.toggleLayoutBtn.title = getInterfaceText('toggleRelatedTagsLayout');
+        this.toggleLayoutBtn.ariaLabel = this.toggleLayoutBtn.title;
 
         // Add click handler for layout toggle
         this.toggleLayoutBtn.addEventListener('click', (e) => {
@@ -436,11 +438,17 @@ class RelatedTagsUI {
 
         // Update header text with current tag
         this.headerText.innerHTML = ''; // Clear previous content
-        this.headerText.textContent = 'Tags related to: ';
+        this.headerText.textContent = `${getInterfaceText('tagsRelatedTo')} `;
 
         const tagName = document.createElement('span');
         tagName.classList.add('related-tags-header-tag-name', tagData.source);
-        tagName.title = `Count: ${tagData.count}\nCategory: ${categoryText}\nAlias: ${aliasText}`;
+        const localizedCategory = getTagCategoryLabel(categoryText);
+        const detailLines = [
+            `${getInterfaceText('count')}: ${tagData.count}`,
+            `${getInterfaceText('category')}: ${localizedCategory}`,
+        ];
+        if (aliasText) detailLines.push(`${getInterfaceText('alias')}: ${aliasText}`);
+        tagName.title = detailLines.join('\n');
         tagName.dataset.tagCategory = categoryText;
         tagName.dataset.tagSource = tagData.source;
         tagName.dataset.tagName = tagData.tag;
@@ -464,6 +472,10 @@ class RelatedTagsUI {
 
         // Update pin button
         this.pinBtn.textContent = this.isPinned ? '🎯' : '📌';
+        this.pinBtn.title = getInterfaceText(this.isPinned ? 'unpinRelatedTags' : 'pinRelatedTags');
+        this.pinBtn.ariaLabel = this.pinBtn.title;
+        this.toggleLayoutBtn.title = getInterfaceText('toggleRelatedTagsLayout');
+        this.toggleLayoutBtn.ariaLabel = this.toggleLayoutBtn.title;
 
         // Update the button icon
         this.toggleLayoutBtn.innerHTML = settingValues.relatedTagsDisplayPosition === 'vertical'
@@ -481,7 +493,9 @@ class RelatedTagsUI {
             // Show loading message
             const messageDiv = document.createElement('div');
             messageDiv.className = 'related-tags-message';
-            messageDiv.textContent = `Initializing cooccurrence data... [${autoCompleteData[TagSource.Danbooru].baseLoadingProgress.cooccurrence}%]`;
+            messageDiv.textContent = getInterfaceText('initializingCooccurrence', {
+                progress: autoCompleteData[TagSource.Danbooru].baseLoadingProgress.cooccurrence,
+            });
             this.tagsContainer.appendChild(messageDiv);
             return;
         }
@@ -490,7 +504,7 @@ class RelatedTagsUI {
             // Show no related tags message
             const messageDiv = document.createElement('div');
             messageDiv.className = 'related-tags-message';
-            messageDiv.textContent = 'No related tags found';
+            messageDiv.textContent = getInterfaceText('noRelatedTags');
             this.tagsContainer.appendChild(messageDiv);
             return;
         }
@@ -540,7 +554,8 @@ class RelatedTagsUI {
             wikiIcon.dataset.tagName = tagData.tag;
             wikiIcon.dataset.tagSource = tagData.source;
             wikiIcon.textContent = '📖'
-            wikiIcon.title = 'Open wiki page';
+            wikiIcon.title = getInterfaceText('openWikiPage');
+            wikiIcon.ariaLabel = wikiIcon.title;
         } else {
             wikiIcon.classList.add('disabled');
         }
@@ -561,9 +576,11 @@ class RelatedTagsUI {
         similarity.textContent = `${(tagData.similarity * 100).toFixed(2)}%`;
 
         // Create tooltip with more info
-        let tooltipText = `Similarity: ${(tagData.similarity * 100).toFixed(2)}%\nCount: ${tagData.count}\nCategory: ${categoryText}`;
+        const localizedCategory = getTagCategoryLabel(categoryText);
+        let tooltipText = `${getInterfaceText('similarity')}: ${(tagData.similarity * 100).toFixed(2)}%\n` +
+            `${getInterfaceText('count')}: ${tagData.count}\n${getInterfaceText('category')}: ${localizedCategory}`;
         if (aliasText.length > 0) {
-            tooltipText += `\nAlias: ${aliasText}`;
+            tooltipText += `\n${getInterfaceText('alias')}: ${aliasText}`;
         }
         tagRow.title = tooltipText;
 
@@ -636,12 +653,17 @@ class RelatedTagsUI {
     #insertTag(tag) {
         if (!this.target) return;
 
-        // Use the same insertTag function from autocomplete.js
-        insertTagToTextArea(this.target, tag);
+        // The input event fired by insertText may hide the current panel and
+        // clear this.target, so retain the active textarea before editing.
+        const target = this.target;
+        const wasPinned = this.isPinned;
+        insertTagToTextArea(target, tag);
 
-        // Hide the panel after selection, unless pinned
-        if (!this.isPinned) {
-            this.hide();
+        if (!wasPinned) {
+            // The caret now sits after the inserted tag (and optional trailing
+            // comma). Re-resolve it immediately to enable continuous chains.
+            this.selectedIndex = -1;
+            this.show(target, false);
         } else {
             this.#highlightItem();
         }

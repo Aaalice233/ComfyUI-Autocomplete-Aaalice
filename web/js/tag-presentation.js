@@ -1,3 +1,10 @@
+import {
+    getCurrentInterfaceLocale,
+    normalizeInterfaceLocale,
+} from './localization.js';
+
+export { getCurrentInterfaceLocale, normalizeInterfaceLocale } from './localization.js';
+
 const CATEGORY_ICON_KEYS = new Set([
     'general',
     'artist',
@@ -46,24 +53,6 @@ const CATEGORY_TRANSLATIONS = {
         embeddings: '埋め込み', wildcard: 'ワイルドカード', unknown: '不明',
     },
 };
-
-export function normalizeInterfaceLocale(locale) {
-    const normalized = String(locale || 'en').replaceAll('_', '-').toLowerCase();
-    if (['zh-tw', 'zh-hant', 'zh-hk'].includes(normalized)) return 'zh-TW';
-    if (normalized.startsWith('zh')) return 'zh';
-    if (normalized.startsWith('ja')) return 'ja';
-    return 'en';
-}
-
-export function getCurrentInterfaceLocale() {
-    const app = globalThis.window?.app;
-    const locale = app?.extensionManager?.setting?.get?.('Comfy.Locale')
-        ?? app?.ui?.settings?.getSettingValue?.('Comfy.Locale')
-        ?? globalThis.document?.documentElement?.lang
-        ?? globalThis.navigator?.language
-        ?? 'en';
-    return normalizeInterfaceLocale(locale);
-}
 
 export function getTagCategoryLabel(category, locale = getCurrentInterfaceLocale()) {
     const key = String(category || 'unknown').toLowerCase();

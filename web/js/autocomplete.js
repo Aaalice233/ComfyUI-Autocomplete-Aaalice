@@ -24,9 +24,10 @@ import { settingValues } from './settings.js';
 import {
     searchLoraManagerCandidates,
 } from './integrations/lora-manager-provider.js';
-import { renderTagNameWithCategoryIcon } from './tag-presentation.js';
+import { getTagCategoryLabel, renderTagNameWithCategoryIcon } from './tag-presentation.js';
 import { rankCompletionCandidates } from './candidate-ranking.js';
 import { applyTextInsertionEdit, buildAutocompleteInsertionEdit } from './tag-insertion.js';
+import { getInterfaceText } from './localization.js';
 
 export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
 
@@ -555,7 +556,8 @@ class AutocompleteUI {
             wikiIcon.dataset.tagName = tagData.tag;
             wikiIcon.dataset.tagSource = tagData.source;
             wikiIcon.textContent = '📖'
-            wikiIcon.title = 'Open wiki page';
+            wikiIcon.title = getInterfaceText('openWikiPage');
+            wikiIcon.ariaLabel = wikiIcon.title;
         } else {
             wikiIcon.classList.add('disabled');
         }
@@ -576,9 +578,10 @@ class AutocompleteUI {
         tagCount.textContent = formatCountHumanReadable(tagData.count);
 
         // Create tooltip with more info
-        let tooltipText = `Count: ${tagData.count}\nCategory: ${categoryText}`;
+        const localizedCategory = getTagCategoryLabel(categoryText);
+        let tooltipText = `${getInterfaceText('count')}: ${tagData.count}\n${getInterfaceText('category')}: ${localizedCategory}`;
         if (aliasText.length > 0) {
-            tooltipText += `\nAlias: ${aliasText}`;
+            tooltipText += `\n${getInterfaceText('alias')}: ${aliasText}`;
         }
         tagRow.title = tooltipText;
 

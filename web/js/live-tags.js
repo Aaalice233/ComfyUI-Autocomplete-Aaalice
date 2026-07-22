@@ -55,6 +55,16 @@ const TEXT = {
         saved: "Settings saved",
         refreshHint: "The generated CSV changed. Refresh the page to rebuild the search index.",
         manager: "LIVE DATA WORKSPACE",
+        invalidMode: "Invalid mode for {category}",
+        invalidThreshold: "Invalid threshold for {category}",
+        rangeError: "{field} must be between {minimum} and {maximum}",
+        modelRequired: "Model cannot be empty",
+        promptRequired: "System prompt cannot be empty",
+        jobStates: {
+            queued: "Queued", running: "Running", cancelling: "Cancelling", loading_base: "Loading base CSV",
+            scanning: "Scanning tags", committing: "Saving scan results", translating: "Translating tags",
+            completed: "Completed", cancelled: "Cancelled", interrupted: "Interrupted", failed: "Failed",
+        },
     },
     zh: {
         title: "Danbooru 实时标签",
@@ -107,6 +117,16 @@ const TEXT = {
         saved: "设置已保存",
         refreshHint: "额外 CSV 已更新，请刷新页面以重建搜索索引。",
         manager: "实时数据工作台",
+        invalidMode: "{category} 的拉取策略无效",
+        invalidThreshold: "{category} 的最低热度无效",
+        rangeError: "{field} 必须在 {minimum} 到 {maximum} 之间",
+        modelRequired: "模型不能为空",
+        promptRequired: "System Prompt 不能为空",
+        jobStates: {
+            queued: "等待开始", running: "正在运行", cancelling: "正在取消", loading_base: "正在读取基础 CSV",
+            scanning: "正在扫描标签", committing: "正在保存扫描结果", translating: "正在翻译标签",
+            completed: "已完成", cancelled: "已取消", interrupted: "已中断", failed: "失败",
+        },
     },
     "zh-TW": {
         title: "Danbooru 即時標籤",
@@ -159,6 +179,16 @@ const TEXT = {
         saved: "設定已儲存",
         refreshHint: "額外 CSV 已更新，請重新整理頁面以重建搜尋索引。",
         manager: "即時資料工作台",
+        invalidMode: "{category} 的擷取策略無效",
+        invalidThreshold: "{category} 的最低熱度無效",
+        rangeError: "{field} 必須介於 {minimum} 與 {maximum} 之間",
+        modelRequired: "模型不能為空",
+        promptRequired: "System Prompt 不能為空",
+        jobStates: {
+            queued: "等待開始", running: "執行中", cancelling: "正在取消", loading_base: "正在讀取基礎 CSV",
+            scanning: "正在掃描標籤", committing: "正在儲存掃描結果", translating: "正在翻譯標籤",
+            completed: "已完成", cancelled: "已取消", interrupted: "已中斷", failed: "失敗",
+        },
     },
     ja: {
         title: "Danbooru ライブタグ",
@@ -211,6 +241,16 @@ const TEXT = {
         saved: "設定を保存しました",
         refreshHint: "追加 CSV が更新されました。ページを更新して検索インデックスを再構築してください。",
         manager: "ライブデータワークスペース",
+        invalidMode: "{category} の取得方法が無効です",
+        invalidThreshold: "{category} の最低投稿数が無効です",
+        rangeError: "{field} は {minimum} から {maximum} の範囲で指定してください",
+        modelRequired: "モデルを入力してください",
+        promptRequired: "System Prompt を入力してください",
+        jobStates: {
+            queued: "開始待ち", running: "実行中", cancelling: "キャンセル中", loading_base: "基本 CSV を読み込み中",
+            scanning: "タグをスキャン中", committing: "スキャン結果を保存中", translating: "タグを翻訳中",
+            completed: "完了", cancelled: "キャンセル済み", interrupted: "中断", failed: "失敗",
+        },
     },
 };
 
@@ -222,14 +262,25 @@ export function normalizeLiveTagsLocale(locale) {
     return "en";
 }
 
-export function validateLiveTagsConfig(config) {
+function formatText(template, parameters = {}) {
+    return String(template).replace(/\{(\w+)\}/g, (match, name) =>
+        Object.hasOwn(parameters, name) ? String(parameters[name]) : match);
+}
+
+function getLocalizedJobState(job, text) {
+    const state = job?.phase || job?.status;
+    return text.jobStates?.[state] || job?.message || state || text.completed;
+}
+
+export function validateLiveTagsConfig(config, locale = "en") {
+    const text = TEXT[normalizeLiveTagsLocale(locale)];
     const errors = [];
     for (const category of CATEGORY_NAMES) {
         const policy = config.categories?.[category];
         if (!policy || !["disabled", "all", "threshold"].includes(policy.mode)) {
-            errors.push(`Invalid mode for ${category}`);
+            errors.push(formatText(text.invalidMode, { category: getTagCategoryLabel(category, locale) }));
         } else if (policy.mode === "threshold" && (!Number.isInteger(policy.threshold) || policy.threshold < 0)) {
-            errors.push(`Invalid threshold for ${category}`);
+            errors.push(formatText(text.invalidThreshold, { category: getTagCategoryLabel(category, locale) }));
         }
     }
     const ranges = {
@@ -241,11 +292,11 @@ export function validateLiveTagsConfig(config) {
     for (const [key, [minimum, maximum]] of Object.entries(ranges)) {
         const value = config.deepseek?.[key];
         if (!Number.isInteger(value) || value < minimum || value > maximum) {
-            errors.push(`${key} must be between ${minimum} and ${maximum}`);
+            errors.push(formatText(text.rangeError, { field: key, minimum, maximum }));
         }
     }
-    if (!config.deepseek?.model?.trim()) errors.push("Model cannot be empty");
-    if (!config.deepseek?.system_prompt?.trim()) errors.push("System prompt cannot be empty");
+    if (!config.deepseek?.model?.trim()) errors.push(text.modelRequired);
+    if (!config.deepseek?.system_prompt?.trim()) errors.push(text.promptRequired);
     return errors;
 }
 
@@ -462,7 +513,7 @@ export async function openLiveTagsManager(app) {
 
     const save = async () => {
         const updated = collectConfig();
-        const errors = validateLiveTagsConfig(updated);
+        const errors = validateLiveTagsConfig(updated, locale);
         if (errors.length) throw new Error(errors.join("; "));
         config = await requestJson(`${API_ROOT}/config`, { method: "PUT", body: JSON.stringify(updated) });
         danbooruKey.value = config.danbooru.api_key;
@@ -501,14 +552,14 @@ export async function openLiveTagsManager(app) {
         const active = Boolean(status.active);
         stateBadge.classList.toggle("is-active", active);
         stateBadge.classList.toggle("is-idle", !active);
-        stateLabel.textContent = active ? (job?.phase || job?.status || text.completed) : text.idle;
+        stateLabel.textContent = active ? getLocalizedJobState(job, text) : text.idle;
         taskStatus.dataset.active = String(active);
         taskStatus.dataset.hasJob = String(Boolean(job));
         scanButton.disabled = active;
         for (const button of [translateButton, failedButton, allButton]) button.disabled = active || locale === "en";
         cancelButton.disabled = !active;
         if (job) {
-            message.textContent = job.error || job.message || job.phase;
+            message.textContent = job.error || getLocalizedJobState(job, text);
             jobCounters.textContent = [
                 `${text.completed}: ${job.completed || 0}/${job.total || "?"}`,
                 `${text.cached}: ${job.cached || 0}`,

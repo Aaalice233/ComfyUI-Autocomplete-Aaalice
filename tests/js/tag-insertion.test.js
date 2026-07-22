@@ -2,6 +2,7 @@ import {
     buildAutocompleteInsertionEdit,
     buildRelatedTagInsertionEdit
 } from '../../web/js/tag-insertion.js';
+import { getTagRangeForRelatedTags } from '../../web/js/utils.js';
 
 function applyEdit(text, edit) {
     return text.substring(0, edit.start) + edit.replacement + text.substring(edit.end);
@@ -42,8 +43,15 @@ describe('related tag insertion formatting', () => {
     test('uses the existing trailing comma as the separator before the related tag', () => {
         const text = '1girl, looking at viewer, ';
         const edit = buildRelatedTagInsertionEdit(text, text.length, 'long hair', true);
+        const result = applyEdit(text, edit);
+        const newCursorPos = edit.start + edit.replacement.length;
 
-        expect(applyEdit(text, edit)).toBe('1girl, looking at viewer, long hair, ');
+        expect(result).toBe('1girl, looking at viewer, long hair, ');
+        expect(getTagRangeForRelatedTags(result, newCursorPos)).toEqual({
+            start: 26,
+            end: 35,
+            tag: 'long hair'
+        });
     });
 
     test('repairs repeated comma slots while inserting a related tag', () => {
