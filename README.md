@@ -21,6 +21,8 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 - Optional Danbooru live-tag scanning with per-category popularity filters, plus resumable DeepSeek translation and a persistent local cache.
 - Alias previews are filtered to the current ComfyUI language while the complete alias set remains searchable.
 - Live-tag network, authentication, CSV, and translation errors are localized to the current ComfyUI language while unknown diagnostics remain visible.
+- Danbooru synchronization uses a Cloudflare-compatible product identifier instead of the `ComfyUI` User-Agent token rejected by some edge rules.
+- Danbooru scans use configurable adaptive concurrency (1–16, default 8) across 16 ID ranges; scan status shows the number processed without a misleading percentage, while translation keeps determinate progress.
 - Optional LoRA Manager compatibility layer that supplements results through its local tag, LoRA, Embedding, and Wildcard APIs while avoiding duplicate autocomplete inside LoRA Manager inputs.
 - Category-specific emoji markers with localized hover labels for general, artist, copyright, character, meta, model, and other tag types.
 - Unified relevance ranking across Danbooru, e621, and LoRA Manager results instead of grouping suggestions by source.
@@ -237,10 +239,15 @@ Open **Autocomplete Plus → Live Tags → Manage Danbooru Live Tags** to use th
 
 1. Choose `Do not fetch`, `Fetch all`, or `Minimum post count` independently for each Danbooru category.
 2. Optionally configure a Danbooru login and API key, then click **Scan tags**. Only tags missing from `danbooru_tags.csv` are written to `data/danbooru_tags_live.csv`.
+   The credentials section also provides an **Open Danbooru** shortcut that opens the official site in a new tab.
 3. Review new candidates, base tags missing a translation, and the estimated request count before starting DeepSeek translation. Translation follows the current ComfyUI language; English does not require translation.
 4. Refresh the page after the CSV changes so the autocomplete index is rebuilt.
 
 DeepSeek translation covers both newly scanned tags and rows in the base CSV whose aliases do not contain the current interface language. Successful translations are cached by tag and language in SQLite, so later runs only send uncached or explicitly retried tags. The generated live CSV preserves each base row's category, count, and existing aliases while adding cached translations; the original base CSV is never changed. Interrupted and cancelled jobs keep completed results.
+
+Danbooru scanning uses a dedicated `Autocomplete-Plus` User-Agent. Some Cloudflare edge routes reject requests whose product token contains `ComfyUI`, even when the same `aiohttp` request and network exit work with another valid product identifier.
+
+Because Danbooru does not provide a cheap stable total for these filtered scans, scanning displays a live processed-tag counter instead of a percentage bar. Categories are split into 16 non-overlapping tag-ID ranges and processed with configurable concurrency from 1 to 16 (default 8). HTTP 429 responses automatically halve active concurrency; sustained successful requests restore it gradually. Translation still uses a normal progress bar because its work list is known before requests start.
 
 Autocomplete and related-tag panels only preview aliases matching the current ComfyUI language. This is display filtering only: all aliases remain in the search index.
 

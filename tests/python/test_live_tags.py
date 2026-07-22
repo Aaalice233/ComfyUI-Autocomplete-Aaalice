@@ -7,7 +7,16 @@ import unittest
 from unittest.mock import patch
 
 from modules.live_tags_config import DEFAULT_CONFIG, LiveTagsConfig, mask_config, validate_config
-from modules.live_tags_service import DeepSeekClient, LiveTagsManager, normalize_locale, validate_translation_response
+from modules.live_tags_service import (
+    AdaptiveRequestLimiter,
+    DanbooruClient,
+    DeepSeekClient,
+    LiveTagsManager,
+    USER_AGENT,
+    normalize_locale,
+    split_id_ranges,
+    validate_translation_response,
+)
 from modules.live_tags_store import LiveTagsStore
 
 
@@ -23,6 +32,12 @@ class LiveTagsConfigTests(unittest.TestCase):
             validate_config({"deepseek": {"concurrency": 301}})
         with self.assertRaisesRegex(ValueError, "batch_size"):
             validate_config({"deepseek": {"batch_size": 0}})
+
+    def test_scan_concurrency_defaults_to_eight_and_is_bounded(self):
+        self.assertEqual(validate_config({})["danbooru"]["scan_concurrency"], 8)
+        for value in (0, 17):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "scan_concurrency"):
+                validate_config({"danbooru": {"scan_concurrency": value}})
 
     def test_masked_secret_is_preserved_when_saving(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -158,6 +173,20 @@ class TranslationValidationTests(unittest.TestCase):
 
 
 class LiveTagsManagerTests(unittest.TestCase):
+    def test_danbooru_user_agent_avoids_cloudflare_blocked_product_token(self):
+        self.assertNotIn("ComfyUI", USER_AGENT)
+
+    def test_scan_id_ranges_cover_every_id_once(self):
+        ranges = split_id_ranges(10, 4)
+        flattened = [tag_id for start, end in ranges for tag_id in range(start, end + 1)]
+        self.assertEqual(flattened, list(range(1, 11)))
+        self.assertEqual(len(ranges), 4)
+
+    def test_danbooru_auth_is_applied_to_scan_metadata_requests(self):
+        client = DanbooruClient(None, {"login": "user", "api_key": "secret"}, asyncio.Event())
+        params = client._with_auth({"limit": "1"})
+        self.assertEqual(params, {"limit": "1", "login": "user", "api_key": "secret"})
+
     def test_base_csv_names_are_loaded_for_deduplication(self):
         with tempfile.TemporaryDirectory() as directory:
             base_csv = os.path.join(directory, "danbooru_tags.csv")
@@ -180,6 +209,17 @@ class LiveTagsManagerTests(unittest.TestCase):
 
 
 class LiveTagsManagerAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_scan_limiter_reduces_on_rate_limit_and_recovers_gradually(self):
+        limiter = AdaptiveRequestLimiter(8, recovery_successes=2)
+        await limiter.acquire()
+        await limiter.release(rate_limited=True)
+        self.assertEqual(limiter.current_limit, 4)
+
+        for _ in range(2):
+            await limiter.acquire()
+            await limiter.release(successful=True)
+        self.assertEqual(limiter.current_limit, 5)
+
     async def test_scan_filters_base_tags_and_exports_only_new_candidates(self):
         with tempfile.TemporaryDirectory() as directory:
             base_csv = os.path.join(directory, "danbooru_tags.csv")
@@ -280,10 +320,15 @@ class StubSession:
 
 
 class StubDanbooruClient:
-    def __init__(self, session, config, cancel_event):
+    def __init__(self, session, config, cancel_event, **_kwargs):
         self.cancel_event = cancel_event
 
-    async def iter_category(self, category_name, policy):
+    async def get_max_tag_id(self):
+        return 100
+
+    async def iter_category(self, category_name, policy, id_range=None):
+        if id_range[0] != 1:
+            return
         yield [
             _tag(1, "existing_tag", 0, 100),
             _tag(2, "new_tag", 0, 50),

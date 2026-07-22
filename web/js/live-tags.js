@@ -13,6 +13,7 @@ const TEXT = {
         categoriesDescription: "Choose which tag groups to include and control their size.",
         credentials: "Credentials",
         credentialsDescription: "Keys are stored only in the local ComfyUI user directory.",
+        openDanbooru: "Open Danbooru",
         translation: "DeepSeek translation",
         translationDescription: "Translate new tags and base tags missing the current interface language.",
         advanced: "Advanced prompt",
@@ -25,6 +26,7 @@ const TEXT = {
         threshold: "Minimum post count",
         danbooruLogin: "Danbooru login (optional)",
         danbooruKey: "Danbooru API key (optional)",
+        scanConcurrency: "Scan concurrency",
         deepseekKey: "DeepSeek API key",
         configured: "Configured; leave unchanged to keep it",
         model: "Model",
@@ -49,6 +51,7 @@ const TEXT = {
         pending: "Pending translations",
         requests: "Estimated requests",
         completed: "Processed",
+        scanned: "Scanned",
         cached: "Cache hits",
         retrying: "Retries",
         failed: "Failed",
@@ -92,6 +95,7 @@ const TEXT = {
         categoriesDescription: "决定需要补充的标签类别，并控制候选数据规模。",
         credentials: "凭据",
         credentialsDescription: "密钥仅保存在本机 ComfyUI 用户目录。",
+        openDanbooru: "打开 Danbooru",
         translation: "DeepSeek 翻译",
         translationDescription: "翻译新增标签，并补全基础表中缺少当前界面语言的条目。",
         advanced: "高级提示词",
@@ -104,6 +108,7 @@ const TEXT = {
         threshold: "最低热度",
         danbooruLogin: "Danbooru 用户名（可选）",
         danbooruKey: "Danbooru API Key（可选）",
+        scanConcurrency: "扫描并发数",
         deepseekKey: "DeepSeek API Key",
         configured: "已配置；保持不变即可继续使用",
         model: "模型",
@@ -128,6 +133,7 @@ const TEXT = {
         pending: "待翻译数",
         requests: "预计请求数",
         completed: "已处理",
+        scanned: "已扫描",
         cached: "缓存命中",
         retrying: "重试次数",
         failed: "失败",
@@ -171,6 +177,7 @@ const TEXT = {
         categoriesDescription: "決定需要補充的標籤類別，並控制候選資料規模。",
         credentials: "憑證",
         credentialsDescription: "金鑰僅儲存在本機 ComfyUI 使用者目錄。",
+        openDanbooru: "開啟 Danbooru",
         translation: "DeepSeek 翻譯",
         translationDescription: "翻譯新增標籤，並補全基礎表中缺少目前介面語言的項目。",
         advanced: "進階提示詞",
@@ -183,6 +190,7 @@ const TEXT = {
         threshold: "最低熱度",
         danbooruLogin: "Danbooru 使用者名稱（可選）",
         danbooruKey: "Danbooru API Key（可選）",
+        scanConcurrency: "掃描並行數",
         deepseekKey: "DeepSeek API Key",
         configured: "已設定；保持不變即可繼續使用",
         model: "模型",
@@ -207,6 +215,7 @@ const TEXT = {
         pending: "待翻譯數",
         requests: "預估請求數",
         completed: "已處理",
+        scanned: "已掃描",
         cached: "快取命中",
         retrying: "重試次數",
         failed: "失敗",
@@ -250,6 +259,7 @@ const TEXT = {
         categoriesDescription: "取得するタグカテゴリを選び、候補データの規模を調整します。",
         credentials: "認証情報",
         credentialsDescription: "キーはローカルの ComfyUI ユーザーディレクトリにのみ保存されます。",
+        openDanbooru: "Danbooru を開く",
         translation: "DeepSeek 翻訳",
         translationDescription: "新規タグと、現在の表示言語がない基本タグを翻訳します。",
         advanced: "詳細プロンプト",
@@ -262,6 +272,7 @@ const TEXT = {
         threshold: "最低投稿数",
         danbooruLogin: "Danbooru ログイン名（任意）",
         danbooruKey: "Danbooru API Key（任意）",
+        scanConcurrency: "スキャン同時実行数",
         deepseekKey: "DeepSeek API Key",
         configured: "設定済み。変更しない場合はそのままにしてください",
         model: "モデル",
@@ -286,6 +297,7 @@ const TEXT = {
         pending: "未翻訳数",
         requests: "推定リクエスト数",
         completed: "処理済み",
+        scanned: "スキャン済み",
         cached: "キャッシュヒット",
         retrying: "再試行",
         failed: "失敗",
@@ -387,6 +399,10 @@ export function validateLiveTagsConfig(config, locale = "en") {
         } else if (policy.mode === "threshold" && (!Number.isInteger(policy.threshold) || policy.threshold < 0)) {
             errors.push(formatText(text.invalidThreshold, { category: getTagCategoryLabel(category, locale) }));
         }
+    }
+    const scanConcurrency = config.danbooru?.scan_concurrency;
+    if (!Number.isInteger(scanConcurrency) || scanConcurrency < 1 || scanConcurrency > 16) {
+        errors.push(formatText(text.rangeError, { field: "scan_concurrency", minimum: 1, maximum: 16 }));
     }
     const ranges = {
         concurrency: [1, 300],
@@ -547,8 +563,25 @@ export async function openLiveTagsManager(app) {
         text.credentialsDescription,
         "pi-key",
     );
+    const danbooruLink = createElement("a", "autocomplete-plus-live-tags-external-link");
+    danbooruLink.href = "https://danbooru.donmai.us/";
+    danbooruLink.target = "_blank";
+    danbooruLink.rel = "noopener noreferrer";
+    danbooruLink.title = text.openDanbooru;
+    danbooruLink.ariaLabel = text.openDanbooru;
+    danbooruLink.append(createIcon("pi-external-link"), createElement("span", "", text.openDanbooru));
+    danbooruLink.onclick = event => event.stopPropagation();
+    credentialsSection.querySelector("summary").append(danbooruLink);
     const danbooruLogin = createField(credentialsSection, text.danbooruLogin, "text", config.danbooru.login);
     const danbooruKey = createField(credentialsSection, text.danbooruKey, "password", config.danbooru.api_key);
+    const scanConcurrency = createField(
+        credentialsSection,
+        text.scanConcurrency,
+        "number",
+        config.danbooru.scan_concurrency,
+        1,
+        16,
+    );
     const deepseekKey = createField(credentialsSection, text.deepseekKey, "password", config.deepseek.api_key);
     deepseekKey.parentElement.classList.add("autocomplete-plus-live-tags-wide");
     if (config.danbooru.api_key_configured) danbooruKey.placeholder = text.configured;
@@ -605,7 +638,11 @@ export async function openLiveTagsManager(app) {
             mode: categoryInputs[category].mode.value,
             threshold: Number(categoryInputs[category].threshold.value),
         }])),
-        danbooru: { login: danbooruLogin.value, api_key: danbooruKey.value },
+        danbooru: {
+            login: danbooruLogin.value,
+            api_key: danbooruKey.value,
+            scan_concurrency: Number(scanConcurrency.value),
+        },
         deepseek: {
             api_key: deepseekKey.value,
             model: model.value,
@@ -657,6 +694,7 @@ export async function openLiveTagsManager(app) {
         }
         const job = status.job;
         const active = Boolean(status.active);
+        const isScanJob = job?.kind === "scan";
         stateBadge.classList.toggle("is-active", active);
         stateBadge.classList.toggle("is-idle", !active);
         stateLabel.textContent = active ? getLocalizedJobState(job, text) : text.idle;
@@ -669,19 +707,22 @@ export async function openLiveTagsManager(app) {
             message.textContent = job.error
                 ? localizeLiveTagsError(job.error_code, job.error, locale)
                 : getLocalizedJobState(job, text);
-            jobCounters.textContent = [
-                `${text.completed}: ${job.completed || 0}/${job.total || "?"}`,
-                `${text.cached}: ${job.cached || 0}`,
-                `${text.retrying}: ${job.retrying || 0}`,
-                `${text.failed}: ${job.failed || 0}`,
-            ].join(" · ");
-            if (job.total > 0) {
+            jobCounters.textContent = isScanJob
+                ? `${text.scanned}: ${job.completed || 0}`
+                : [
+                    `${text.completed}: ${job.completed || 0}/${job.total || "?"}`,
+                    `${text.cached}: ${job.cached || 0}`,
+                    `${text.retrying}: ${job.retrying || 0}`,
+                    `${text.failed}: ${job.failed || 0}`,
+                ].join(" · ");
+            progress.hidden = isScanJob;
+            if (!isScanJob && job.total > 0) {
                 progress.removeAttribute("data-indeterminate");
                 progress.value = Math.min((job.completed / job.total) * 100, 100);
-            } else if (active) {
+            } else if (!isScanJob && active) {
                 progress.removeAttribute("value");
                 progress.dataset.indeterminate = "true";
-            } else {
+            } else if (!isScanJob) {
                 progress.value = job.status === "completed" ? 100 : 0;
             }
             if (!active && ["completed", "cancelled"].includes(job.status)) {
@@ -691,6 +732,7 @@ export async function openLiveTagsManager(app) {
             }
         } else {
             jobCounters.textContent = "";
+            progress.hidden = false;
             progress.value = 0;
         }
         if (!active && pollTimer !== null) {

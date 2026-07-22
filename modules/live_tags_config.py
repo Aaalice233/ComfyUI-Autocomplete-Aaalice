@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
         "character": {"mode": "all", "threshold": 0},
         "meta": {"mode": "threshold", "threshold": 100},
     },
-    "danbooru": {"login": "", "api_key": ""},
+    "danbooru": {"login": "", "api_key": "", "scan_concurrency": 8},
     "deepseek": {
         "api_key": "",
         "model": "deepseek-v4-flash",
@@ -76,6 +76,11 @@ def validate_config(raw_config, current_config=None):
     if "login" in raw_danbooru:
         config["danbooru"]["login"] = _validate_string(raw_danbooru["login"], "danbooru.login", 200)
     _apply_secret(config["danbooru"], raw_danbooru, "api_key")
+    if "scan_concurrency" in raw_danbooru:
+        scan_concurrency = raw_danbooru["scan_concurrency"]
+        if isinstance(scan_concurrency, bool) or not isinstance(scan_concurrency, int) or not 1 <= scan_concurrency <= 16:
+            raise ValueError("danbooru.scan_concurrency must be between 1 and 16")
+        config["danbooru"]["scan_concurrency"] = scan_concurrency
 
     raw_deepseek = raw_config.get("deepseek", {})
     if not isinstance(raw_deepseek, dict):

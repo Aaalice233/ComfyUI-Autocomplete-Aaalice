@@ -18,6 +18,7 @@ function validConfig() {
             character: { mode: "all", threshold: 0 },
             meta: { mode: "threshold", threshold: 100 },
         },
+        danbooru: { login: "", api_key: "", scan_concurrency: 8 },
         deepseek: {
             model: "deepseek-v4-flash",
             system_prompt: "Translate tags as JSON",
@@ -72,9 +73,11 @@ describe("live tags configuration validation", () => {
         const config = validConfig();
         config.categories.general.threshold = -1;
         config.deepseek.concurrency = 301;
+        config.danbooru.scan_concurrency = 17;
         expect(validateLiveTagsConfig(config)).toEqual(expect.arrayContaining([
             "Invalid threshold for general",
             "concurrency must be between 1 and 300",
+            "scan_concurrency must be between 1 and 16",
         ]));
     });
 
@@ -108,7 +111,7 @@ describe("live tags manager UI", () => {
 
     test("shows status and disables translation for an English interface", async () => {
         const config = validConfig();
-        config.danbooru = { login: "", api_key: "", api_key_configured: false };
+        config.danbooru = { login: "", api_key: "", scan_concurrency: 8, api_key_configured: false };
         config.deepseek.api_key = "";
         config.deepseek.api_key_configured = false;
         const status = {
@@ -146,7 +149,7 @@ describe("live tags manager UI", () => {
 
     test("adds localized category notes and hides irrelevant thresholds", async () => {
         const config = validConfig();
-        config.danbooru = { login: "", api_key: "", api_key_configured: false };
+        config.danbooru = { login: "", api_key: "", scan_concurrency: 8, api_key_configured: false };
         config.deepseek.api_key = "";
         config.deepseek.api_key_configured = false;
         global.fetch = jest.fn(async url => ({
@@ -179,5 +182,48 @@ describe("live tags manager UI", () => {
         expect(rows.find(row => row.dataset.mode === "threshold").querySelector("input").hidden).toBe(false);
         expect(rows.find(row => row.dataset.mode === "all").querySelector("input").hidden).toBe(true);
         expect(rows.find(row => row.dataset.mode === "disabled").querySelector("input").hidden).toBe(true);
+    });
+
+    test("provides a localized shortcut to Danbooru in credentials", async () => {
+        const config = validConfig();
+        config.danbooru = { login: "", api_key: "", scan_concurrency: 8, api_key_configured: false };
+        config.deepseek.api_key = "";
+        config.deepseek.api_key_configured = false;
+        global.fetch = jest.fn(async url => ({
+            ok: true,
+            status: 200,
+            json: async () => url.endsWith("/config") ? config : { active: false, job: null, statistics: {} },
+        }));
+        HTMLDialogElement.prototype.showModal = jest.fn();
+
+        await openLiveTagsManager({ extensionManager: { setting: { get: () => "zh-CN" } } });
+
+        const link = document.querySelector(".autocomplete-plus-live-tags-external-link");
+        expect(link.textContent).toContain("打开 Danbooru");
+        expect(link.href).toBe("https://danbooru.donmai.us/");
+        expect(link.target).toBe("_blank");
+        expect(link.rel).toBe("noopener noreferrer");
+    });
+
+    test("shows a scan counter without an unknowable progress maximum", async () => {
+        const config = validConfig();
+        config.danbooru = { login: "", api_key: "", scan_concurrency: 8, api_key_configured: false };
+        config.deepseek.api_key = "";
+        config.deepseek.api_key_configured = false;
+        global.fetch = jest.fn(async url => ({
+            ok: true,
+            status: 200,
+            json: async () => url.endsWith("/config") ? config : {
+                active: true,
+                job: { kind: "scan", status: "running", phase: "scanning", completed: 3800, total: 0 },
+                statistics: {},
+            },
+        }));
+        HTMLDialogElement.prototype.showModal = jest.fn();
+
+        await openLiveTagsManager({ extensionManager: { setting: { get: () => "zh-CN" } } });
+
+        expect(document.querySelector(".autocomplete-plus-live-tags-job-counters").textContent).toBe("已扫描: 3800");
+        expect(document.querySelector(".autocomplete-plus-live-tags-progress").hidden).toBe(true);
     });
 });
