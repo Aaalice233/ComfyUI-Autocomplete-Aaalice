@@ -6,12 +6,13 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from modules.live_tags_config import DEFAULT_CONFIG, LiveTagsConfig, mask_config, validate_config
+from modules.live_tags_config import CATEGORY_IDS, DEFAULT_CONFIG, LiveTagsConfig, mask_config, validate_config
 from modules.live_tags_service import (
     AdaptiveRequestLimiter,
     DanbooruClient,
     DeepSeekClient,
     LiveTagsManager,
+    LiveTagsError,
     USER_AGENT,
     normalize_locale,
     split_id_ranges,
@@ -21,11 +22,12 @@ from modules.live_tags_store import LiveTagsStore
 
 
 class LiveTagsConfigTests(unittest.TestCase):
-    def test_defaults_include_three_category_modes(self):
+    def test_defaults_use_a_threshold_of_twenty_for_every_category(self):
         config = validate_config({})
-        self.assertEqual(config["categories"]["character"]["mode"], "all")
-        self.assertEqual(config["categories"]["general"], {"mode": "threshold", "threshold": 1000})
-        self.assertEqual(config["categories"]["unused"]["mode"], "disabled")
+        self.assertEqual(
+            config["categories"],
+            {name: {"mode": "threshold", "threshold": 20} for name in CATEGORY_IDS},
+        )
 
     def test_rejects_out_of_range_translation_settings(self):
         with self.assertRaisesRegex(ValueError, "concurrency"):
@@ -153,6 +155,34 @@ class LiveTagsStoreTests(unittest.TestCase):
         self.assertEqual(self.store.tag_list(source="live")["items"][0]["name"], "live")
         self.assertEqual(self.store.translation_dictionary("zh")["items"][0]["text"], "实时")
 
+    def test_tag_browser_includes_cached_and_base_translations(self):
+        self.store.sync_base_tags(
+            [
+                {"name": "base_translation", "category": 0, "post_count": 30, "aliases": ["基础译文"]},
+                {"name": "cached_translation", "category": 4, "post_count": 20, "aliases": []},
+            ]
+        )
+        job_id = self.store.create_job("scan")
+        self.store.stage_tags(
+            job_id,
+            [_tag(1, "base_translation", 0, 30), _tag(2, "cached_translation", 4, 20)],
+        )
+        self.store.commit_scan(job_id)
+        self.store.save_translation_successes(
+            "zh",
+            {"cached_translation": "缓存译文"},
+            "model",
+            "prompt",
+            1,
+        )
+
+        items = self.store.tag_list(source="live", locale="zh")["items"]
+
+        self.assertEqual(
+            {item["name"]: item["translation"] for item in items},
+            {"base_translation": "基础译文", "cached_translation": "缓存译文"},
+        )
+
     def test_base_tags_missing_current_locale_enter_translation_work(self):
         self.store.sync_base_tags(
             [
@@ -177,6 +207,25 @@ class LiveTagsStoreTests(unittest.TestCase):
         self.assertEqual([row["name"] for row in pending], ["missing_zh", "japanese_only"])
         self.assertEqual(cached, 0)
         self.assertEqual(self.store.statistics("zh")["base_missing"], 2)
+
+    def test_statistics_include_partial_scan_staging(self):
+        self.store.sync_base_tags(
+            [
+                {"name": "translated_base", "category": 0, "post_count": 100, "aliases": ["已有翻译"]},
+                {"name": "missing_base", "category": 4, "post_count": 80, "aliases": []},
+            ]
+        )
+        job_id = self.store.create_job("scan")
+        self.store.stage_tags(
+            job_id,
+            [_tag(1, "translated_base", 0, 100), _tag(2, "missing_base", 4, 80)],
+        )
+
+        statistics = self.store.statistics("zh", staging_job_id=job_id)
+
+        self.assertEqual(statistics["candidates"], 2)
+        self.assertEqual(statistics["base_missing"], 1)
+        self.assertEqual(statistics["untranslated"], 1)
 
     def test_export_preserves_base_row_when_adding_cached_translation(self):
         self.store.sync_base_tags(
@@ -258,6 +307,25 @@ class LiveTagsManagerTests(unittest.TestCase):
         self.assertEqual(normalize_locale("zh-Hant"), "zh-TW")
         self.assertEqual(normalize_locale("ja-JP"), "ja")
         self.assertEqual(normalize_locale("fr"), "en")
+
+    def test_changed_category_settings_prevent_resuming_mixed_scan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base_csv = os.path.join(directory, "danbooru_tags.csv")
+            with open(base_csv, "w", encoding="utf-8", newline="") as csv_file:
+                csv.writer(csv_file).writerow(("tag", "category", "count", "alias"))
+            store = LiveTagsStore(os.path.join(directory, "live.sqlite3"), os.path.join(directory, "live.csv"))
+            manager = LiveTagsManager(os.path.join(directory, "config.json"), store, base_csv)
+            old_categories = json.loads(json.dumps(DEFAULT_CONFIG["categories"]))
+            old_categories["general"]["threshold"] = 1000
+            job_id = store.create_job("scan", options={"categories": old_categories})
+            store.initialize_scan_partitions(job_id, ["general"], [(1, 100)])
+            store.update_job(job_id, status="cancelled", phase="cancelled")
+
+            status = manager.status("zh")
+            self.assertTrue(status["resumable_config_changed"])
+            with self.assertRaises(LiveTagsError) as raised:
+                manager.resume_latest()
+            self.assertEqual(raised.exception.code, "scan_config_changed")
 
 
 class LiveTagsManagerAsyncTests(unittest.IsolatedAsyncioTestCase):

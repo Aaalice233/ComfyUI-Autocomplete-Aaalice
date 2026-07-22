@@ -339,6 +339,7 @@ async def get_live_tags_statistics(request):
                 query=request.query.get("q", ""),
                 limit=request.query.get("limit", 100),
                 offset=request.query.get("offset", 0),
+                locale=request.query.get("locale"),
             )
         )
     except (LiveTagsError, ValueError) as error:

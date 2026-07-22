@@ -21,12 +21,12 @@ CATEGORY_IDS = {
 DEFAULT_CONFIG = {
     "version": 1,
     "categories": {
-        "general": {"mode": "threshold", "threshold": 1000},
-        "artist": {"mode": "threshold", "threshold": 100},
-        "unused": {"mode": "disabled", "threshold": 0},
+        "general": {"mode": "threshold", "threshold": 20},
+        "artist": {"mode": "threshold", "threshold": 20},
+        "unused": {"mode": "threshold", "threshold": 20},
         "copyright": {"mode": "threshold", "threshold": 20},
-        "character": {"mode": "all", "threshold": 0},
-        "meta": {"mode": "threshold", "threshold": 100},
+        "character": {"mode": "threshold", "threshold": 20},
+        "meta": {"mode": "threshold", "threshold": 20},
     },
     "danbooru": {"login": "", "api_key": "", "scan_concurrency": 8},
     "deepseek": {

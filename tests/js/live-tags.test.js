@@ -57,6 +57,11 @@ describe("live tags error localization", () => {
         expect(localizeLiveTagsError("unknown_error", "SocketError", "zh-CN")).toBe("SocketError");
     });
 
+    test("explains why an old scan cannot resume after category settings change", () => {
+        expect(localizeLiveTagsError("scan_config_changed", "raw error", "zh-CN"))
+            .toBe("类别筛选设置已变更，请点击“扫描标签”按新设置重新扫描。");
+    });
+
     test("localizes failed jobs created before error codes were added", () => {
         const legacyError = "Danbooru access was blocked by Cloudflare. Configure a Danbooru login and API key.";
         expect(localizeLiveTagsError(null, legacyError, "zh-CN"))
@@ -142,6 +147,18 @@ describe("live tags manager UI", () => {
         const dialog = document.querySelector(".autocomplete-plus-live-tags-dialog");
         expect(dialog).not.toBeNull();
         expect(dialog.textContent).toContain("123");
+        const header = dialog.querySelector(".autocomplete-plus-live-tags-header");
+        expect(header.querySelector(".autocomplete-plus-live-tags-task-status")).not.toBeNull();
+        expect(header.querySelector(".autocomplete-plus-live-tags-overview")).not.toBeNull();
+        expect(header.querySelector(".autocomplete-plus-live-tags-identity")).toBeNull();
+        expect([...dialog.querySelectorAll(".autocomplete-plus-live-tags-nav-item")]
+            .some(button => button.textContent.includes("Overview"))).toBe(false);
+        expect([...dialog.querySelectorAll(".autocomplete-plus-live-tags-nav-item")]
+            .some(button => button.textContent.includes("Tag browser"))).toBe(true);
+        expect([...dialog.querySelectorAll(".autocomplete-plus-live-tags-nav-item")]
+            .some(button => button.textContent.includes("Local dictionary"))).toBe(false);
+        expect(dialog.querySelector(".autocomplete-plus-live-tags-page.is-active").textContent)
+            .toContain("Category filters");
         const translateButton = [...dialog.querySelectorAll("button")]
             .find(button => button.textContent === "Translate missing");
         expect(translateButton.disabled).toBe(true);
@@ -235,5 +252,56 @@ describe("live tags manager UI", () => {
 
         expect(document.querySelector(".autocomplete-plus-live-tags-job-counters").textContent).toBe("已扫描: 3800");
         expect(document.querySelector(".autocomplete-plus-live-tags-progress").hidden).toBe(true);
+    });
+
+    test("does not request another refresh for a job completed before this page loaded", async () => {
+        const config = validConfig();
+        config.danbooru = { login: "", api_key: "", scan_concurrency: 8, api_key_configured: false };
+        config.deepseek.api_key = "";
+        config.deepseek.api_key_configured = false;
+        global.fetch = jest.fn(async url => ({
+            ok: true,
+            status: 200,
+            json: async () => url.endsWith("/config") ? config : {
+                active: false,
+                job: { id: 91001, kind: "scan", status: "completed", phase: "completed", completed: 200 },
+                statistics: {},
+            },
+        }));
+        HTMLDialogElement.prototype.showModal = jest.fn();
+
+        await openLiveTagsManager({ extensionManager: { setting: { get: () => "zh-CN" } } });
+
+        const dialog = document.querySelector(".autocomplete-plus-live-tags-dialog");
+        expect(dialog.querySelector(".autocomplete-plus-live-tags-message").textContent).toBe("已完成");
+        expect([...dialog.querySelectorAll("button")]
+            .find(button => button.textContent === "刷新页面").hidden).toBe(true);
+    });
+
+    test("hides resume and directs the user to rescan when category settings changed", async () => {
+        const config = validConfig();
+        config.danbooru = { login: "", api_key: "", scan_concurrency: 8, api_key_configured: false };
+        config.deepseek.api_key = "";
+        config.deepseek.api_key_configured = false;
+        global.fetch = jest.fn(async url => ({
+            ok: true,
+            status: 200,
+            json: async () => url.endsWith("/config") ? config : {
+                active: false,
+                job: { kind: "scan", status: "cancelled", phase: "cancelled", completed: 100 },
+                statistics: {},
+                resumable: { id: 1, kind: "scan" },
+                resumable_config_changed: true,
+            },
+        }));
+        HTMLDialogElement.prototype.showModal = jest.fn();
+
+        await openLiveTagsManager({ extensionManager: { setting: { get: () => "zh-CN" } } });
+
+        const buttons = [...document.querySelectorAll("button")];
+        expect(buttons.find(button => button.textContent === "继续任务").hidden).toBe(true);
+        expect(buttons.find(button => button.textContent === "扫描标签").hidden).toBe(false);
+        expect(document.querySelector(".autocomplete-plus-live-tags-message").textContent)
+            .toBe("类别筛选设置已变更，请点击“扫描标签”按新设置重新扫描。");
     });
 });

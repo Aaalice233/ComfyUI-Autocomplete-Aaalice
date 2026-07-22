@@ -477,18 +477,22 @@ body.dark-theme {
 
 .autocomplete-plus-live-tags-dialog {
   overflow: hidden;
-  width: min(1040px, calc(100vw - 32px));
-  height: min(840px, calc(100vh - 32px));
+  width: min(1000px, calc(100vw - 24px));
+  height: min(760px, calc(100vh - 24px));
   padding: 0;
-  border: 0;
-  border-radius: 16px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 14px;
   background: var(--comfy-menu-bg);
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 5%), 0 24px 64px rgb(0 0 0 / 52%);
+  box-shadow: 0 28px 72px rgb(0 0 0 / 58%);
   color: var(--fg-color);
 }
 
 .autocomplete-plus-live-tags-dialog::backdrop {
   background: rgb(0 0 0 / 68%);
+}
+
+.autocomplete-plus-live-tags-dialog [hidden] {
+  display: none !important;
 }
 
 .autocomplete-plus-live-tags-panel {
@@ -501,31 +505,31 @@ body.dark-theme {
 .autocomplete-plus-live-tags-body {
   display: grid;
   min-height: 0;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 164px minmax(0, 1fr);
 }
 
 .autocomplete-plus-live-tags-sidebar {
   display: flex;
   flex-direction: column;
-  padding: 18px 12px;
-  background: rgb(0 0 0 / 12%);
+  padding: 14px 10px;
+  background: rgb(0 0 0 / 10%);
   box-shadow: inset -1px 0 rgb(255 255 255 / 4%);
-  gap: 6px;
+  gap: 4px;
 }
 
 .autocomplete-plus-live-tags-sidebar .autocomplete-plus-live-tags-nav-item {
   display: flex;
-  min-height: 42px;
+  min-height: 40px;
   align-items: center;
   justify-content: flex-start;
-  padding: 0 12px;
+  padding: 0 11px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   background: transparent;
   box-shadow: none;
   color: var(--descrip-text);
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
   gap: 10px;
 }
@@ -536,8 +540,8 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-sidebar .autocomplete-plus-live-tags-nav-item.is-active {
-  background: rgb(59 130 246 / 13%);
-  box-shadow: inset 0 0 0 1px rgb(96 165 250 / 14%);
+  background: rgb(59 130 246 / 12%);
+  box-shadow: inset 3px 0 var(--p-blue-400, #60a5fa);
   color: var(--p-blue-400, #60a5fa);
 }
 
@@ -551,8 +555,10 @@ body.dark-theme {
   display: none;
   height: 100%;
   min-height: 0;
-  padding: 20px 24px;
+  box-sizing: border-box;
+  padding: 18px 20px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
@@ -565,10 +571,11 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-scan-details {
-  padding: 18px;
-  border-radius: 12px;
-  background: rgb(255 255 255 / 2.5%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 5%), 0 10px 26px rgb(0 0 0 / 16%);
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 6%);
+  border-radius: 10px;
+  margin-top: 12px;
+  background: rgb(255 255 255 / 2%);
 }
 
 .autocomplete-plus-live-tags-scan-details h3 {
@@ -691,21 +698,52 @@ body.dark-theme {
 
 .autocomplete-plus-live-tags-distribution-row {
   display: grid;
-  align-items: center;
-  padding: 9px 11px;
+  align-content: start;
+  padding: 11px 12px;
   border-radius: 8px;
   background: rgb(255 255 255 / 2.5%);
-  gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 9px;
 }
 
-.autocomplete-plus-live-tags-distribution-row strong,
-.autocomplete-plus-live-tags-distribution-row span {
-  font-size: 0.7rem;
+.autocomplete-plus-live-tags-distribution-name {
+  overflow: hidden;
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.autocomplete-plus-live-tags-distribution-row span {
+.autocomplete-plus-live-tags-distribution-metrics {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.autocomplete-plus-live-tags-distribution-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding-left: 9px;
+  border-left: 1px solid rgb(255 255 255 / 6%);
+  gap: 2px;
+}
+
+.autocomplete-plus-live-tags-distribution-metric:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.autocomplete-plus-live-tags-distribution-metric span {
+  overflow: hidden;
   color: var(--descrip-text);
+  font-size: 0.64rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autocomplete-plus-live-tags-distribution-metric strong {
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .autocomplete-plus-live-tags-statistics-filters {
@@ -734,9 +772,12 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-tag-table {
-  overflow: hidden;
+  overflow: hidden auto;
+  max-height: min(520px, 55vh);
   border-radius: 10px;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 6%);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .autocomplete-plus-live-tags-tag-row {
@@ -750,7 +791,20 @@ body.dark-theme {
   grid-template-columns: minmax(180px, 1fr) 150px 120px 90px;
 }
 
+.autocomplete-plus-live-tags-tag-row.is-browser {
+  grid-template-columns:
+    minmax(120px, 1.2fr)
+    minmax(110px, 1fr)
+    minmax(90px, 0.8fr)
+    minmax(80px, 0.7fr)
+    70px;
+}
+
 .autocomplete-plus-live-tags-tag-row.is-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--comfy-menu-bg);
   color: var(--descrip-text);
   font-size: 0.68rem;
   font-weight: 600;
@@ -764,18 +818,22 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-header {
-  display: flex;
+  display: grid;
   align-items: center;
-  justify-content: space-between;
-  padding: 22px 24px 18px;
+  padding: 10px 12px 10px 14px;
   box-shadow: 0 1px 0 rgb(255 255 255 / 4%);
-  gap: 24px;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.autocomplete-plus-live-tags-identity,
+.autocomplete-plus-live-tags-tag-translation {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .autocomplete-plus-live-tags-header-actions,
 .autocomplete-plus-live-tags-section-header,
-.autocomplete-plus-live-tags-overview-heading,
 .autocomplete-plus-live-tags-task-copy,
 .autocomplete-plus-live-tags-locale,
 .autocomplete-plus-live-tags-statistic {
@@ -783,75 +841,37 @@ body.dark-theme {
   align-items: center;
 }
 
-.autocomplete-plus-live-tags-identity {
-  min-width: 0;
-  gap: 14px;
-}
-
-.autocomplete-plus-live-tags-brand-icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  border: 0;
-  border-radius: 12px;
-  background: rgb(59 130 246 / 14%);
-  box-shadow: inset 0 0 0 1px rgb(96 165 250 / 18%), 0 8px 20px rgb(0 0 0 / 14%);
-  color: var(--p-blue-400, #60a5fa);
-  font-size: 1.1rem;
-  place-items: center;
-}
-
-.autocomplete-plus-live-tags-heading {
-  min-width: 0;
-}
-
-.autocomplete-plus-live-tags-header h2,
-.autocomplete-plus-live-tags-header p,
 .autocomplete-plus-live-tags-section h3,
 .autocomplete-plus-live-tags-section p {
   margin: 0;
 }
 
-.autocomplete-plus-live-tags-header h2 {
-  margin-top: 2px;
-  font-size: 1.35rem;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-}
-
-.autocomplete-plus-live-tags-header p {
-  max-width: 680px;
-  margin-top: 4px;
-  color: var(--descrip-text);
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
-.autocomplete-plus-live-tags-eyebrow {
-  color: var(--p-blue-400, #60a5fa);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 .autocomplete-plus-live-tags-header-actions {
   flex: 0 0 auto;
-  gap: 10px;
+  align-self: start;
+}
+
+.autocomplete-plus-live-tags-header-overview {
+  display: grid;
+  min-width: 0;
+  align-items: stretch;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .autocomplete-plus-live-tags-state {
   display: inline-flex;
-  min-height: 30px;
+  min-height: 24px;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 7%);
   color: var(--descrip-text);
-  font-size: 0.78rem;
-  gap: 7px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .autocomplete-plus-live-tags-state-dot {
@@ -872,8 +892,8 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-icon-button.p-button {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 9px;
@@ -893,36 +913,38 @@ body.dark-theme {
 
 .autocomplete-plus-live-tags-task-status {
   display: grid;
-  min-height: 42px;
+  min-height: 34px;
   align-items: center;
-  padding: 8px 12px;
+  padding: 3px 4px;
   border: 0;
-  border-radius: 10px;
-  margin: 12px 24px 0;
-  background: var(--comfy-input-bg);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 4%), 0 6px 18px rgb(0 0 0 / 12%);
-  column-gap: 16px;
+  border-radius: 0;
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+  column-gap: 12px;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .autocomplete-plus-live-tags-task-status[data-tone="success"] {
-  box-shadow: 0 0 0 1px rgb(74 222 128 / 28%), 0 6px 18px rgb(0 0 0 / 12%);
+  color: var(--p-green-400, #4ade80);
 }
 
 .autocomplete-plus-live-tags-task-copy {
   min-width: 0;
-  gap: 9px;
-}
-
-.autocomplete-plus-live-tags-task-copy > .pi {
-  color: var(--p-blue-400, #60a5fa);
+  gap: 8px;
 }
 
 .autocomplete-plus-live-tags-message {
+  overflow: hidden;
   min-width: 0;
   color: var(--descrip-text);
-  font-size: 0.83rem;
-  overflow-wrap: anywhere;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autocomplete-plus-live-tags-message:empty {
+  display: none;
 }
 
 .autocomplete-plus-live-tags-progress {
@@ -966,8 +988,10 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-job-counters {
+  overflow: hidden;
   color: var(--descrip-text);
   font-size: 0.76rem;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -977,45 +1001,34 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-overview {
-  display: grid;
-  align-items: stretch;
-  margin: 14px 24px 0;
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.autocomplete-plus-live-tags-page > .autocomplete-plus-live-tags-task-status,
-.autocomplete-plus-live-tags-page > .autocomplete-plus-live-tags-overview {
-  margin: 0 0 16px;
-}
-
-.autocomplete-plus-live-tags-overview-heading {
-  padding: 0 16px 0 4px;
-  border-right: 1px solid var(--p-neutral-800, var(--border-color));
-  color: var(--descrip-text);
-  font-size: 0.78rem;
-  font-weight: 600;
-  gap: 8px;
-}
-
-.autocomplete-plus-live-tags-overview-heading .pi {
-  color: var(--p-blue-400, #60a5fa);
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 6%);
+  border-radius: 8px;
+  margin: 0;
+  background: rgb(255 255 255 / 2.5%);
 }
 
 .autocomplete-plus-live-tags-statistics {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  min-height: 50px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .autocomplete-plus-live-tags-statistic {
   min-width: 0;
-  padding: 4px 14px;
-  gap: 9px;
+  padding: 6px 8px;
+  border-left: 1px solid rgb(255 255 255 / 5%);
+  gap: 7px;
+}
+
+.autocomplete-plus-live-tags-statistic:first-child {
+  border-left: 0;
 }
 
 .autocomplete-plus-live-tags-statistic > .pi {
   color: var(--p-gray-500, var(--descrip-text));
-  font-size: 0.9rem;
+  font-size: 0.78rem;
 }
 
 .autocomplete-plus-live-tags-statistic-value {
@@ -1025,7 +1038,7 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-statistic strong {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
 }
@@ -1033,9 +1046,14 @@ body.dark-theme {
 .autocomplete-plus-live-tags-statistic span {
   overflow: hidden;
   color: var(--descrip-text);
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.autocomplete-plus-live-tags-header-overview > .autocomplete-plus-live-tags-task-status,
+.autocomplete-plus-live-tags-header-overview > .autocomplete-plus-live-tags-overview {
+  margin: 0;
 }
 
 .autocomplete-plus-live-tags-workspace {
@@ -1044,7 +1062,7 @@ body.dark-theme {
   min-height: 0;
   padding: 0;
   gap: 16px;
-  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .autocomplete-plus-live-tags-column {
@@ -1058,32 +1076,32 @@ body.dark-theme {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: 18px;
-  border: 0;
-  border-radius: 12px;
-  background: rgb(255 255 255 / 2.5%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 5%), 0 10px 26px rgb(0 0 0 / 16%);
-  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgb(255 255 255 / 6%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 2%);
+  box-shadow: none;
+  gap: 10px;
 }
 
 .autocomplete-plus-live-tags-section-header {
-  padding-bottom: 4px;
-  gap: 11px;
+  padding-bottom: 6px;
+  gap: 10px;
 }
 
 .autocomplete-plus-live-tags-section-header > .pi {
   display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  border-radius: 9px;
-  background: rgb(59 130 246 / 11%);
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 7px;
+  background: rgb(59 130 246 / 10%);
   color: var(--p-blue-400, #60a5fa);
   place-items: center;
 }
 
 .autocomplete-plus-live-tags-section h3 {
-  font-size: 0.98rem;
+  font-size: 0.9rem;
   line-height: 1.3;
 }
 
@@ -1164,12 +1182,12 @@ body.dark-theme {
 
 .autocomplete-plus-live-tags-category-row {
   display: grid;
-  min-height: 42px;
+  min-height: 44px;
   align-items: center;
-  padding-top: 8px;
+  padding: 6px 0;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
   gap: 12px;
-  grid-template-columns: minmax(130px, 1.25fr) minmax(120px, 1fr) minmax(90px, 0.75fr);
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 0.8fr) minmax(140px, 0.7fr);
 }
 
 .autocomplete-plus-live-tags-category-name {
@@ -1316,12 +1334,13 @@ body.dark-theme {
 
 .autocomplete-plus-live-tags-actions {
   display: flex;
+  min-height: 56px;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
-  background: var(--comfy-menu-bg);
-  box-shadow: 0 -1px 0 rgb(255 255 255 / 4%), 0 -10px 24px rgb(0 0 0 / 10%);
-  gap: 12px;
+  padding: 9px 14px;
+  background: rgb(0 0 0 / 8%);
+  box-shadow: inset 0 1px rgb(255 255 255 / 4%);
+  gap: 10px;
 }
 
 .autocomplete-plus-live-tags-inline-actions {
@@ -1346,16 +1365,16 @@ body.dark-theme {
 .autocomplete-plus-live-tags-action-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .autocomplete-plus-live-tags-actions .p-button {
-  min-height: 36px;
-  padding: 0 13px;
-  border: 0;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 8px;
-  background: var(--comfy-input-bg);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 7%), 0 4px 12px rgb(0 0 0 / 12%);
+  background: rgb(255 255 255 / 4%);
+  box-shadow: none;
   color: var(--fg-color);
   font-size: 0.8rem;
   font-weight: 600;
@@ -1381,7 +1400,7 @@ body.dark-theme {
 
 .autocomplete-plus-live-tags-actions .p-button:hover:not(:disabled) {
   background: var(--comfy-hover-bg);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%), 0 6px 16px rgb(0 0 0 / 16%);
+  box-shadow: none;
 }
 
 .autocomplete-plus-live-tags-inline-actions .p-button:hover:not(:disabled) {
@@ -1394,14 +1413,15 @@ body.dark-theme {
 }
 
 .autocomplete-plus-live-tags-actions .p-button.is-primary {
+  border-color: rgb(96 165 250 / 28%);
   background: var(--p-blue-700, #1d4ed8);
-  box-shadow: 0 7px 18px rgb(29 78 216 / 24%);
+  box-shadow: 0 4px 12px rgb(29 78 216 / 18%);
   color: white;
 }
 
 .autocomplete-plus-live-tags-actions .p-button.is-primary:hover:not(:disabled) {
   background: var(--p-blue-400, #3b82f6);
-  box-shadow: 0 9px 22px rgb(59 130 246 / 28%);
+  box-shadow: 0 5px 14px rgb(59 130 246 / 22%);
 }
 
 .autocomplete-plus-live-tags-actions .p-button.is-danger:not(:disabled) {
@@ -1423,24 +1443,15 @@ body.dark-theme {
   .autocomplete-plus-live-tags-body {
     grid-template-columns: 154px minmax(0, 1fr);
   }
-
-  .autocomplete-plus-live-tags-overview-heading {
-    display: none;
-  }
-
-  .autocomplete-plus-live-tags-overview {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (width <= 620px) {
   .autocomplete-plus-live-tags-header {
-    padding: 16px;
+    padding: 10px;
   }
 
-  .autocomplete-plus-live-tags-header p,
-  .autocomplete-plus-live-tags-state {
-    display: none;
+  .autocomplete-plus-live-tags-header-overview {
+    grid-template-columns: 1fr;
   }
 
   .autocomplete-plus-live-tags-body {
@@ -1452,11 +1463,12 @@ body.dark-theme {
     flex-direction: row;
     padding: 8px;
     box-shadow: inset 0 -1px rgb(255 255 255 / 4%);
+    overflow-x: auto;
   }
 
   .autocomplete-plus-live-tags-sidebar .autocomplete-plus-live-tags-nav-item {
-    min-width: 0;
-    flex: 1;
+    min-width: max-content;
+    flex: 0 0 auto;
     justify-content: center;
     padding: 0 8px;
   }
@@ -1495,9 +1507,8 @@ body.dark-theme {
   }
 
   .autocomplete-plus-live-tags-actions {
-    flex-direction: column-reverse;
-    align-items: stretch;
-    padding: 10px 16px;
+    padding: 8px 10px;
+    overflow-x: auto;
   }
 
   .autocomplete-plus-live-tags-detail-metrics,
@@ -1514,7 +1525,15 @@ body.dark-theme {
     grid-template-columns: minmax(140px, 1fr) 100px 80px;
   }
 
-  .autocomplete-plus-live-tags-tag-row > :nth-child(2) {
+  .autocomplete-plus-live-tags-tag-row:not(.is-browser) > :nth-child(2) {
+    display: none;
+  }
+
+  .autocomplete-plus-live-tags-tag-row.is-browser {
+    grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) 80px 70px;
+  }
+
+  .autocomplete-plus-live-tags-tag-row.is-browser > :nth-child(3) {
     display: none;
   }
 

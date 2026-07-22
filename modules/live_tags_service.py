@@ -387,6 +387,8 @@ class LiveTagsManager:
         self._base_count = 0
         self._base_mtime_ns = None
         self._runtime_progress = None
+        self._statistics_cache = None
+        self._statistics_task = None
         try:
             self._load_base_names()
         except LiveTagsError:
@@ -399,7 +401,7 @@ class LiveTagsManager:
     def save_config(self, raw_config):
         return mask_config(self.config_store.save(raw_config))
 
-    def tag_statistics(self, category=None, source="all", query="", limit=100, offset=0):
+    def tag_statistics(self, category=None, source="all", query="", limit=100, offset=0, locale=None):
         category_id = CATEGORY_IDS.get(category) if category else None
         if category and category_id is None:
             raise LiveTagsError("Unknown tag category", "statistics_filter_invalid")
@@ -407,7 +409,14 @@ class LiveTagsManager:
         offset = max(int(offset), 0)
         return {
             "summary": self.store.tag_statistics(),
-            "list": self.store.tag_list(category_id, source, query.strip(), limit, offset),
+            "list": self.store.tag_list(
+                category_id,
+                source,
+                query.strip(),
+                limit,
+                offset,
+                normalize_locale(locale),
+            ),
         }
 
     def translation_dictionary(self, locale=None, query="", limit=100, offset=0):
@@ -423,10 +432,12 @@ class LiveTagsManager:
         config = self.config_store.load()
         normalized_locale = normalize_locale(locale)
         self._load_base_names_count()
-        statistics = self.store.statistics(normalized_locale, config["deepseek"]["batch_size"])
-        statistics["base_tags"] = self._base_count
         job = self.store.latest_job()
         resumable = self.store.latest_resumable_job()
+        active = bool(self._task and not self._task.done())
+        staging_job_id = None
+        if job and job["kind"] == "scan" and job["status"] != "completed":
+            staging_job_id = job["id"]
         details = None
         if job:
             if job["kind"] == "scan":
@@ -437,15 +448,70 @@ class LiveTagsManager:
             elapsed = max(time.monotonic() - self._runtime_progress["started_at"], 0.001)
             details = details or {}
             details["rate"] = max(job["completed"] - self._runtime_progress["baseline"], 0) / elapsed
+        batch_size = config["deepseek"]["batch_size"]
+        if staging_job_id is not None and active:
+            statistics = self.store.statistics(normalized_locale, batch_size)
+            cache_key = (staging_job_id, normalized_locale, batch_size)
+            if self._statistics_cache and self._statistics_cache["key"] == cache_key:
+                statistics = self._statistics_cache["value"].copy()
+            if details:
+                statistics["candidates"] = details["candidates"]
+            self._schedule_statistics_refresh(cache_key)
+        else:
+            statistics = self.store.statistics(
+                normalized_locale,
+                batch_size,
+                staging_job_id=staging_job_id,
+            )
+        statistics["base_tags"] = self._base_count
+        resumable_config_changed = bool(
+            resumable
+            and resumable["kind"] == "scan"
+            and self._scan_config_changed(resumable, config)
+        )
         return {
-            "active": bool(self._task and not self._task.done()),
+            "active": active,
             "job": job,
             "statistics": statistics,
             "locale": normalized_locale,
             "csv_path": self.store.csv_path,
             "details": details,
             "resumable": resumable,
+            "resumable_config_changed": resumable_config_changed,
         }
+
+    def _schedule_statistics_refresh(self, cache_key):
+        if self._statistics_task and not self._statistics_task.done():
+            return
+        if (
+            self._statistics_cache
+            and self._statistics_cache["key"] == cache_key
+            and time.monotonic() - self._statistics_cache["updated_at"] < 5
+        ):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        async def refresh():
+            try:
+                job_id, locale, batch_size = cache_key
+                value = await asyncio.to_thread(
+                    self.store.statistics,
+                    locale,
+                    batch_size,
+                    staging_job_id=job_id,
+                )
+                self._statistics_cache = {
+                    "key": cache_key,
+                    "value": value,
+                    "updated_at": time.monotonic(),
+                }
+            finally:
+                self._statistics_task = None
+
+        self._statistics_task = asyncio.create_task(refresh())
 
     def start_scan(self):
         self._ensure_idle()
@@ -481,6 +547,11 @@ class LiveTagsManager:
         job = self.store.latest_resumable_job()
         if not job:
             raise LiveTagsError("No interrupted task can be resumed", "resume_not_available")
+        if job["kind"] == "scan" and self._scan_config_changed(job, self.config_store.load()):
+            raise LiveTagsError(
+                "Category settings changed after this scan started. Start a new scan to apply the new settings.",
+                "scan_config_changed",
+            )
         self._cancel_event = asyncio.Event()
         self.store.update_job(job["id"], status="queued", phase="queued", error=None, error_code=None)
         if job["kind"] == "scan":
@@ -490,6 +561,12 @@ class LiveTagsManager:
                 self._run_translation(job["id"], job["locale"], job.get("mode") or "missing", resume=True)
             )
         return job["id"]
+
+    @staticmethod
+    def _scan_config_changed(job, config):
+        options = json.loads(job.get("options_json") or "{}")
+        saved_categories = options.get("categories")
+        return saved_categories is not None and saved_categories != config["categories"]
 
     def cancel(self):
         if not self._task or self._task.done():

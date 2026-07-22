@@ -512,38 +512,51 @@ class LiveTagsStore:
                 rows,
             )
 
-    def statistics(self, locale=None, batch_size=100):
+    def statistics(self, locale=None, batch_size=100, staging_job_id=None):
         with self._connect() as connection:
-            candidates = connection.execute("SELECT COUNT(*) FROM tags WHERE active = 1").fetchone()[0]
+            if staging_job_id is None:
+                live_tags = "SELECT name FROM tags WHERE active = 1"
+                live_params = ()
+            else:
+                live_tags = """
+                    SELECT name FROM scan_staging WHERE job_id = ?
+                    UNION ALL
+                    SELECT t.name FROM tags t
+                     WHERE t.active = 1
+                       AND NOT EXISTS (
+                           SELECT 1 FROM scan_staging s WHERE s.job_id = ? AND s.name = t.name
+                       )
+                """
+                live_params = (staging_job_id, staging_job_id)
             base_missing = 0
             translated = 0
             failed = 0
             locale_column = LOCALE_ALIAS_COLUMNS.get(locale)
             if locale_column:
-                base_missing = connection.execute(
+                row = connection.execute(
                     f"""
-                    SELECT COUNT(*) FROM tags t
+                    WITH live AS ({live_tags})
+                    SELECT COUNT(*) AS candidates,
+                           COALESCE(SUM(
+                               COALESCE(b.{locale_column}, 0) = 0
+                               AND COALESCE(tr.status, '') != 'success'
+                           ), 0) AS base_missing,
+                           COALESCE(SUM(tr.status = 'success'), 0) AS translated,
+                           COALESCE(SUM(tr.status = 'failed'), 0) AS failed
+                      FROM live t
                  LEFT JOIN base_tags b ON b.name = t.name
                  LEFT JOIN translations tr ON tr.tag_name = t.name AND tr.locale = ?
-                     WHERE t.active = 1
-                       AND COALESCE(b.{locale_column}, 0) = 0
-                       AND COALESCE(tr.status, '') != 'success'
                     """,
-                    (locale,),
-                ).fetchone()[0]
-                translated = connection.execute(
-                    """
-                    SELECT COUNT(*) FROM tags t JOIN translations tr ON tr.tag_name = t.name
-                     WHERE t.active = 1 AND tr.locale = ? AND tr.status = 'success'
-                    """,
-                    (locale,),
-                ).fetchone()[0]
-                failed = connection.execute(
-                    """
-                    SELECT COUNT(*) FROM tags t JOIN translations tr ON tr.tag_name = t.name
-                     WHERE t.active = 1 AND tr.locale = ? AND tr.status = 'failed'
-                    """,
-                    (locale,),
+                    (*live_params, locale),
+                ).fetchone()
+                candidates = row["candidates"]
+                base_missing = row["base_missing"]
+                translated = row["translated"]
+                failed = row["failed"]
+            else:
+                candidates = connection.execute(
+                    f"WITH live AS ({live_tags}) SELECT COUNT(*) FROM live",
+                    live_params,
                 ).fetchone()[0]
         untranslated = base_missing
         return {
@@ -585,15 +598,24 @@ class LiveTagsStore:
             "last_scan_at": last_scan["updated_at"] if last_scan else None,
         }
 
-    def tag_list(self, category=None, source="all", query="", limit=100, offset=0):
+    def tag_list(self, category=None, source="all", query="", limit=100, offset=0, locale=None):
         if source not in {"all", "base", "live"}:
             raise ValueError("Invalid tag source")
         parts = []
         params = []
         if source in {"all", "base"}:
-            parts.append("SELECT name, category, post_count, 'base' AS source FROM base_tags")
+            parts.append(
+                "SELECT name, category, post_count, 'base' AS source, aliases_json FROM base_tags"
+            )
         if source in {"all", "live"}:
-            parts.append("SELECT name, category, post_count, 'live' AS source FROM tags WHERE active = 1")
+            parts.append(
+                """
+                SELECT t.name, t.category, t.post_count, 'live' AS source,
+                       COALESCE(b.aliases_json, '[]') AS aliases_json
+                  FROM tags t LEFT JOIN base_tags b ON b.name = t.name
+                 WHERE t.active = 1
+                """
+            )
         filters = []
         if category is not None:
             filters.append("category = ?")
@@ -608,12 +630,41 @@ class LiveTagsStore:
             total = connection.execute(f"SELECT COUNT(*) FROM ({union}) {where}", params).fetchone()[0]
             rows = connection.execute(
                 f"""
-                SELECT name, category, post_count, source FROM ({union}) {where}
+                SELECT name, category, post_count, source, aliases_json FROM ({union}) {where}
                  ORDER BY post_count DESC, name ASC LIMIT ? OFFSET ?
                 """,
                 (*params, limit, offset),
             ).fetchall()
-        return {"total": total, "items": [dict(row) for row in rows]}
+            names = list(dict.fromkeys(row["name"] for row in rows))
+            translations = {}
+            if locale and names:
+                placeholders = ", ".join("?" for _ in names)
+                translation_rows = connection.execute(
+                    f"""
+                    SELECT tag_name, text, status FROM translations
+                     WHERE locale = ? AND tag_name IN ({placeholders})
+                    """,
+                    (locale, *names),
+                ).fetchall()
+                translations = {row["tag_name"]: dict(row) for row in translation_rows}
+
+        items = []
+        for row in rows:
+            item = dict(row)
+            aliases = json.loads(item.pop("aliases_json"))
+            cached = translations.get(item["name"])
+            if cached and cached["status"] == "success" and cached["text"]:
+                item["translation"] = cached["text"]
+                item["translation_status"] = "success"
+            else:
+                alias = next(
+                    (value for value in aliases if has_alias_for_locale([value], locale)),
+                    None,
+                ) if locale else None
+                item["translation"] = alias
+                item["translation_status"] = "base" if alias else (cached or {}).get("status", "missing")
+            items.append(item)
+        return {"total": total, "items": items}
 
     def translation_dictionary(self, locale=None, query="", limit=100, offset=0):
         filters = []
