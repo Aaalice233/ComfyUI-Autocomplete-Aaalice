@@ -99,6 +99,35 @@ export function createFlexSearchDocument() {
 }
 
 /**
+ * Creates a small alias-only index for translations resolved at runtime.
+ * Keeping it separate makes the large immutable tag index cheap to query and
+ * avoids FlexSearch Document.update(), which rebuilds expensive index state.
+ * @returns {Document} Configured FlexSearch document for translated aliases
+ */
+export function createTranslationSearchDocument() {
+    const tagEncoder = createTagEncoder();
+    const cjkEncoder = createCJKEncoder();
+    const encodeAlias = function (word) {
+        return word.split(",")
+            .flatMap(str => /[^\u0000-\u007f]/.test(str)
+                ? cjkEncoder.encode(str)
+                : tagEncoder.encode(str))
+            .filter(Boolean);
+    };
+
+    return new Document({
+        document: {
+            id: "id",
+            index: [{
+                field: "alias",
+                tokenize: "full",
+                encode: encodeAlias,
+            }],
+        },
+    });
+}
+
+/**
  * Creates a FlexSearch Document instance optimized for lora or embedding searching.
  * @returns {Document} Configured FlexSearch document
  */

@@ -27,7 +27,7 @@
     },
     "AutocompletePlus_Autocompletion_UseFastSearch": {
         "name": "Use Fast Search",
-        "tooltip": "Tag search processing during text input operates faster, improving responsiveness."
+        "tooltip": "Use indexed search for immediate results. Large tag sources use it automatically to avoid blocking the interface."
     },
     "AutocompletePlus_Autocompletion_EnableModels": {
         "name": "Enable Loras and Embeddings"
@@ -58,7 +58,8 @@
         "tooltip": "Automatically insert a comma after tags when inserting from autocomplete."
     },
     "AutocompletePlus_Autocompletion_MaxSuggestions": {
-        "name": "Max suggestions"
+        "name": "Suggestions per page",
+        "tooltip": "Number of autocomplete rows loaded at a time while scrolling."
     },
     "AutocompletePlus_Autocompletion_Enable": {
         "name": "Enable Autocomplete"
@@ -80,7 +81,8 @@
         }
     },
     "AutocompletePlus_RelatedTags_MaxRelatedTags": {
-        "name": "Max related tags"
+        "name": "Co-occurrence tags per page",
+        "tooltip": "Number of co-occurrence rows loaded at a time while scrolling."
     },
     "AutocompletePlus_RelatedTags_Enable": {
         "name": "Enable Related Tags"
@@ -104,8 +106,8 @@
     "AutocompletePlus_AutoFormatter_EnableAutoFormat": {
         "name": "Enable Auto Format"
     },
-    "AutocompletePlus_LiveTags_Manager": {
-        "name": "Manage Danbooru Live Tags"
+    "AutocompletePlus_OnlineServices_Manager": {
+        "name": "Configure online completion and translation"
     },
     "AutocompletePlus_AutoFormatter_TrimSurroundingSpaces": {
         "name": "Trim Surrounding Spaces",

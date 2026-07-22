@@ -22,14 +22,26 @@ import {
 } from './utils.js';
 import { settingValues } from './settings.js';
 import {
+    isExplicitLoraManagerQuery,
     searchLoraManagerCandidates,
 } from './integrations/lora-manager-provider.js';
+import { searchDanbooruCandidates } from './integrations/danbooru-provider.js';
+import { resolveCandidateTranslations } from './integrations/translation-provider.js';
 import { getTagCategoryLabel, renderTagNameWithCategoryIcon } from './tag-presentation.js';
 import { rankCompletionCandidates } from './candidate-ranking.js';
 import { applyTextInsertionEdit, buildAutocompleteInsertionEdit } from './tag-insertion.js';
-import { filterAliasesForLocale, getInterfaceText } from './localization.js';
+import {
+    filterAliasesForLocale,
+    getCurrentInterfaceLocale,
+    getInterfaceText,
+    normalizeInterfaceLocale,
+} from './localization.js';
 
 export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
+
+function isNearScrollEnd(element, threshold = 48) {
+    return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
+}
 
 // --- Autocomplete Logic ---
 
@@ -90,7 +102,7 @@ function matchWord(target, queries) {
  * @param {HTMLTextAreaElement} textareaElement The partial tag input.
  * @returns {Array<TagData>} The list of matching candidates.
  */
-function searchCompletionCandidates(textareaElement) {
+function searchCompletionCandidates(textareaElement, resultLimit = settingValues.maxSuggestions) {
 
     const ESCAPE_SEQUENCE = ["#", "/"]; // If the first string is that character, autocomplete will not be displayed.
     const partialTag = getCurrentPartialTag(textareaElement);
@@ -102,10 +114,10 @@ function searchCompletionCandidates(textareaElement) {
 
     const queryVariations = createQueryVariations(partialTag);
 
-    if (settingValues.useFastSearch) {
-        return searchWithFlexSearch(partialTag, queryVariations);
+    if (shouldUseFastSearch()) {
+        return searchWithFlexSearch(partialTag, queryVariations, resultLimit);
     } else {
-        return sequentialSearch(partialTag, queryVariations);
+        return sequentialSearch(partialTag, queryVariations, resultLimit);
     }
 }
 
@@ -123,19 +135,23 @@ function createQueryVariations(partialTag) {
     return queryVariations;
 }
 
-function getSourceMaxCounts(sources) {
-    return Object.fromEntries(sources.map(source => [
-        source,
-        Number(autoCompleteData[source]?.sortedTags?.[0]?.count) || 0,
-    ]));
+function rankCandidates(candidates, queryVariations, sources, limit = settingValues.maxSuggestions) {
+    return rankCompletionCandidates(candidates, queryVariations, {
+        limit,
+        sourcePriority: sources,
+    });
 }
 
-function rankCandidates(candidates, queryVariations, sources) {
-    return rankCompletionCandidates(candidates, queryVariations, {
-        limit: settingValues.maxSuggestions,
-        sourcePriority: sources,
-        sourceMaxCounts: getSourceMaxCounts(sources),
+function shouldUseFastSearch() {
+    if (settingValues.useFastSearch) return true;
+    return getEnabledTagSourceInPriorityOrder().some(source => {
+        const sourceData = autoCompleteData[source];
+        return sourceData?.sortedTags.length >= 50_000;
     });
+}
+
+function getSearchCandidateLimit(resultLimit = settingValues.maxSuggestions) {
+    return Math.max(resultLimit * 4, 40);
 }
 
 function addCandidate(candidate, candidates, addedTags) {
@@ -162,7 +178,7 @@ function addExactCandidates(source, queryVariations, candidates, addedTags) {
  * @param {Set<string>} queryVariations 
  * @returns 
  */
-function sequentialSearch(partialTag, queryVariations) {
+function sequentialSearch(partialTag, queryVariations, resultLimit = settingValues.maxSuggestions) {
     const startTime = performance.now();
 
     const candidates = [];
@@ -173,7 +189,7 @@ function sequentialSearch(partialTag, queryVariations) {
         if (!autoCompleteData[source]) continue;
         addExactCandidates(source, queryVariations, candidates, addedTags);
         let sourceMatchCount = 0;
-        const sourceResultLimit = Math.min(Math.max(settingValues.maxSuggestions * 10, 50), 500);
+        const sourceResultLimit = getSearchCandidateLimit(resultLimit);
 
         // Search in sortedTags (already sorted by count)
         for (const tagData of autoCompleteData[source].sortedTags) {
@@ -200,7 +216,7 @@ function sequentialSearch(partialTag, queryVariations) {
         }
     }
 
-    const rankedCandidates = rankCandidates(candidates, queryVariations, sources);
+    const rankedCandidates = rankCandidates(candidates, queryVariations, sources, resultLimit);
 
     if (settingValues._logprocessingTime) {
         const endTime = performance.now();
@@ -217,7 +233,7 @@ function sequentialSearch(partialTag, queryVariations) {
  * @param {Set<string>} queryVariations 
  * @returns 
  */
-function searchWithFlexSearch(partialTag, queryVariations) {
+function searchWithFlexSearch(partialTag, queryVariations, resultLimit = settingValues.maxSuggestions) {
     const startTime = performance.now();
 
     const collectedResults = [];
@@ -225,26 +241,38 @@ function searchWithFlexSearch(partialTag, queryVariations) {
 
     const sources = getEnabledTagSourceInPriorityOrder();
     for (const source of sources) {
-        if (!autoCompleteData[source].flexSearchDocument) continue;
+        const sourceData = autoCompleteData[source];
+        const locale = normalizeInterfaceLocale(getCurrentInterfaceLocale());
+        const indexes = [
+            { document: sourceData.flexSearchDocument, fields: ["tag", "alias"] },
+            { document: sourceData.translationSearchDocuments?.get(locale), fields: ["alias"] },
+        ];
 
-        // Use the FlexSearch Document to search
-        // NOTE: The limit param is reflected separately for "tag" and "alias".
-        const searchResult = autoCompleteData[source].flexSearchDocument.search(partialTag, {
-            field: ["tag", "alias"],
-            limit: Math.min(settingValues.maxSuggestions * 10, 500),
-            merge: true,
-            suggest: false,
-            cache: true,
-        });
-
-        if (!searchResult || searchResult.length <= 0) continue;
-
-        collectedResults.push(...searchResult.map(r => autoCompleteData[source].sortedTags[r.id]));
-
-        totalSearchCount += searchResult.length;
+        for (const index of indexes) {
+            if (!index.document) continue;
+            const searchResult = index.document.search(partialTag, {
+                field: index.fields,
+                limit: getSearchCandidateLimit(resultLimit),
+                merge: true,
+                suggest: false,
+                cache: true,
+            });
+            if (!searchResult?.length) continue;
+            collectedResults.push(...searchResult.map(result => sourceData.sortedTags[result.id]));
+            totalSearchCount += searchResult.length;
+        }
     }
 
-    const rankedCandidates = rankCandidates(collectedResults, queryVariations, sources);
+    // The immutable base index can still contain a CSV alias that an online
+    // translation replaced. Validate against current candidate data so stale
+    // aliases never surface in the result list.
+    const currentMatches = collectedResults.filter(candidate => {
+        if (!candidate) return false;
+        const tagMatch = matchWord(candidate.tag.toLowerCase(), queryVariations).matched;
+        return tagMatch || candidate.alias?.some(alias =>
+            matchWord(alias.toLowerCase(), queryVariations).matched);
+    });
+    const rankedCandidates = rankCandidates(currentMatches, queryVariations, sources, resultLimit);
 
     if (settingValues._logprocessingTime) {
         const endTime = performance.now();
@@ -370,6 +398,19 @@ class AutocompleteUI {
         this.candidates = [];
         this._requestId = 0;
         this._abortController = null;
+        this._pageCount = 1;
+        this._hasMorePages = false;
+        this._loadingNextPage = false;
+        this._onlineCandidates = [];
+        this._nextDanbooruPage = 1;
+        this._danbooruExhausted = false;
+
+        this.tagsList.addEventListener('scroll', () => {
+            if (isNearScrollEnd(this.tagsList)) this.#loadNextPage();
+        }, { passive: true });
+        this.tagsList.addEventListener('wheel', (event) => {
+            if (event.deltaY > 0 && isNearScrollEnd(this.tagsList)) this.#loadNextPage();
+        }, { passive: true });
 
         // Add event listener for clicks on items
         this.tagsList.addEventListener('mousedown', (e) => {
@@ -406,26 +447,52 @@ class AutocompleteUI {
      * @returns 
      */
     async updateDisplay(textareaElement) {
+        this._pageCount = 1;
+        this._hasMorePages = false;
+        this._loadingNextPage = false;
+        this._onlineCandidates = [];
+        this._nextDanbooruPage = 1;
+        this._danbooruExhausted = false;
+        return this.#updateDisplayPage(textareaElement, false, null);
+    }
+
+    async #updateDisplayPage(textareaElement, pagination, preserveScrollTop) {
         const requestId = ++this._requestId;
         this._abortController?.abort();
         this._abortController = new AbortController();
+        const pageSize = Math.max(Number(settingValues.maxSuggestions) || 15, 1);
+        const requestedLimit = this._pageCount * pageSize;
 
-        const localCandidates = searchCompletionCandidates(textareaElement);
-        this.candidates = localCandidates;
+        const localCandidates = searchCompletionCandidates(textareaElement, requestedLimit);
         this.target = textareaElement;
+        const partialTag = getCurrentPartialTag(textareaElement);
+        const isModelQuery = isExplicitLoraManagerQuery(partialTag);
+        const sources = getEnabledTagSourceInPriorityOrder();
+        const queryVariations = createQueryVariations(partialTag);
+        this.candidates = this._onlineCandidates.length > 0
+            ? rankCandidates(
+                [...localCandidates, ...this._onlineCandidates],
+                queryVariations,
+                sources,
+                requestedLimit,
+            )
+            : localCandidates;
 
-        if (localCandidates.length > 0) {
-            this.#displayCandidates();
+        if (!isModelQuery) {
+            this.#enrichCandidateTranslations(localCandidates, requestId, textareaElement);
+        }
+
+        if (this.candidates.length > 0) {
+            this.#displayCandidates(preserveScrollTop);
         } else {
             this.#hideDisplay();
         }
 
-        const partialTag = getCurrentPartialTag(textareaElement);
         const invalidPrefix = ["#", "/"].some(prefix => partialTag.startsWith(prefix));
         if (!partialTag || invalidPrefix || isLongText(partialTag)) return;
 
         const supplemental = await searchLoraManagerCandidates(partialTag, {
-            limit: settingValues.maxSuggestions,
+            limit: requestedLimit,
             mode: settingValues.loraManagerIntegration,
             tagSource: settingValues.tagSource,
             includeModels: settingValues.enableModels,
@@ -433,13 +500,73 @@ class AutocompleteUI {
         });
         if (requestId !== this._requestId || textareaElement !== this.target) return;
 
-        const sources = getEnabledTagSourceInPriorityOrder();
-        const combined = [...localCandidates, ...supplemental];
-        this.candidates = rankCandidates(combined, createQueryVariations(partialTag), sources);
-        if (this.candidates.length > 0) this.#displayCandidates();
+        let combined = [...localCandidates, ...supplemental, ...this._onlineCandidates];
+        this.candidates = rankCandidates(combined, queryVariations, sources, requestedLimit);
+        if (!isModelQuery) {
+            this.#enrichCandidateTranslations(supplemental, requestId, textareaElement);
+        }
+        if (this.candidates.length > 0) this.#displayCandidates(preserveScrollTop);
+
+        const allowsDanbooru = ["all", "danbooru"].includes(settingValues.tagSource);
+        const remaining = requestedLimit - this.candidates.length;
+        const shouldLoadOnline = remaining > 0 || pagination;
+        if (!isModelQuery && allowsDanbooru && shouldLoadOnline && !this._danbooruExhausted) {
+            const online = await searchDanbooruCandidates(partialTag, {
+                limit: pageSize,
+                page: this._nextDanbooruPage,
+                signal: this._abortController.signal,
+            });
+            if (requestId !== this._requestId || textareaElement !== this.target) return;
+            this._onlineCandidates.push(...online);
+            this._nextDanbooruPage++;
+            this._danbooruExhausted = online.length < pageSize;
+            combined = [...localCandidates, ...supplemental, ...this._onlineCandidates];
+            this.candidates = rankCandidates(
+                combined,
+                queryVariations,
+                sources,
+                requestedLimit,
+            );
+            this.#enrichCandidateTranslations(online, requestId, textareaElement);
+            if (this.candidates.length > 0) this.#displayCandidates(preserveScrollTop);
+        }
+
+        const supplementalCanGrow = requestedLimit < 100 && supplemental.length >= requestedLimit;
+        const onlineCanGrow = !isModelQuery && allowsDanbooru && !this._danbooruExhausted;
+        this._hasMorePages = localCandidates.length >= requestedLimit
+            || supplementalCanGrow
+            || onlineCanGrow;
     }
 
-    #displayCandidates() {
+    #loadNextPage() {
+        if (this._loadingNextPage || !this._hasMorePages || !this.target) return;
+        const textareaElement = this.target;
+        const partialTag = getCurrentPartialTag(textareaElement);
+        const preserveScrollTop = this.tagsList.scrollTop;
+        this._loadingNextPage = true;
+
+        setTimeout(async () => {
+            try {
+                if (textareaElement !== this.target || partialTag !== getCurrentPartialTag(textareaElement)) return;
+                this._pageCount++;
+                await this.#updateDisplayPage(textareaElement, true, preserveScrollTop);
+            } finally {
+                this._loadingNextPage = false;
+            }
+        }, 0);
+    }
+
+    #enrichCandidateTranslations(candidates, requestId, textareaElement) {
+        if (candidates.length <= 0) return;
+        void resolveCandidateTranslations(candidates, getCurrentInterfaceLocale()).then(() => {
+            if (requestId !== this._requestId || textareaElement !== this.target) return;
+            if (this.candidates.length > 0) this.#displayCandidates(this.tagsList.scrollTop);
+        }).catch(() => {
+            // Translation enrichment is optional and must not interrupt typing.
+        });
+    }
+
+    #displayCandidates(preserveScrollTop = null) {
         if (!this.target || this.candidates.length <= 0) {
             this.#hideDisplay();
             return;
@@ -452,13 +579,14 @@ class AutocompleteUI {
         this.#updateContent();
 
         // Calculate caret position using the helper function (returns viewport-relative coordinates)
-        this.#updatePosition();
+        if (preserveScrollTop === null) this.#updatePosition();
 
         this.root.style.display = 'block'; // Make it visible
 
         // Highlight the selected item
         // This function must be called after the route has been displayed, in order to scroll the highlighted item into view.
         this.#highlightItem();
+        if (preserveScrollTop !== null) this.tagsList.scrollTop = preserveScrollTop;
     }
 
     #hideDisplay() {
@@ -481,6 +609,10 @@ class AutocompleteUI {
     /** Moves the selection up or down */
     navigate(direction) {
         if (this.candidates.length === 0) return;
+        if (direction > 0 && this.selectedIndex >= this.candidates.length - 1 && this._hasMorePages) {
+            this.#loadNextPage();
+            return;
+        }
         this.selectedIndex += direction;
 
         if (this.selectedIndex < 0) {
@@ -941,21 +1073,18 @@ export class AutocompleteEventHandler {
     }
 
     /**
-     * Calls autocompleteUI.updateDisplay() with debounce for sequential search, or immediately for fast search.
+     * Coalesces key events before searching so synchronous index work never runs inside the keyup handler.
      * @param {HTMLTextAreaElement} target
      */
     _triggerUpdateDisplay(target) {
-        if (settingValues.useFastSearch || settingValues.searchDebounceTime <= 0) {
-            // FastSearch or debounce disabled: immediate update
+        clearTimeout(this._debounceTimer);
+        const delay = shouldUseFastSearch()
+            ? 16
+            : Math.max(settingValues.searchDebounceTime, 0);
+        this._debounceTimer = setTimeout(() => {
             this.autocompleteUI.updateDisplay(target);
-        } else {
-            // Sequential search: debounced update
-            clearTimeout(this._debounceTimer);
-            this._debounceTimer = setTimeout(() => {
-                this.autocompleteUI.updateDisplay(target);
-                this._debounceTimer = null;
-            }, settingValues.searchDebounceTime);
-        }
+            this._debounceTimer = null;
+        }, delay);
     }
 
     /**
@@ -1121,6 +1250,9 @@ export const __test__ = isTestEnvironment
         searchCompletionCandidates,
         sequentialSearch,
         searchWithFlexSearch,
+        shouldUseFastSearch,
+        getSearchCandidateLimit,
+        isNearScrollEnd,
         matchWord,
         getCurrentPartialTag,
         insertTagToTextArea

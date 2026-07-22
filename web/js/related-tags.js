@@ -2,7 +2,8 @@ import { TagCategory, TagData, TagSource, autoCompleteData, getEnabledTagSourceI
 import { settingValues } from './settings.js';
 import { getTagCategoryLabel, renderTagNameWithCategoryIcon } from './tag-presentation.js';
 import { applyTextInsertionEdit, buildRelatedTagInsertionEdit } from './tag-insertion.js';
-import { filterAliasesForLocale, getInterfaceText } from './localization.js';
+import { filterAliasesForLocale, getCurrentInterfaceLocale, getInterfaceText } from './localization.js';
+import { resolveCandidateTranslations } from './integrations/translation-provider.js';
 import {
     extractTagsFromTextArea,
     findAllTagPositions,
@@ -17,6 +18,8 @@ import {
 } from './utils.js';
 
 // --- RelatedTags Logic ---
+
+const relatedTagsCache = new WeakMap();
 
 /**
  * Calculates the Jaccard similarity between two tags.
@@ -69,7 +72,7 @@ export function getTagFromCursorPosition(inputElement) {
  * Finds related tags for a given tag.
  * @param {string} tag The tag to find related tags for
  */
-function searchRelatedTags(tag) {
+export function searchRelatedTags(tag, resultLimit = settingValues.maxRelatedTags) {
     const startTime = performance.now(); // Record start time for performance measurement
 
     const tagSource = TagSource.Danbooru; // TODO: Leave the tag source as Danbooru until e621_tags_cooccurrence.csv is ready
@@ -79,16 +82,28 @@ function searchRelatedTags(tag) {
     }
 
     const cooccurrences = autoCompleteData[tagSource].cooccurrenceMap.get(tag);
-    const relatedTags = [];
+    let cache = relatedTagsCache.get(cooccurrences);
+    if (!cache) {
+        cache = new Map();
+        relatedTagsCache.set(cooccurrences, cache);
+    }
+    if (cache.has(resultLimit)) {
+        return cache.get(resultLimit);
+    }
 
-    // Convert to array for sorting
-    cooccurrences.forEach((count, coTag) => {
+    const relatedTags = [];
+    const evaluationLimit = Math.max(resultLimit * 20, 100);
+    let evaluated = 0;
+
+    // Co-occurrence CSV rows are loaded in descending frequency order. Evaluating
+    // a bounded head avoids scanning tens of thousands of pairs on every click.
+    for (const [coTag] of cooccurrences) {
         // Skip the tag itself
-        if (coTag === tag) return;
+        if (coTag === tag) continue;
 
         // Get tag data
         const tagData = autoCompleteData[tagSource].tagMap.get(coTag);
-        if (!tagData) return;
+        if (!tagData) continue;
 
         // Calculate similarity
         const similarity = calculateJaccardSimilarity(tagSource, tag, coTag);
@@ -103,13 +118,16 @@ function searchRelatedTags(tag) {
             categoryText: tagData.categoryText,
             hasWikiPage: tagData.hasWikiPage
         });
-    });
+        evaluated++;
+        if (evaluated >= evaluationLimit) break;
+    }
 
     // Sort by similarity (highest first)
     relatedTags.sort((a, b) => b.similarity - a.similarity);
 
     // Limit to max number of suggestions
-    const result = relatedTags.slice(0, settingValues.maxRelatedTags);
+    const result = relatedTags.slice(0, resultLimit);
+    cache.set(resultLimit, result);
 
     if (settingValues._logprocessingTime) {
         const endTime = performance.now();
@@ -245,6 +263,10 @@ class RelatedTagsUI {
         this.target = null;
         this.selectedIndex = -1;
         this.relatedTags = [];
+        this.translationRequestId = 0;
+        this._pageCount = 1;
+        this._hasMorePages = false;
+        this._loadingNextPage = false;
 
         // Timer ID for auto-refresh
         this.autoRefreshTimerId = null;
@@ -278,6 +300,19 @@ class RelatedTagsUI {
                 e.stopPropagation();
             }
         });
+
+        this.tagsContainer.addEventListener('scroll', () => {
+            const remaining = this.tagsContainer.scrollHeight
+                - this.tagsContainer.scrollTop
+                - this.tagsContainer.clientHeight;
+            if (remaining <= 48) this.#loadNextPage();
+        }, { passive: true });
+        this.tagsContainer.addEventListener('wheel', (event) => {
+            const remaining = this.tagsContainer.scrollHeight
+                - this.tagsContainer.scrollTop
+                - this.tagsContainer.clientHeight;
+            if (event.deltaY > 0 && remaining <= 48) this.#loadNextPage();
+        }, { passive: true });
     }
 
     /**
@@ -314,7 +349,10 @@ class RelatedTagsUI {
 
         this.target = textareaElement;
 
-        this.relatedTags = searchRelatedTags(this.currentTag);
+        this._pageCount = 1;
+        const pageSize = Math.max(Number(settingValues.maxRelatedTags) || 15, 1);
+        this.relatedTags = searchRelatedTags(this.currentTag, pageSize);
+        this._hasMorePages = this.relatedTags.length >= pageSize;
 
         // Click-triggered related tags should not replace useful autocomplete
         // suggestions with an empty panel. Manual triggers keep the empty-state
@@ -334,6 +372,17 @@ class RelatedTagsUI {
         // This function must be called after the content is updated and the root is displayed.
         this.#highlightItem();
 
+        const translationRequestId = ++this.translationRequestId;
+        const translationCandidates = [this.getCurrentTagData(), ...this.relatedTags].filter(Boolean);
+        resolveCandidateTranslations(translationCandidates, getCurrentInterfaceLocale()).then(() => {
+            if (translationRequestId !== this.translationRequestId || textareaElement !== this.target) return;
+            const preserveScrollTop = this.tagsContainer.scrollTop;
+            this.#updateHeader();
+            this.#updateContent();
+            this.#highlightItem();
+            this.tagsContainer.scrollTop = preserveScrollTop;
+        });
+
         // Update initialization status if not already done
         if (!autoCompleteData[TagSource.Danbooru].initialized) {
             if (this.autoRefreshTimerId) {
@@ -347,10 +396,51 @@ class RelatedTagsUI {
         return true;
     }
 
+    #loadNextPage() {
+        if (this._loadingNextPage || !this._hasMorePages || !this.target || !this.relatedTags) return;
+        const textareaElement = this.target;
+        const currentTag = this.currentTag;
+        const preserveScrollTop = this.tagsContainer.scrollTop;
+        this._loadingNextPage = true;
+
+        setTimeout(() => {
+            try {
+                if (textareaElement !== this.target || currentTag !== this.currentTag) return;
+                const previousLength = this.relatedTags.length;
+                const pageSize = Math.max(Number(settingValues.maxRelatedTags) || 15, 1);
+                const requestedLimit = (this._pageCount + 1) * pageSize;
+                const nextTags = searchRelatedTags(currentTag, requestedLimit);
+                this._hasMorePages = nextTags.length >= requestedLimit;
+                if (nextTags.length <= previousLength) return;
+
+                this._pageCount++;
+                this.relatedTags = nextTags;
+                this.#updateContent();
+                this.#highlightItem();
+                this.tagsContainer.scrollTop = preserveScrollTop;
+
+                const translationRequestId = ++this.translationRequestId;
+                resolveCandidateTranslations(
+                    nextTags.slice(previousLength),
+                    getCurrentInterfaceLocale(),
+                ).then(() => {
+                    if (translationRequestId !== this.translationRequestId || textareaElement !== this.target) return;
+                    const scrollTop = this.tagsContainer.scrollTop;
+                    this.#updateContent();
+                    this.#highlightItem();
+                    this.tagsContainer.scrollTop = scrollTop;
+                });
+            } finally {
+                this._loadingNextPage = false;
+            }
+        }, 0);
+    }
+
     /**
      * Hides the related tags UI.
      */
     hide() {
+        this.translationRequestId++;
         if (this.autoRefreshTimerId) {
             clearTimeout(this.autoRefreshTimerId);
         }
@@ -371,6 +461,11 @@ class RelatedTagsUI {
      */
     navigate(direction) {
         if (this.relatedTags.length === 0) return;
+
+        if (direction > 0 && this.selectedIndex >= this.relatedTags.length - 1 && this._hasMorePages) {
+            this.#loadNextPage();
+            return;
+        }
 
         if (this.selectedIndex == -1) {
             // Initialize selection based on navigation direction

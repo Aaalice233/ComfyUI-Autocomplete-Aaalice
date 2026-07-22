@@ -1,5 +1,6 @@
 import {
     AUTOCOMPLETE_TAG_INSERTED_EVENT,
+    AutocompleteEventHandler,
     __test__
 } from "../../web/js/autocomplete.js";
 import {
@@ -12,11 +13,15 @@ import {
     createFlexSearchDocument,
     createFlexSearchDocumentForModel
 } from "../../web/js/searchengine.js"
+import { settingValues } from "../../web/js/settings.js";
 
 const {
     searchCompletionCandidates,
     sequentialSearch,
     searchWithFlexSearch,
+    shouldUseFastSearch,
+    getSearchCandidateLimit,
+    isNearScrollEnd,
     matchWord,
     getCurrentPartialTag,
     insertTagToTextArea
@@ -158,6 +163,42 @@ describe('Autocomplete Functions', () => {
                 fontFamily: 'Arial'
             })
         };
+    });
+
+    test('automatically avoids sequential scans for a large tag source', () => {
+        settingValues.useFastSearch = false;
+        autoCompleteData[TagSource.Danbooru].sortedTags.length = 50_000;
+        expect(shouldUseFastSearch()).toBe(true);
+        settingValues.useFastSearch = true;
+    });
+
+    test('bounds the ranked candidate pool to limit per-keystroke work', () => {
+        settingValues.maxSuggestions = 25;
+        expect(getSearchCandidateLimit()).toBe(100);
+        expect(getSearchCandidateLimit(45)).toBe(180);
+    });
+
+    test('detects the scroll threshold used to request the next page', () => {
+        expect(isNearScrollEnd({ scrollHeight: 500, scrollTop: 352, clientHeight: 100 })).toBe(true);
+        expect(isNearScrollEnd({ scrollHeight: 500, scrollTop: 300, clientHeight: 100 })).toBe(false);
+    });
+
+    test('coalesces rapid keystrokes before running indexed search', async () => {
+        const firstTarget = { value: 'gi' };
+        const latestTarget = { value: 'gir' };
+        const handler = {
+            _debounceTimer: null,
+            autocompleteUI: { updateDisplay: target => calls.push(target) },
+        };
+        const calls = [];
+        settingValues.useFastSearch = true;
+
+        AutocompleteEventHandler.prototype._triggerUpdateDisplay.call(handler, firstTarget);
+        AutocompleteEventHandler.prototype._triggerUpdateDisplay.call(handler, latestTarget);
+        expect(calls).toHaveLength(0);
+
+        await new Promise(resolve => setTimeout(resolve, 25));
+        expect(calls).toEqual([latestTarget]);
     });
 
     describe('matchWord', () => {
@@ -329,6 +370,20 @@ describe('Autocomplete Functions', () => {
                 .toEqual(expect.arrayContaining([
                     'test_tag', '<lora:test_model>', 'embedding:test_embedding'
                 ]));
+        });
+
+        test('filters a stale CSV alias after online translation replaces it', () => {
+            const candidate = new TagData('translated_tag', 0, 100, ['旧译名'], TagSource.Danbooru);
+            const sourceData = autoCompleteData[TagSource.Danbooru];
+            const index = sourceData.sortedTags.length;
+            sourceData.sortedTags.push(candidate);
+            sourceData.tagMap.set(candidate.tag, candidate);
+            sourceData.flexSearchDocument.add(index, candidate);
+
+            candidate.alias = ['新译名'];
+            const results = searchWithFlexSearch('旧译名', new Set(['旧译名']));
+
+            expect(results.map(item => item.tag)).not.toContain('translated_tag');
         });
 
     });

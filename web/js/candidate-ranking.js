@@ -89,21 +89,21 @@ export function rankCompletionCandidates(candidates, queryVariations, options = 
     const {
         limit = 10,
         sourcePriority = [],
-        sourceMaxCounts = {},
     } = options;
     const sourceRanks = new Map(sourcePriority.map((source, index) => [source, index]));
 
     return mergeDuplicateCandidates(candidates)
+        .filter(candidate => candidate.origin !== "danbooru_api" || Number(candidate.count) > 0)
         .map((candidate, originalIndex) => ({
             candidate,
             originalIndex,
             matchTier: getCandidateMatchTier(candidate, queryVariations),
-            popularity: getNormalizedPopularity(candidate, sourceMaxCounts),
+            count: Math.max(0, Number(candidate?.count) || 0),
             sourceRank: sourceRanks.get(candidate.source) ?? sourcePriority.length,
         }))
         .sort((a, b) =>
-            b.matchTier - a.matchTier
-            || b.popularity - a.popularity
+            b.count - a.count
+            || b.matchTier - a.matchTier
             || a.sourceRank - b.sourceRank
             || String(a.candidate.tag).localeCompare(String(b.candidate.tag))
             || a.originalIndex - b.originalIndex)

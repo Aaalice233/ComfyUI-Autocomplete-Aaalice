@@ -27,7 +27,7 @@
     },
     "AutocompletePlus_Autocompletion_UseFastSearch": {
         "name": "启用快速搜索",
-        "tooltip": "使用更快的标签搜索方式，提高输入时的响应速度。"
+        "tooltip": "使用索引搜索立即显示结果。大型标签源会自动启用，以免阻塞界面。"
     },
     "AutocompletePlus_Autocompletion_EnableModels": {
         "name": "显示 LoRA 和 Embedding"
@@ -51,21 +51,22 @@
     },
     "AutocompletePlus_Autocompletion_ReplaceUnderscoreWithSpace": {
         "name": "将下划线替换为空格",
-        "tooltip": "插入标签时将下划线替换为空格；此设置也会影响相关标签的显示。"
+        "tooltip": "插入标签时将下划线替换为空格；此设置也会影响共现标签的显示。"
     },
     "AutocompletePlus_Autocompletion_AutoInsertComma": {
         "name": "自动添加逗号",
         "tooltip": "通过自动补全插入标签时，自动在标签末尾添加逗号。"
     },
     "AutocompletePlus_Autocompletion_MaxSuggestions": {
-        "name": "最大补全候选数"
+        "name": "每页补全候选数",
+        "tooltip": "每次滚动到底部时加载的补全候选数量。"
     },
     "AutocompletePlus_Autocompletion_Enable": {
         "name": "启用自动补全"
     },
     "AutocompletePlus_RelatedTags_RelatedTagsTriggerMode": {
-        "name": "显示相关标签的操作",
-        "tooltip": "指定触发显示已输入标签的相关标签的操作（仅点击、Ctrl+点击）",
+        "name": "显示共现标签的操作",
+        "tooltip": "指定触发显示已输入标签的共现标签的操作（仅点击、Ctrl+点击）",
         "options": {
             "click": "点击",
             "ctrl+Click": "Ctrl+点击"
@@ -80,14 +81,15 @@
         }
     },
     "AutocompletePlus_RelatedTags_MaxRelatedTags": {
-        "name": "最大相关标签数"
+        "name": "每页共现标签数",
+        "tooltip": "每次滚动到底部时加载的共现标签数量。"
     },
     "AutocompletePlus_RelatedTags_Enable": {
-        "name": "启用相关标签"
+        "name": "启用共现标签"
     },
     "AutocompletePlus_Display_HideAlias": {
         "name": "隐藏别名",
-        "tooltip": "隐藏自动完成和相关标签显示中的别名列"
+        "tooltip": "隐藏自动完成和共现标签显示中的别名列"
     },
     "AutocompletePlus_AutoFormatter_Trigger": {
         "name": "自动格式化触发方式",
@@ -104,8 +106,8 @@
     "AutocompletePlus_AutoFormatter_EnableAutoFormat": {
         "name": "启用自动格式化"
     },
-    "AutocompletePlus_LiveTags_Manager": {
-        "name": "管理 Danbooru 实时标签"
+    "AutocompletePlus_OnlineServices_Manager": {
+        "name": "配置在线补全与翻译"
     },
     "AutocompletePlus_AutoFormatter_TrimSurroundingSpaces": {
         "name": "去除首尾空白",

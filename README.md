@@ -18,14 +18,14 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 - Support for text inputs rendered by **Nodes 2.0**.
 - Support for promoted text inputs on **subgraph nodes**, including resolving the original inner node and widget.
 - Improved autocomplete/related-tags handoff and shared insertion formatting: partial tags reopen autocomplete, accepting a completed tag immediately shows related tags, trailing commas resolve to the preceding tag, and accepting a related tag reuses existing separators without creating empty comma slots.
-- Optional Danbooru live-tag scanning that replaces the Hugging Face tag source after the first snapshot, plus resumable DeepSeek translation and a persistent local dictionary.
+- Three-stage tag lookup: Hugging Face stays as the local base, LoRA Manager supplements it when available, and Danbooru's online API silently fills remaining suggestion slots.
+- On-demand DeepSeek translation for visible candidates with a persistent, searchable local dictionary, selectable models, model discovery/health checks, and optional thinking effort (off by default).
 - Alias previews are filtered to the current ComfyUI language while the complete alias set remains searchable.
-- Live-tag network, authentication, CSV, and translation errors are localized to the current ComfyUI language while unknown diagnostics remain visible.
-- Danbooru synchronization uses a Cloudflare-compatible product identifier instead of the `ComfyUI` User-Agent token rejected by some edge rules.
-- Danbooru scans use configurable adaptive concurrency (1–16, default 8) across 16 checkpointed ID ranges; translation shows cache, success, failure, and pending work in a segmented progress bar.
+- Danbooru and translation failures never interrupt typing; the compact settings panel retains the latest diagnostic state.
+- Typing stays responsive through frame-coalesced searches, bounded candidate pools, chunked CSV parsing, deferred translation/SQLite work, and cached bounded related-tag scoring.
 - Optional LoRA Manager compatibility layer that supplements results through its local tag, LoRA, Embedding, and Wildcard APIs while avoiding duplicate autocomplete inside LoRA Manager inputs.
 - Category-specific emoji markers with localized hover labels for general, artist, copyright, character, meta, model, and other tag types.
-- Unified relevance ranking across Danbooru, e621, and LoRA Manager results instead of grouping suggestions by source.
+- Unified popularity-first ranking across Danbooru, e621, and LoRA Manager results instead of grouping suggestions by source.
 - Simplified Chinese documentation and continued localization maintenance.
 - Runtime autocomplete and related-tag labels, loading/empty states, controls, Wiki links, and detail tooltips are localized in English, Simplified Chinese, Traditional Chinese, and Japanese.
 
@@ -44,7 +44,8 @@ The original project remains the foundation of this fork. Existing features and 
 - **:art:Design**: Supports both light and dark themes of ComfyUI.
 - **:pencil:User CSV**: Allows users to add their own CSV files for autocomplete suggestions.
 - **:twisted_rightwards_arrows:Modern ComfyUI Compatibility**: Supports Nodes 2.0 and promoted text inputs on subgraph nodes.
-- **:arrows_counterclockwise:Live Tag Supplement**: Fetches tags missing from the bundled Danbooru CSV and can translate them through DeepSeek.
+- **:arrows_counterclockwise:Online Tag Fallback**: Silently fills incomplete local results from Danbooru without downloading a second tag database.
+- **:speech_balloon:On-demand Translation**: Translates visible ordinary Danbooru and e621 tags through DeepSeek once, caches the result, and makes translated aliases searchable.
 - **:link:LoRA Manager Integration**: Reuses LoRA Manager's local indexes for supplemental tag, LoRA, Embedding, and Wildcard suggestions.
 
 ## Installation
@@ -67,7 +68,7 @@ When you type in a text input area, tags that partially match the text are displ
 - Tag aliases are also included in the search. Japanese hiragana and katakana are searched without distinction.
 - Tags are color-coded by category. The color-coding rules are the same as Danbooru.
 - Each suggestion uses a distinct category emoji; hover it to see the category and source.
-- Suggestions are ranked globally by exact tag, tag prefix, exact alias, tag substring, and alias substring. Popularity is normalized within each source before it is used as the next tie-breaker.
+- Matching suggestions are ranked globally by their displayed post count (popularity) by default. Match quality and source priority are only used to break equal-popularity results.
 - The active suggestion uses a persistent accent highlight, including the initially selected first row and while the pointer is hovering it.
 - Tags that have already been entered are displayed grayed out.
 - You can display Danbooru and e621 tags at the same time. You can also change the priority from the settings.
@@ -202,17 +203,17 @@ For example, by preparing the following CSV, you can quickly insert correspondin
 ### Autocomplete
 
 - **Enable Autocomplete**: Enable/disable the autocomplete feature.
-- **Max suggestions**: Maximum number of autocomplete suggestions to display.
+- **Suggestions per page**: Number of autocomplete candidates loaded per scroll page (default: 15). Reaching the bottom loads the next page instead of imposing a total-result limit.
 - **Auto-Insert Comma**: Automatically insert a comma after tags when inserting from autocomplete.
 - **Replace '_' with 'Space'**: Replaces underscores with spaces when inserting tags. This setting also affects related tag display.
 - **String to add before artist tags**: Text to prepend when inserting an artist tag. For Anima models, specify `@`.
 - **Enable Loras and Embeddings**: Display Lora and Embedding in the suggestions.
-- **Use Fast Search**: Switch autocomplete suggestions search to fast processing (see [About Fast Search for Autocomplete](#about-fast-search-for-autocomplete) for details).
+- **Use Fast Search**: Use indexed autocomplete search (enabled by default). Sources with at least 50,000 loaded tags always avoid the blocking sequential scan, even if this setting was previously saved as disabled.
 
 ### Related Tags
 
 - **Enable Related Tags**: Enable/disable the related tags feature.
-- **Max related tags**: Maximum number of related tags to display.
+- **Co-occurrence tags per page**: Number of co-occurrence tags loaded per scroll page (default: 15). Additional pages load when the list reaches the bottom.
 - **Default Display Position**: Default display position when ComfyUI starts.
 - **Related Tags Trigger Mode**: Which action will trigger displaying related tags for the entered tag (click only, Ctrl+click)
 
@@ -233,25 +234,17 @@ For example, by preparing the following CSV, you can quickly insert correspondin
 
 When [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) is installed, **Auto** mode supplements autocomplete from its local `/api/lm/custom-words/search`, `/api/lm/loras/relative-paths`, `/api/lm/embeddings/relative-paths`, and `/api/lm/wildcards/search` indexes. API failures fall back to the built-in data without interrupting input. LoRA Manager's own autocomplete text boxes are excluded automatically; additional third-party node types can be listed under **Excluded node types**.
 
-### Danbooru Live Tags
+### Online Completion and Translation
 
-Open **Autocomplete Plus → Live Tags → Manage Danbooru Live Tags** to use the manager. Once a Danbooru snapshot exists, autocomplete uses it as the exclusive Danbooru tag source while LoRA Manager compatibility remains active; the downloaded Hugging Face file stays on disk as a fallback.
+Autocomplete always searches the downloaded Hugging Face CSV first, then merges LoRA Manager results when that extension is available. Danbooru fills an incomplete first page and is paged in silently as the user continues scrolling, so a full local first page no longer permanently hides online results. The page-size setting controls only each incremental batch, not the total result count. Empty tags with a zero post count, deprecated tags, and unsupported categories are filtered out on both the backend and frontend, including zero-count online entries retained by an older translation catalog, so unused punctuation variants cannot fill the list. Long tag names are ellipsized instead of pushing the alias and popularity columns outside the popup. Online failures, timeouts, and rate limits are silent; raw responses are cached only for the browser session and are never exported as a local tag snapshot.
 
-1. Choose `Do not fetch`, `Fetch all`, or `Minimum post count` independently for each Danbooru category.
-2. Optionally configure a Danbooru login and API key, then click **Scan tags**. The complete filtered snapshot is written to `data/danbooru_tags_live.csv` and becomes the Danbooru autocomplete source.
-   The credentials section also provides an **Open Danbooru** shortcut that opens the official site in a new tab.
-3. Review the active tag count, missing translations, and estimated request count before starting DeepSeek translation. Translation follows the current ComfyUI language; English does not require translation.
-4. Refresh the page after the CSV changes so the autocomplete index is rebuilt.
+Suggestions supplied exclusively by the Danbooru API carry a compact, low-contrast `API` chip after the tag name. Hovering the chip identifies the online fallback source, making it possible to verify that fallback is working without visually dominating the list.
 
-DeepSeek can either skip tags that already have a base alias or cached translation, or retranslate the whole active snapshot. Successful translations are stored by tag and language in the local SQLite dictionary and merged into the generated CSV. The sidebar separates task status, scanning, translation, tag statistics, dictionary, and credentials. The footer only shows the primary action relevant to the current page; retry and full-retranslation actions stay inside the translation page. Scanning writes checkpointed snapshots to CSV during execution; scanning and translation can both resume after an interruption, failure, or manual cancellation. Translation uses a segmented progress bar for cache hits, completed, failed, and pending items.
+Open **Autocomplete Plus → Online Services → Online completion and translation** to configure DeepSeek. Visible ordinary Danbooru and e621 candidates begin translation as soon as each local or supplemental batch appears, without waiting for LoRA Manager or Danbooru requests to finish; cached aliases render immediately and newly resolved aliases update the same rows later. LoRA, Embedding, and Wildcard candidates are excluded. When an online or cached translation is available, it replaces the same-language alias bundled in the Hugging Face CSV; the CSV alias remains the fallback when online translation is unavailable. Successful results are stored once in `translations.sqlite3`, added to every matching booru search index, and reused on later inputs. Existing cached translations remain available when the key is removed or the service is offline.
 
-Danbooru scanning uses a dedicated `Autocomplete-Plus` User-Agent. Some Cloudflare edge routes reject requests whose product token contains `ComfyUI`, even when the same `aiohttp` request and network exit work with another valid product identifier.
+The panel can explicitly check all online data sources, fetch the model list for the configured key, and run a small health check against the selected model. Before their first request, passive sources are labelled as waiting for completion or fallback instead of ambiguously appearing unchecked; status cards refresh immediately after every check. Thinking effort can be **Off**, **High**, or **Maximum**; it defaults to **Off** because tag translation normally does not benefit from slower reasoning. Advanced batching, concurrency, retry, timeout, and system-prompt controls remain collapsed by default.
 
-Because Danbooru does not provide a cheap stable total for these filtered scans, scanning displays processed tags, category distribution, range completion, and current speed instead of a misleading percentage. Categories are split into 16 non-overlapping tag-ID ranges and processed with configurable concurrency from 1 to 16 (default 8). HTTP 429 responses automatically halve active concurrency; sustained successful requests restore it gradually.
-
-Autocomplete and related-tag panels only preview aliases matching the current ComfyUI language. This is display filtering only: all aliases remain in the search index.
-
-Configuration and cache files are stored under the ComfyUI user directory in `autocomplete-plus/`. API keys are never returned by the backend or written to logs. Treat this as a local/private-instance feature: any user who can access the ComfyUI server can start a translation job and incur API charges.
+Autocomplete and related-tag panels only preview aliases matching the current ComfyUI language. This is display filtering only: all aliases remain searchable. Configuration and the new translation dictionary are stored under the ComfyUI user directory in `autocomplete-plus/`; old live-tag databases and CSV files are not read or deleted automatically.
 
 ## Advanced Settings
 
@@ -284,15 +277,16 @@ You can skip the check process during ComfyUI startup by following these steps:
 
 ### About Fast Search for Autocomplete
 
-In `v1.3.0`, Added a fast search feature functionality to autocomplete. By enabling this function in the settings screen, tag search processing during text input operates faster, improving responsiveness.  
-While fast operation can be expected in any scenario, I particularly recommend **enabling** it in the following use cases:
+Fast indexed search is enabled by default so the local candidate list can render immediately while LoRA Manager, Danbooru, and translation enrichment arrive later. Sources with at least 50,000 loaded tags automatically avoid sequential scans even when an older saved setting says otherwise.
+
+Keystrokes are coalesced to the next frame instead of running index work inside the keyboard event. Search only collects a bounded pool before ranking, while CSV parsing yields between small chunks. Runtime translations use a separate append-only alias index, so typing never rebuilds the large base FlexSearch index. Co-occurrence loading retains the highest-frequency pairs needed by the UI instead of expanding the entire CSV in memory; related-tag results also use bounded scoring and an in-memory cache.
 
 - When the loaded CSV files contain a large number of tags or aliases. This is especially useful when the total number of tags exceeds **100,000**.
 - When using natural language instead of comma-separated tags in prompt input.
 
 **Browser startup behavior**
 
-Fast search requires tag index building and is not available immediately after browser startup. The conventional search process is used until building is complete.  
+Fast search requires tag index building. While a large source is still building, it is temporarily skipped instead of synchronously scanning the entire dataset and blocking list appearance or disappearance.
 As of `v1.3.0`, The notification when building is completed is displayed only in the browser's developer tools. This is planned to be improved in future versions.
 
 For example, when index building for approximately 220,000 tags is completed, the following log is recorded:

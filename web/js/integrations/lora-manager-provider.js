@@ -5,11 +5,13 @@ const RETRY_DELAY_MS = 30_000;
 const cache = new Map();
 let unavailableUntil = 0;
 let hasLoggedUnavailable = false;
+let lastStatus = { state: "idle", message: "", updatedAt: null };
 
 function resetState() {
     cache.clear();
     unavailableUntil = 0;
     hasLoggedUnavailable = false;
+    lastStatus = { state: "idle", message: "", updatedAt: null };
 }
 
 const CATEGORY_MAP = {
@@ -127,10 +129,12 @@ export async function searchLoraManagerCandidates(partialTag, options = {}) {
         cache.set(url, { expiresAt: Date.now() + CACHE_TTL_MS, results });
         unavailableUntil = 0;
         hasLoggedUnavailable = false;
+        lastStatus = { state: "success", message: `${results.length} result(s)`, updatedAt: Date.now() };
         return results;
     } catch (error) {
         if (error?.name === "AbortError") return [];
         unavailableUntil = Date.now() + RETRY_DELAY_MS;
+        lastStatus = { state: "error", message: error.message, updatedAt: Date.now() };
         if (!hasLoggedUnavailable) {
             const log = mode === "enabled" ? console.warn : console.debug;
             log("[Autocomplete-Plus] LoRA Manager integration is temporarily unavailable:", error.message);
@@ -138,6 +142,10 @@ export async function searchLoraManagerCandidates(partialTag, options = {}) {
         }
         return [];
     }
+}
+
+export function getLoraManagerStatus() {
+    return { ...lastStatus, cooldown: Math.max(unavailableUntil - Date.now(), 0) };
 }
 
 export function isExplicitLoraManagerQuery(partialTag) {

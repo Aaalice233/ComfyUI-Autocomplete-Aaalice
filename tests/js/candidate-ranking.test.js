@@ -10,7 +10,7 @@ function candidate(tag, source, count, alias = []) {
 }
 
 describe('unified autocomplete candidate ranking', () => {
-    test('orders match types by user intent before popularity', () => {
+    test('orders matching tags by raw popularity before match type', () => {
         const query = new Set(['blue']);
         const candidates = [
             candidate('ocean', 'e621', 10_000_000, ['deep_blue']),
@@ -25,15 +25,15 @@ describe('unified autocomplete candidate ranking', () => {
             sourcePriority: ['danbooru', 'e621'],
             sourceMaxCounts: { danbooru: 10_000_000, e621: 10_000_000 },
         }).map(item => item.tag)).toEqual([
-            'blue',
-            'blue_hair',
             'azure',
-            'dark_blue_hair',
             'ocean',
+            'dark_blue_hair',
+            'blue_hair',
+            'blue',
         ]);
     });
 
-    test('normalizes popularity within each source before comparing sources', () => {
+    test('compares raw heat across sources', () => {
         const danbooru = candidate('1boy', 'danbooru', 1_000_000);
         const e621 = candidate('1girl', 'e621', 2_000_000);
         const ranked = rankCompletionCandidates([danbooru, e621], new Set(['1']), {
@@ -47,7 +47,7 @@ describe('unified autocomplete candidate ranking', () => {
         expect(getNormalizedPopularity(danbooru, { danbooru: 10_000_000 })).toBeLessThan(1);
     });
 
-    test('uses source priority only after match quality and normalized popularity tie', () => {
+    test('uses source priority only after heat and match quality tie', () => {
         const ranked = rankCompletionCandidates([
             candidate('test_e621', 'e621', 100),
             candidate('test_danbooru', 'danbooru', 100),
@@ -58,6 +58,20 @@ describe('unified autocomplete candidate ranking', () => {
         });
 
         expect(ranked.map(item => item.source)).toEqual(['danbooru', 'e621']);
+    });
+
+    test('filters legacy zero-count candidates restored from the Danbooru API', () => {
+        const invalidOnline = {
+            ...candidate('1gir-', 'danbooru', 0),
+            origin: 'danbooru_api',
+        };
+        const localZeroCount = candidate('<lora:test>', 'lora', 0);
+
+        expect(rankCompletionCandidates(
+            [invalidOnline, localZeroCount],
+            new Set(['1gir']),
+            { limit: 10, sourcePriority: ['danbooru', 'lora'] },
+        )).toEqual([localZeroCount]);
     });
 
     test('merges duplicate aliases and fresher counts without changing the preferred source', () => {

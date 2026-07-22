@@ -27,7 +27,7 @@
     },
     "AutocompletePlus_Autocompletion_UseFastSearch": {
         "name": "啟用快速搜尋",
-        "tooltip": "標籤搜尋處理更快，提高文字輸入時的回應速度"
+        "tooltip": "使用索引搜尋立即顯示結果。大型標籤來源會自動啟用，以免阻塞介面。"
     },
     "AutocompletePlus_Autocompletion_EnableModels": {
         "name": "顯示Lora和Embedding"
@@ -51,21 +51,22 @@
     },
     "AutocompletePlus_Autocompletion_ReplaceUnderscoreWithSpace": {
         "name": "將'_'替換為'空格'",
-        "tooltip": "此設定也會影響相關標籤顯示"
+        "tooltip": "此設定也會影響共現標籤顯示"
     },
     "AutocompletePlus_Autocompletion_AutoInsertComma": {
         "name": "自動插入逗號",
         "tooltip": "從自動完成插入標籤時自動在標籤後添加逗號"
     },
     "AutocompletePlus_Autocompletion_MaxSuggestions": {
-        "name": "最大提示數"
+        "name": "每頁自動完成數",
+        "tooltip": "每次捲動到底部時載入的自動完成候選數量。"
     },
     "AutocompletePlus_Autocompletion_Enable": {
         "name": "啟用自動完成"
     },
     "AutocompletePlus_RelatedTags_RelatedTagsTriggerMode": {
-        "name": "顯示相關標籤的操作",
-        "tooltip": "指定觸發顯示已輸入標籤的相關標籤的操作（僅點擊、Ctrl+點擊）",
+        "name": "顯示共現標籤的操作",
+        "tooltip": "指定觸發顯示已輸入標籤的共現標籤的操作（僅點擊、Ctrl+點擊）",
         "options": {
             "click": "點擊",
             "ctrl+Click": "Ctrl+點擊"
@@ -80,14 +81,15 @@
         }
     },
     "AutocompletePlus_RelatedTags_MaxRelatedTags": {
-        "name": "最大相關標籤數"
+        "name": "每頁共現標籤數",
+        "tooltip": "每次捲動到底部時載入的共現標籤數量。"
     },
     "AutocompletePlus_RelatedTags_Enable": {
-        "name": "啟用相關標籤"
+        "name": "啟用共現標籤"
     },
     "AutocompletePlus_Display_HideAlias": {
         "name": "隱藏別名",
-        "tooltip": "隱藏自動完成和相關標籤顯示中的別名欄"
+        "tooltip": "隱藏自動完成和共現標籤顯示中的別名欄"
     },
     "AutocompletePlus_AutoFormatter_Trigger": {
         "name": "自動格式化觸發方式",
@@ -104,8 +106,8 @@
     "AutocompletePlus_AutoFormatter_EnableAutoFormat": {
         "name": "啟用自動格式化"
     },
-    "AutocompletePlus_LiveTags_Manager": {
-        "name": "管理 Danbooru 即時標籤"
+    "AutocompletePlus_OnlineServices_Manager": {
+        "name": "設定線上補全與翻譯"
     },
     "AutocompletePlus_AutoFormatter_TrimSurroundingSpaces": {
         "name": "去除首尾空白",

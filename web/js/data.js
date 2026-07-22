@@ -61,7 +61,7 @@ export class TagData {
      * @param {string[]} [alias=[]] - Array of aliases for the tag
      * @param {string} [source=TagSource.Danbooru] - The source of the tag data
      */
-    constructor(tag, category, count = 0, alias = [], source = TagSource.Danbooru) {
+    constructor(tag, category, count = 0, alias = [], source = TagSource.Danbooru, origin = 'local') {
         /** @type {string} */
         this.tag = tag;
 
@@ -75,6 +75,9 @@ export class TagData {
         this.count = count;
 
         this.source = source;
+
+        /** @type {'local'|'danbooru_api'} */
+        this.origin = origin;
     }
 
     /**
@@ -109,6 +112,15 @@ class AutocompleteData {
         /** @type {Map<string, TagData>} */
         this.aliasMap = new Map();
 
+        /** @type {Map<string, number>} */
+        this.tagIndexMap = new Map();
+
+        /** @type {Map<string, Document>} */
+        this.translationSearchDocuments = new Map();
+
+        /** @type {Map<string, Map<number, string>>} */
+        this.translationIndexTexts = new Map();
+
         /** @type {Map<string, Map<string, number>>} */
         this.cooccurrenceMap = new Map();
 
@@ -134,6 +146,9 @@ const TAG_INDEX = TAGS_CSV_HEADER_COLUMNS.indexOf('tag');
 const CATEGORY_INDEX = TAGS_CSV_HEADER_COLUMNS.indexOf('category');
 const COUNT_INDEX = TAGS_CSV_HEADER_COLUMNS.indexOf('count');
 const ALIAS_INDEX = TAGS_CSV_HEADER_COLUMNS.indexOf('alias');
+const TAG_PARSE_CHUNK_SIZE = 2000;
+const COOCCURRENCE_PARSE_CHUNK_SIZE = 3000;
+const MAX_COOCCURRENCES_PER_TAG = 2000;
 
 // --- Helder Functions ---
 
@@ -174,56 +189,59 @@ async function loadTags(csvUrl, siteName) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const csvText = await response.text();
-        const lines = csvText.split('\n').filter(line => line.trim().length > 0);
-        const totalLines = lines.length;
+        const lines = csvText.split('\n');
 
         const startIndex = lines[0].toLowerCase().startsWith(TAGS_CSV_HEADER) ? 1 : 0;
 
-        for (let i = startIndex; i < lines.length; i++) {
-            const line = lines[i];
-            const columns = parseCSVLine(line);
-
-            if (columns.length === TAGS_CSV_HEADER_COLUMNS.length) {
-                const tag = columns[TAG_INDEX].trim();
-                const aliasStr = columns[ALIAS_INDEX].trim();
-                const category = columns[CATEGORY_INDEX].trim();
-                const count = parseInt(columns[COUNT_INDEX].trim(), 10);
-
-                if (!tag || isNaN(count)) continue;
-
-                // Skip if tag already exists (priority to earlier loaded files - extra then base)
-                if (autoCompleteData[siteName].tagMap.has(tag)) {
-                    continue;
-                }
-
-                // Parse aliases - might be comma-separated list inside quotes
-                const aliases = aliasStr ? aliasStr.split(',').map(a => a.trim()).filter(a => a.length > 0) : [];
-
-                // Create a TagData instance instead of a plain object
-                const tagData = new TagData(tag, category, count, aliases, siteName);
-
-                updateMaxTagLength(tag.length);
-
-                autoCompleteData[siteName].sortedTags.push(tagData);
-
-                // Set the tag and its alias in the maps
-                autoCompleteData[siteName].tagMap.set(tagData.tag, tagData);
-                if (tagData.alias && Array.isArray(tagData.alias)) {
-                    tagData.alias.forEach(alias => {
-                        if (!autoCompleteData[siteName].aliasMap.has(alias)) {
-                            autoCompleteData[siteName].aliasMap.set(alias, tagData.tag); // Map alias back to the main tag
-                        }
-                    });
-                }
-            } else {
-                console.warn(`[Autocomplete-Plus] Invalid CSV format in line ${i + 1} of ${csvUrl}: ${line}. Expected ${TAGS_CSV_HEADER_COLUMNS.length} columns, but got ${columns.length}.`);
-                continue;
-            }
-        }
+        await processTagLinesInChunks(lines, startIndex, csvUrl, siteName);
 
     } catch (error) {
         console.error(`[Autocomplete-Plus] Failed to fetch or process tags from ${csvUrl}:`, error);
     }
+}
+
+function processTagLinesInChunks(lines, startIndex, csvUrl, siteName) {
+    return new Promise((resolve) => {
+        let i = startIndex;
+
+        function processChunk() {
+            const endIndex = Math.min(i + TAG_PARSE_CHUNK_SIZE, lines.length);
+            for (; i < endIndex; i++) {
+                const line = lines[i];
+                if (!line.trim()) continue;
+                const columns = parseCSVLine(line);
+                if (columns.length !== TAGS_CSV_HEADER_COLUMNS.length) {
+                    console.warn(`[Autocomplete-Plus] Invalid CSV format in line ${i + 1} of ${csvUrl}: ${line}. Expected ${TAGS_CSV_HEADER_COLUMNS.length} columns, but got ${columns.length}.`);
+                    continue;
+                }
+
+                const tag = columns[TAG_INDEX].trim();
+                const aliasStr = columns[ALIAS_INDEX].trim();
+                const category = columns[CATEGORY_INDEX].trim();
+                const count = parseInt(columns[COUNT_INDEX].trim(), 10);
+                if (!tag || isNaN(count) || autoCompleteData[siteName].tagMap.has(tag)) continue;
+
+                const aliases = aliasStr ? aliasStr.split(',').map(a => a.trim()).filter(Boolean) : [];
+                const tagData = new TagData(tag, category, count, aliases, siteName);
+                updateMaxTagLength(tag.length);
+                autoCompleteData[siteName].sortedTags.push(tagData);
+                autoCompleteData[siteName].tagMap.set(tagData.tag, tagData);
+                for (const alias of tagData.alias) {
+                    if (!autoCompleteData[siteName].aliasMap.has(alias)) {
+                        autoCompleteData[siteName].aliasMap.set(alias, tagData.tag);
+                    }
+                }
+            }
+
+            if (i < lines.length) {
+                setTimeout(processChunk, 0);
+            } else {
+                resolve();
+            }
+        }
+
+        processChunk();
+    });
 }
 
 /**
@@ -247,26 +265,28 @@ async function buildFlexSearchIndex(siteName) {
 
         let startIdx = 0;
         const startTime = performance.now();
-        function processChunkTasks() {
-            const chunkSize = 1000;
-            const end = Math.min(startIdx + chunkSize, autoCompleteData[siteName].sortedTags.length);
-            for (; startIdx < end; startIdx++) {
-                const tagData = autoCompleteData[siteName].sortedTags[startIdx];
-                document.add(startIdx, tagData);
-            }
+        await new Promise((resolve) => {
+            function processChunkTasks() {
+                const chunkSize = 1000;
+                const end = Math.min(startIdx + chunkSize, autoCompleteData[siteName].sortedTags.length);
+                for (; startIdx < end; startIdx++) {
+                    const tagData = autoCompleteData[siteName].sortedTags[startIdx];
+                    autoCompleteData[siteName].tagIndexMap.set(tagData.tag, startIdx);
+                    document.add(startIdx, tagData);
+                }
 
-            if (startIdx < autoCompleteData[siteName].sortedTags.length) {
-                setTimeout(processChunkTasks, 0);
-                // console.log(`[Autocomplete-Plus] Current porcess: ${startIdx}`);
-            } else {
-                autoCompleteData[siteName].flexSearchDocument = document;
-
-                const endTime = performance.now();
-                const duration = endTime - startTime;
-                console.info(`[Autocomplete-Plus] Building ${autoCompleteData[siteName].sortedTags.length} index for ${siteName} took ${duration.toFixed(2)}ms.`);
+                if (startIdx < autoCompleteData[siteName].sortedTags.length) {
+                    setTimeout(processChunkTasks, 0);
+                } else {
+                    autoCompleteData[siteName].flexSearchDocument = document;
+                    const endTime = performance.now();
+                    const duration = endTime - startTime;
+                    console.info(`[Autocomplete-Plus] Building ${autoCompleteData[siteName].sortedTags.length} index for ${siteName} took ${duration.toFixed(2)}ms.`);
+                    resolve();
+                }
             }
-        }
-        processChunkTasks();
+            processChunkTasks();
+        });
     } catch (error) {
         console.error(`[Autocomplete-Plus] Failed to building flexSearch index`, error);
     }
@@ -286,7 +306,7 @@ async function loadCooccurrence(csvUrl, siteName) {
         }
 
         const csvText = await response.text();
-        const lines = csvText.split('\n').filter(line => line.trim().length > 0);
+        const lines = csvText.split('\n');
 
         const startIndex = lines[0].startsWith('tag_a,tag_b,count') ? 1 : 0;
 
@@ -302,15 +322,14 @@ async function loadCooccurrence(csvUrl, siteName) {
  */
 function processInChunks(lines, startIndex, targetMap, csvUrl, siteName) {
     return new Promise((resolve) => {
-        const CHUNK_SIZE = 10000;
         let i = startIndex;
-        let pairCount = 0;
 
         function processChunk() {
-            const endIndex = Math.min(i + CHUNK_SIZE, lines.length);
+            const endIndex = Math.min(i + COOCCURRENCE_PARSE_CHUNK_SIZE, lines.length);
 
             for (; i < endIndex; i++) {
                 const line = lines[i];
+                if (!line.trim()) continue;
                 const columns = parseCSVLine(line);
 
                 if (columns.length >= 3) {
@@ -320,20 +339,9 @@ function processInChunks(lines, startIndex, targetMap, csvUrl, siteName) {
 
                     if (!tagA || !tagB || isNaN(count)) continue;
 
-                    // Add tagA -> tagB relationship
-                    if (!targetMap.has(tagA)) {
-                        targetMap.set(tagA, new Map());
-                    }
-                    targetMap.get(tagA).set(tagB, count);
+                    addCooccurrence(targetMap, tagA, tagB, count);
+                    addCooccurrence(targetMap, tagB, tagA, count);
 
-
-                    // Add tagB -> tagA relationship (bidirectional)
-                    if (!targetMap.has(tagB)) {
-                        targetMap.set(tagB, new Map());
-                    }
-                    targetMap.get(tagB).set(tagA, count);
-
-                    pairCount++;
                 }
             }
 
@@ -347,6 +355,17 @@ function processInChunks(lines, startIndex, targetMap, csvUrl, siteName) {
 
         processChunk();
     });
+}
+
+function addCooccurrence(targetMap, tag, relatedTag, count) {
+    let related = targetMap.get(tag);
+    if (!related) {
+        related = new Map();
+        targetMap.set(tag, related);
+    }
+    if (related.has(relatedTag) || related.size < MAX_COOCCURRENCES_PER_TAG) {
+        related.set(relatedTag, count);
+    }
 }
 
 /**
@@ -427,10 +446,7 @@ async function initializeDataFromCSV(csvListData, source) {
             return;
         }
 
-        const allExtraTags = csvListData[source].extra_tags || [];
-        const extraTagsFileList = csvListData[source].live_tags_active
-            ? allExtraTags.filter(filename => filename === "danbooru_tags_live.csv")
-            : allExtraTags;
+        const extraTagsFileList = csvListData[source].extra_tags || [];
         const extraCooccurrenceFileList = csvListData[source].extra_cooccurrence || [];
 
         const tagsUrl = `/autocomplete-plus/csv/${source}/tags`;
@@ -442,7 +458,7 @@ async function initializeDataFromCSV(csvListData, source) {
             for (let i = 0; i < extraTagsFileList.length; i++) {
                 promiseChain = promiseChain.then(() => loadTags(`${tagsUrl}/extra/${i}`, source));
             }
-            if (csvListData[source].base_tags && !csvListData[source].live_tags_active) {
+            if (csvListData[source].base_tags) {
                 promiseChain = promiseChain.then(() => loadTags(`${tagsUrl}/base`, source));
             }
             return promiseChain;
@@ -575,9 +591,8 @@ export async function loadDataAsync() {
     }
     return Promise.all([
         fetchCsvList().then((csvList) => {
-            Object.values(TagSource).forEach((source) => {
-                initializeDataFromCSV(csvList, source);
-            });
+            return Promise.all(Object.values(TagSource).map((source) =>
+                initializeDataFromCSV(csvList, source)));
         }),
         loadEmbeddings(),
         loadLoras(),

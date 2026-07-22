@@ -33,7 +33,7 @@ describe('runtime UI localization', () => {
 
     test('uses the current ComfyUI locale when no locale is passed', () => {
         setInterfaceLocalizationApp({ extensionManager: { setting: { get: () => 'zh-CN' } } });
-        expect(getInterfaceText('noRelatedTags')).toBe('未找到相关标签');
+        expect(getInterfaceText('noRelatedTags')).toBe('未找到共现标签');
         setInterfaceLocalizationApp(null);
     });
 

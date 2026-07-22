@@ -1,5 +1,6 @@
 import {
     getCurrentInterfaceLocale,
+    getInterfaceText,
     normalizeInterfaceLocale,
 } from './localization.js';
 
@@ -105,19 +106,37 @@ export function createTagCategoryIcon(tagData, className = '') {
     return container;
 }
 
+export function createTagOriginMarker(tagData) {
+    if (tagData?.origin !== 'danbooru_api') return null;
+    const tooltip = getInterfaceText('danbooruOnlineFallback');
+    const marker = document.createElement('span');
+    marker.className = 'autocomplete-plus-online-origin-marker';
+    marker.dataset.tagOrigin = 'danbooru_api';
+    marker.title = tooltip;
+    marker.setAttribute('role', 'img');
+    marker.setAttribute('aria-label', tooltip);
+    marker.textContent = 'API';
+    return marker;
+}
+
 export function renderTagNameWithCategoryIcon(element, tagData, position = 'left') {
     element.textContent = '';
     const tagName = String(tagData?.tag || '');
+    const originMarker = createTagOriginMarker(tagData);
+    const text = document.createElement('span');
+    text.className = 'autocomplete-plus-tag-text';
+    text.textContent = tagName;
     if (!['left', 'right'].includes(position)) {
-        element.textContent = tagName;
+        element.append(text);
+        if (originMarker) element.append(originMarker);
         return;
     }
 
     const icon = createTagCategoryIcon(tagData);
-    const text = document.createTextNode(tagName);
     if (position === 'left') {
         element.append(icon, text);
     } else {
         element.append(text, icon);
     }
+    if (originMarker) element.append(originMarker);
 }

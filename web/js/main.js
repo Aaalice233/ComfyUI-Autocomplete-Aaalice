@@ -7,9 +7,10 @@ import { AUTOCOMPLETE_TAG_INSERTED_EVENT, AutocompleteEventHandler } from "./aut
 import { RelatedTagsEventHandler } from "./related-tags.js";
 import { AutoFormatterEventHandler } from "./auto-formatter.js";
 import { NodeInfo, VUE_NODE_TEXTAREA_SELECTOR, getVueTextareaNodeInfo } from "./node-info.js";
-import { createLiveTagsSetting } from "./live-tags.js";
+import { createOnlineServicesSetting } from "./online-settings.js";
 import { isInputOwnedByAnotherExtension } from "./integrations/input-compatibility.js";
-import { getInterfaceText, setInterfaceLocalizationApp } from "./localization.js";
+import { getCurrentInterfaceLocale, getInterfaceText, setInterfaceLocalizationApp } from "./localization.js";
+import { loadTranslationCatalog } from "./integrations/translation-provider.js";
 
 // --- Constants ---
 const id = "AutocompletePlus";
@@ -135,8 +136,8 @@ function initializeEventHandlers() {
     }
 
     function resolveNodeInfo(element) {
-        return getVueTextareaNodeInfo(element, app.canvas?.graph)
-            ?? attachedElementNodeInfoMap.get(element);
+        return attachedElementNodeInfoMap.get(element)
+            ?? getVueTextareaNodeInfo(element, app.canvas?.graph);
     }
 
     function skipOwnedInput(event) {
@@ -221,7 +222,7 @@ function initializeEventHandlers() {
  * Add Miscellaneous settings to the settings screen
  */
 async function addExtraSettings() {
-    app.ui.settings.addSetting(createLiveTagsSetting(app, name, id));
+    app.ui.settings.addSetting(createOnlineServicesSetting(app, name, id));
 }
 
 /**
@@ -239,6 +240,7 @@ app.registerExtension({
         loadCSS(rootPath + "css/autocomplete-plus.css"); // Load CSS for autocomplete
 
         await loadDataAsync();
+        void loadTranslationCatalog(getCurrentInterfaceLocale());
     },
 
     // --- Commands ---
@@ -328,7 +330,7 @@ app.registerExtension({
             name: "Use Fast Search",
             tooltip: "Tag search processing during text input operates faster, improving responsiveness.",
             type: "boolean",
-            defaultValue: false,
+            defaultValue: true,
             category: [name, "Autocompletion", "Use Fast Search"],
             onChange: (newVal, oldVal) => {
                 settingValues.useFastSearch = newVal;
@@ -402,14 +404,15 @@ app.registerExtension({
         },
         {
             id: id + ".Autocompletion.MaxSuggestions",
-            name: "Max suggestions",
+            name: "Suggestions per page",
+            tooltip: "Number of autocomplete rows loaded at a time while scrolling.",
             type: "slider",
             attrs: {
                 min: 5,
                 max: 50,
                 step: 5,
             },
-            defaultValue: 10,
+            defaultValue: 15,
             category: [name, "Autocompletion", "Max suggestions"],
             onChange: (newVal, oldVal) => {
                 settingValues.maxSuggestions = newVal;
@@ -453,14 +456,15 @@ app.registerExtension({
         },
         {
             id: id + ".RelatedTags.MaxRelatedTags",
-            name: "Max related tags",
+            name: "Co-occurrence tags per page",
+            tooltip: "Number of co-occurrence rows loaded at a time while scrolling.",
             type: "slider",
             attrs: {
                 min: 5,
                 max: 100,
                 step: 5,
             },
-            defaultValue: 20,
+            defaultValue: 15,
             category: [name, "Related Tags", "Max related tags"],
             onChange: (newVal, oldVal) => {
                 settingValues.maxRelatedTags = newVal;

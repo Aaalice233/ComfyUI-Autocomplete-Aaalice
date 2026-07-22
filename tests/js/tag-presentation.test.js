@@ -2,6 +2,7 @@
 
 import {
     createTagCategoryIcon,
+    createTagOriginMarker,
     getTagCategoryEmoji,
     getTagCategoryIconKey,
     getTagCategoryLabel,
@@ -50,6 +51,15 @@ describe('tag category presentation', () => {
         expect(getTagCategoryLabel('copyright', 'zh-TW')).toBe('copyright（版權作品）');
         expect(getTagCategoryLabel('character', 'ja-JP')).toBe('character（キャラクター）');
         expect(getTagCategoryLabel('artist', 'en-US')).toBe('artist');
+    });
+
+    test('uses a subtle accessible marker only for Danbooru API candidates', () => {
+        const marker = createTagOriginMarker({ origin: 'danbooru_api' });
+        expect(marker.dataset.tagOrigin).toBe('danbooru_api');
+        expect(marker.className).toBe('autocomplete-plus-online-origin-marker');
+        expect(marker.textContent).toBe('API');
+        expect(marker.getAttribute('aria-label')).toContain('Danbooru');
+        expect(createTagOriginMarker({ origin: 'local' })).toBeNull();
     });
 
     test('normalizes supported ComfyUI locale variants', () => {
