@@ -12,7 +12,8 @@ export const TagSource = {
 // Tag sources for model based tag data.
 export const ModelTagSource = {
     Embeddings: 'embeddings',
-    Lora: 'lora'
+    Lora: 'lora',
+    Wildcard: 'wildcard'
 }
 
 export const TagCategory = {
@@ -40,6 +41,9 @@ export const TagCategory = {
     ],
     'lora': [
         'lora'
+    ],
+    'wildcard': [
+        'wildcard'
     ]
 }
 
@@ -562,6 +566,10 @@ async function loadLoras() {
  * Load all data sources asynchronously.
  */
 export async function loadDataAsync() {
+    if (!autoCompleteData[ModelTagSource.Wildcard]) {
+        autoCompleteData[ModelTagSource.Wildcard] = new AutocompleteData();
+        autoCompleteData[ModelTagSource.Wildcard].initialized = true;
+    }
     return Promise.all([
         fetchCsvList().then((csvList) => {
             Object.values(TagSource).forEach((source) => {

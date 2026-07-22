@@ -22,6 +22,11 @@ import {
     openTagWikiUrl
 } from './utils.js';
 import { settingValues } from './settings.js';
+import {
+    isExplicitLoraManagerQuery,
+    mergeSupplementalCandidates,
+    searchLoraManagerCandidates,
+} from './integrations/lora-manager-provider.js';
 
 export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
 
@@ -414,6 +419,8 @@ class AutocompleteUI {
         this.target = null;
         this.selectedIndex = -1;
         this.candidates = [];
+        this._requestId = 0;
+        this._abortController = null;
 
         // Add event listener for clicks on items
         this.tagsList.addEventListener('mousedown', (e) => {
@@ -449,14 +456,49 @@ class AutocompleteUI {
      * @param {HTMLTextAreaElement} textareaElement 
      * @returns 
      */
-    updateDisplay(textareaElement) {
-        this.candidates = searchCompletionCandidates(textareaElement);
-        if (this.candidates.length <= 0) {
-            this.hide();
-            return;
+    async updateDisplay(textareaElement) {
+        const requestId = ++this._requestId;
+        this._abortController?.abort();
+        this._abortController = new AbortController();
+
+        const localCandidates = searchCompletionCandidates(textareaElement);
+        this.candidates = localCandidates;
+        this.target = textareaElement;
+
+        if (localCandidates.length > 0) {
+            this.#displayCandidates();
+        } else {
+            this.#hideDisplay();
         }
 
-        this.target = textareaElement;
+        const partialTag = getCurrentPartialTag(textareaElement);
+        const invalidPrefix = ["#", "/"].some(prefix => partialTag.startsWith(prefix));
+        const explicitQuery = isExplicitLoraManagerQuery(partialTag);
+        const needsSupplement = explicitQuery || localCandidates.length < settingValues.maxSuggestions;
+        if (!partialTag || invalidPrefix || isLongText(partialTag) || !needsSupplement) return;
+
+        const supplemental = await searchLoraManagerCandidates(partialTag, {
+            limit: settingValues.maxSuggestions,
+            mode: settingValues.loraManagerIntegration,
+            tagSource: settingValues.tagSource,
+            includeModels: settingValues.enableModels,
+            signal: this._abortController.signal,
+        });
+        if (requestId !== this._requestId || textareaElement !== this.target) return;
+
+        const reservedCount = explicitQuery ? Math.min(3, supplemental.length) : 0;
+        const primary = reservedCount > 0
+            ? localCandidates.slice(0, settingValues.maxSuggestions - reservedCount)
+            : localCandidates;
+        this.candidates = mergeSupplementalCandidates(primary, supplemental, settingValues.maxSuggestions);
+        if (this.candidates.length > 0) this.#displayCandidates();
+    }
+
+    #displayCandidates() {
+        if (!this.target || this.candidates.length <= 0) {
+            this.#hideDisplay();
+            return;
+        }
 
         if (this.selectedIndex == -1) {
             this.selectedIndex = 0; // Reset selection to the first item
@@ -474,14 +516,21 @@ class AutocompleteUI {
         this.#highlightItem();
     }
 
+    #hideDisplay() {
+        this.root.style.display = 'none';
+        this.selectedIndex = -1;
+        this.candidates = [];
+    }
+
     /**
      * hides the autocomplete list.
      */
     hide() {
-        this.root.style.display = 'none';
-        this.selectedIndex = -1;
+        this._requestId++;
+        this._abortController?.abort();
+        this._abortController = null;
+        this.#hideDisplay();
         this.target = null;
-        this.candidates = [];
     }
 
     /** Moves the selection up or down */

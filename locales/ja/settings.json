@@ -31,6 +31,19 @@
     "AutocompletePlus_Autocompletion_EnableModels": {
         "name": "LoraとEmbeddingを候補に表示する"
     },
+    "AutocompletePlus_Integration_LoRAManager": {
+        "name": "LoRA Manager 連携",
+        "tooltip": "LoRA Manager のローカルタグ、LoRA、Embedding、Wildcard API を補助的な補完候補として使用します。",
+        "options": {
+            "auto": "自動",
+            "enabled": "有効",
+            "disabled": "無効"
+        }
+    },
+    "AutocompletePlus_Integration_ExcludedNodeTypes": {
+        "name": "除外するノードタイプ",
+        "tooltip": "別の拡張機能にテキスト入力を任せるノードタイプ名をカンマ区切りで指定します。"
+    },
     "AutocompletePlus_Autocompletion_PrefixArtist": {
         "name": "アーティストタグの前に追加する文字列",
         "tooltip": "オートコンプリートからアーティストタグを挿入する際に付加する文字列。\n例: '{'@'}' -> '{'@'}artist_name'."

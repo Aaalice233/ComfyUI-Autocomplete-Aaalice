@@ -13,6 +13,8 @@ export const settingValues = {
     prefixArtist: '', // Prefix to be attached before artist tags
     autoInsertComma: true,
     searchDebounceTime: 100, // Sequential search debounce time in milliseconds
+    loraManagerIntegration: 'auto', // 'auto', 'enabled', 'disabled'
+    excludedNodeTypes: '', // Comma or newline-separated node types owned by other extensions
 
     // Related tags feature settings
     enableRelatedTags: true,

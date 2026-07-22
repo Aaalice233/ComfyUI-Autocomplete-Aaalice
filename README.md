@@ -19,6 +19,7 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 - Support for promoted text inputs on **subgraph nodes**, including resolving the original inner node and widget.
 - Improved autocomplete/related-tags handoff: partial tags reopen autocomplete, accepting a completed tag immediately shows related tags, trailing commas resolve to the preceding tag, and empty related-tags panels no longer replace useful completion suggestions.
 - Optional Danbooru live-tag scanning with per-category popularity filters, plus resumable DeepSeek translation and a persistent local cache.
+- Optional LoRA Manager compatibility layer that supplements results through its local tag, LoRA, Embedding, and Wildcard APIs while avoiding duplicate autocomplete inside LoRA Manager inputs.
 - Simplified Chinese documentation and continued localization maintenance.
 
 The original project remains the foundation of this fork. Existing features and credits are preserved wherever possible.
@@ -37,6 +38,7 @@ The original project remains the foundation of this fork. Existing features and 
 - **:pencil:User CSV**: Allows users to add their own CSV files for autocomplete suggestions.
 - **:twisted_rightwards_arrows:Modern ComfyUI Compatibility**: Supports Nodes 2.0 and promoted text inputs on subgraph nodes.
 - **:arrows_counterclockwise:Live Tag Supplement**: Fetches tags missing from the bundled Danbooru CSV and can translate them through DeepSeek.
+- **:link:LoRA Manager Integration**: Reuses LoRA Manager's local indexes for supplemental tag, LoRA, Embedding, and Wildcard suggestions.
 
 ## Installation
 
@@ -214,6 +216,10 @@ For example, by preparing the following CSV, you can quickly insert correspondin
   - **Manual**: Format only via keyboard shortcut (default: `Alt+Shift+F`)
 - **Use Trailing Comma**: When enabled, ensures all lines end with a trailing comma when formatting. If disabled, removes trailing commas.
 - **Trim Surrounding Spaces**: When enabled, trim any blank lines or spaces from the beginning and end of the prompt.
+
+### LoRA Manager Integration
+
+When [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) is installed, **Auto** mode supplements autocomplete from its local `/api/lm/custom-words/search`, `/api/lm/loras/relative-paths`, `/api/lm/embeddings/relative-paths`, and `/api/lm/wildcards/search` indexes. API failures fall back to the built-in data without interrupting input. LoRA Manager's own autocomplete text boxes are excluded automatically; additional third-party node types can be listed under **Excluded node types**.
 
 ### Danbooru Live Tags
 

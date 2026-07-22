@@ -19,6 +19,7 @@
 - 支持**子图节点**提升后的文本输入框，并能追溯到子图内部的真实节点和字段。
 - 改进自动补全与相关标签的衔接：点击未完成标签会恢复补全，确认完整标签后立即显示相关标签，光标位于尾逗号后仍能识别前一个标签，并避免空的相关标签面板遮挡有效补全候选。
 - 支持按类别热度规则从 Danbooru 补充最新标签，并通过可续跑的 DeepSeek 翻译任务和本地缓存补充译名。
+- 提供 LoRA Manager 兼容层，通过其本地标签、LoRA、Embedding 和 Wildcard API 补充候选，并避免在 LoRA Manager 自有输入框中重复触发补全。
 - 提供简体中文 README，并继续维护本地化内容。
 
 上游项目仍是本分支的基础，原有功能和致谢信息会尽可能保留。
@@ -37,6 +38,7 @@
 - **:pencil:用户 CSV**：可以添加自定义 CSV 作为补全数据。
 - **:twisted_rightwards_arrows:新版 ComfyUI 兼容**：支持 Nodes 2.0 和子图节点提升后的文本输入框。
 - **:arrows_counterclockwise:实时标签补充**：拉取基础 Danbooru CSV 中缺失的标签，并可使用 DeepSeek 翻译。
+- **:link:LoRA Manager 兼容**：复用 LoRA Manager 的本地索引，补充标签、LoRA、Embedding 和 Wildcard 候选。
 
 ## 安装
 
@@ -209,6 +211,10 @@ worst_quality,5,9999999,
   - **Manual**：仅通过快捷键手动格式化，默认为 `Alt+Shift+F`。
 - **Use Trailing Comma**：启用时确保每行以逗号结尾，关闭时移除行尾逗号。
 - **Trim Surrounding Spaces**：移除提示词开头和结尾的空行或空格。
+
+### LoRA Manager 兼容
+
+安装 [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) 后，默认的“自动”模式会通过其本地 `/api/lm/custom-words/search`、`/api/lm/loras/relative-paths`、`/api/lm/embeddings/relative-paths` 和 `/api/lm/wildcards/search` 索引补充候选。接口不可用时会自动退回本插件原有数据，不影响输入。LoRA Manager 自带补全的文本框会自动排除；其他第三方节点可在“排除的节点类型”中添加黑名单。
 
 ### Danbooru 实时标签
 

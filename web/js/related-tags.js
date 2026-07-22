@@ -774,6 +774,10 @@ export class RelatedTagsEventHandler {
         this.relatedTagsUI = new RelatedTagsUI();
     }
 
+    hide() {
+        this.relatedTagsUI.hide();
+    }
+
     /**
      * 
      * @param {KeyboardEvent} event 

@@ -31,6 +31,19 @@
     "AutocompletePlus_Autocompletion_EnableModels": {
         "name": "显示 LoRA 和 Embedding"
     },
+    "AutocompletePlus_Integration_LoRAManager": {
+        "name": "LoRA Manager 兼容",
+        "tooltip": "将 LoRA Manager 的本地标签、LoRA、Embedding 和 Wildcard API 作为补充补全源。",
+        "options": {
+            "auto": "自动",
+            "enabled": "启用",
+            "disabled": "关闭"
+        }
+    },
+    "AutocompletePlus_Integration_ExcludedNodeTypes": {
+        "name": "排除的节点类型",
+        "tooltip": "以英文逗号分隔节点类型名称，这些节点的文本框将交给其他扩展处理。"
+    },
     "AutocompletePlus_Autocompletion_PrefixArtist": {
         "name": "艺术家标签前缀",
         "tooltip": "通过自动补全插入艺术家标签时，在标签前添加指定文本。\n例如：设置为 '{'@'}' 后，将插入 '{'@'}artist_name'。"

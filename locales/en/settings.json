@@ -31,6 +31,19 @@
     "AutocompletePlus_Autocompletion_EnableModels": {
         "name": "Enable Loras and Embeddings"
     },
+    "AutocompletePlus_Integration_LoRAManager": {
+        "name": "LoRA Manager integration",
+        "tooltip": "Use LoRA Manager's local tag, LoRA, Embedding, and Wildcard APIs as supplemental autocomplete sources.",
+        "options": {
+            "auto": "Auto",
+            "enabled": "Enabled",
+            "disabled": "Disabled"
+        }
+    },
+    "AutocompletePlus_Integration_ExcludedNodeTypes": {
+        "name": "Excluded node types",
+        "tooltip": "Comma-separated node type names whose text inputs must be left to another extension."
+    },
     "AutocompletePlus_Autocompletion_PrefixArtist": {
         "name": "String to add before artist tags",
         "tooltip": "Text to prepend when inserting an artist tag via autocomplete.\ne.g. '{'@'}' -> '{'@'}artist_name'."

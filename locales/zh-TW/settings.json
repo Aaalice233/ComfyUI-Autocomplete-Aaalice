@@ -31,6 +31,19 @@
     "AutocompletePlus_Autocompletion_EnableModels": {
         "name": "顯示Lora和Embedding"
     },
+    "AutocompletePlus_Integration_LoRAManager": {
+        "name": "LoRA Manager 相容",
+        "tooltip": "將 LoRA Manager 的本機標籤、LoRA、Embedding 與 Wildcard API 作為補充自動完成來源。",
+        "options": {
+            "auto": "自動",
+            "enabled": "啟用",
+            "disabled": "停用"
+        }
+    },
+    "AutocompletePlus_Integration_ExcludedNodeTypes": {
+        "name": "排除的節點類型",
+        "tooltip": "以英文逗號分隔節點類型名稱，這些節點的文字方塊將交由其他擴充功能處理。"
+    },
     "AutocompletePlus_Autocompletion_PrefixArtist": {
         "name": "在藝術家標籤前添加的字串",
         "tooltip": "透過自動完成插入藝術家標籤時，在標籤前添加的文字。\n例： '{'@'}' -> '{'@'}artist_name'."

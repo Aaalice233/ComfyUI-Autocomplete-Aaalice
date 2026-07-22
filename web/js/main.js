@@ -8,6 +8,7 @@ import { RelatedTagsEventHandler } from "./related-tags.js";
 import { AutoFormatterEventHandler } from "./auto-formatter.js";
 import { NodeInfo, VUE_NODE_TEXTAREA_SELECTOR, getVueTextareaNodeInfo } from "./node-info.js";
 import { createLiveTagsSetting } from "./live-tags.js";
+import { isInputOwnedByAnotherExtension } from "./integrations/input-compatibility.js";
 
 // --- Constants ---
 const id = "AutocompletePlus";
@@ -27,6 +28,11 @@ function initializeEventHandlers() {
     // Function to attach listeners
     function attachListeners(element, nodeInfo) {
         if (element.tagName !== 'TEXTAREA' || element.readOnly) return;
+        if (isInputOwnedByAnotherExtension({
+            element,
+            nodeInfo,
+            excludedNodeTypes: settingValues.excludedNodeTypes,
+        })) return;
         if (attachedElementNodeInfoMap.has(element)) {
             if (nodeInfo) attachedElementNodeInfoMap.set(element, nodeInfo);
             return;
@@ -117,8 +123,7 @@ function initializeEventHandlers() {
      * @returns {Object|null} NodeInfo object or undefined if not found
      */
     function getNodeInfo(event) {
-        const nodeInfo = getVueTextareaNodeInfo(event.target, app.canvas?.graph)
-            ?? attachedElementNodeInfoMap.get(event.target);
+        const nodeInfo = resolveNodeInfo(event.target);
         if (!nodeInfo) {
             console.warn('[Autocomplete-Plus] Node info not found for element in ', event.target);
             return null;
@@ -127,19 +132,40 @@ function initializeEventHandlers() {
         return nodeInfo;
     }
 
+    function resolveNodeInfo(element) {
+        return getVueTextareaNodeInfo(element, app.canvas?.graph)
+            ?? attachedElementNodeInfoMap.get(element);
+    }
+
+    function skipOwnedInput(event) {
+        const owned = isInputOwnedByAnotherExtension({
+            element: event.target,
+            nodeInfo: resolveNodeInfo(event.target),
+            excludedNodeTypes: settingValues.excludedNodeTypes,
+        });
+        if (owned) {
+            autocompleteEventHandler.hide();
+            relatedTagsEventHandler.hide();
+        }
+        return owned;
+    }
+
     function handleInput(event) {
+        if (skipOwnedInput(event)) return;
         autocompleteEventHandler.handleInput(event);
         relatedTagsEventHandler.handleInput(event);
         autoFormatterEventHandler.handleInput(event);
     }
 
     function handleFocus(event) {
+        if (skipOwnedInput(event)) return;
         autocompleteEventHandler.handleFocus(event);
         relatedTagsEventHandler.handleFocus(event);
         autoFormatterEventHandler.handleFocus(event);
     }
 
     function handleBlur(event) {
+        if (skipOwnedInput(event)) return;
         const nodeInfo = getNodeInfo(event); // Get node info to pass to auto formatter
 
         autocompleteEventHandler.handleBlur(event);
@@ -148,6 +174,7 @@ function initializeEventHandlers() {
     }
 
     function handleKeyDown(event) {
+        if (skipOwnedInput(event)) return;
         autocompleteEventHandler.handleKeyDown(event);
         const relatedTagsShown = relatedTagsEventHandler.handleKeyDown(event);
         if (relatedTagsShown) {
@@ -157,18 +184,21 @@ function initializeEventHandlers() {
     }
 
     function handleKeyUp(event) {
+        if (skipOwnedInput(event)) return;
         autocompleteEventHandler.handleKeyUp(event);
         relatedTagsEventHandler.handleKeyUp(event);
         autoFormatterEventHandler.handleKeyUp(event);
     }
 
     function handleMouseMove(event) {
+        if (skipOwnedInput(event)) return;
         autocompleteEventHandler.handleMouseMove(event);
         relatedTagsEventHandler.handleMouseMove(event);
         autoFormatterEventHandler.handleMouseMove(event);
     }
 
     function handleClick(event) {
+        if (skipOwnedInput(event)) return;
         const relatedTagsShown = relatedTagsEventHandler.handleClick(event);
         if (relatedTagsShown) {
             autocompleteEventHandler.hide();
@@ -179,6 +209,7 @@ function initializeEventHandlers() {
     }
 
     function handleAutocompleteTagInserted(event) {
+        if (skipOwnedInput(event)) return;
         autocompleteEventHandler.hide();
         relatedTagsEventHandler.handleAutocompleteTagInserted(event);
     }
@@ -308,6 +339,29 @@ app.registerExtension({
             category: [name, "Autocompletion", "Enable Loras and Embeddings"],
             onChange: (newVal, oldVal) => {
                 settingValues.enableModels = newVal;
+            }
+        },
+        {
+            id: id + ".Integration.LoRAManager",
+            name: "LoRA Manager integration",
+            tooltip: "Use LoRA Manager's local tag, LoRA, Embedding, and Wildcard APIs as supplemental autocomplete sources.",
+            type: "combo",
+            options: ["auto", "enabled", "disabled"],
+            defaultValue: "auto",
+            category: [name, "Integration", "LoRA Manager"],
+            onChange: (newVal, oldVal) => {
+                settingValues.loraManagerIntegration = newVal;
+            }
+        },
+        {
+            id: id + ".Integration.ExcludedNodeTypes",
+            name: "Excluded node types",
+            tooltip: "Comma-separated node type names whose text inputs must be left to another extension.",
+            type: "text",
+            defaultValue: "",
+            category: [name, "Integration", "Excluded node types"],
+            onChange: (newVal, oldVal) => {
+                settingValues.excludedNodeTypes = newVal;
             }
         },
         {
