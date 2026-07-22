@@ -285,11 +285,12 @@ app.registerExtension({
         // --- Tag source Settings ---
         {
             id: id + ".TagSource.IconPosition",
-            name: "Tag Source Icon Position",
+            name: "Tag category icon position",
+            tooltip: "Show a category-specific icon for each suggestion. Hover the icon to see its category.",
             type: "combo",
             options: ["left", "right", "hidden"],
             defaultValue: "left",
-            category: [name, "Tag Source", "Tag Source Icon Position"],
+            category: [name, "Tag Source", "Tag category icon position"],
             onChange: (newVal, oldVal) => {
                 settingValues.tagSourceIconPosition = newVal;
             }

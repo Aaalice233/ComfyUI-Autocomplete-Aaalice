@@ -9,7 +9,6 @@ import {
     hiraToKata,
     kataToHira,
     formatCountHumanReadable,
-    escapeHtml,
     isContainsLetterOrNumber,
     normalizeTagToInsert,
     normalizeTagToSearch,
@@ -23,10 +22,11 @@ import {
 } from './utils.js';
 import { settingValues } from './settings.js';
 import {
-    isExplicitLoraManagerQuery,
-    mergeSupplementalCandidates,
     searchLoraManagerCandidates,
 } from './integrations/lora-manager-provider.js';
+import { renderTagNameWithCategoryIcon } from './tag-presentation.js';
+import { rankCompletionCandidates } from './candidate-ranking.js';
+import { applyTextInsertionEdit, buildAutocompleteInsertionEdit } from './tag-insertion.js';
 
 export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
 
@@ -99,6 +99,16 @@ function searchCompletionCandidates(textareaElement) {
         return []; // No valid input for autocomplete
     }
 
+    const queryVariations = createQueryVariations(partialTag);
+
+    if (settingValues.useFastSearch) {
+        return searchWithFlexSearch(partialTag, queryVariations);
+    } else {
+        return sequentialSearch(partialTag, queryVariations);
+    }
+}
+
+function createQueryVariations(partialTag) {
     // Generate Hiragana/Katakana variations if applicable
     const queryVariations = new Set([partialTag.toLowerCase(), normalizeTagToSearch(partialTag).toLowerCase()]);
     const kataQuery = hiraToKata(partialTag);
@@ -109,11 +119,39 @@ function searchCompletionCandidates(textareaElement) {
     if (hiraQuery !== partialTag) {
         queryVariations.add(hiraQuery);
     }
+    return queryVariations;
+}
 
-    if (settingValues.useFastSearch) {
-        return searchWithFlexSearch(partialTag, queryVariations);
-    } else {
-        return sequentialSearch(partialTag, queryVariations);
+function getSourceMaxCounts(sources) {
+    return Object.fromEntries(sources.map(source => [
+        source,
+        Number(autoCompleteData[source]?.sortedTags?.[0]?.count) || 0,
+    ]));
+}
+
+function rankCandidates(candidates, queryVariations, sources) {
+    return rankCompletionCandidates(candidates, queryVariations, {
+        limit: settingValues.maxSuggestions,
+        sourcePriority: sources,
+        sourceMaxCounts: getSourceMaxCounts(sources),
+    });
+}
+
+function addCandidate(candidate, candidates, addedTags) {
+    if (!candidate) return false;
+    const key = `${candidate.source}\0${String(candidate.tag).toLowerCase()}`;
+    if (addedTags.has(key)) return false;
+    addedTags.add(key);
+    candidates.push(candidate);
+    return true;
+}
+
+function addExactCandidates(source, queryVariations, candidates, addedTags) {
+    const sourceData = autoCompleteData[source];
+    for (const query of queryVariations) {
+        addCandidate(sourceData.tagMap.get(query), candidates, addedTags);
+        const aliasTarget = sourceData.aliasMap.get(query);
+        if (aliasTarget) addCandidate(sourceData.tagMap.get(aliasTarget), candidates, addedTags);
     }
 }
 
@@ -126,22 +164,21 @@ function searchCompletionCandidates(textareaElement) {
 function sequentialSearch(partialTag, queryVariations) {
     const startTime = performance.now();
 
-    const exactMatches = [];
-    const partialMatches = [];
+    const candidates = [];
     const addedTags = new Set();
 
     const sources = getEnabledTagSourceInPriorityOrder();
     for (const source of sources) {
+        if (!autoCompleteData[source]) continue;
+        addExactCandidates(source, queryVariations, candidates, addedTags);
+        let sourceMatchCount = 0;
+        const sourceResultLimit = Math.min(Math.max(settingValues.maxSuggestions * 10, 50), 500);
+
         // Search in sortedTags (already sorted by count)
         for (const tagData of autoCompleteData[source].sortedTags) {
-            let matched = false;
-            let isExactMatch = false;
-            let matchedAlias = null;
-
             // Check primary tag against all variations for exact/partial match
             const tagMatch = matchWord(tagData.tag.toLowerCase(), queryVariations);
-            matched = tagMatch.matched;
-            isExactMatch = tagMatch.isExactMatch;
+            let matched = tagMatch.matched;
 
             // If primary tag didn't match, check aliases against all variations
             if (!matched && tagData.alias && Array.isArray(tagData.alias) && tagData.alias.length > 0) {
@@ -149,53 +186,28 @@ function sequentialSearch(partialTag, queryVariations) {
                     const aliasMatch = matchWord(alias.toLowerCase(), queryVariations);
                     if (aliasMatch.matched) {
                         matched = true;
-                        isExactMatch = aliasMatch.isExactMatch;
-                        matchedAlias = alias;
                         break;
                     }
                 }
             }
 
-            const tagSetKey = tagData.tag;
-
             // Add candidate if matched and not already added
-            if (matched && !addedTags.has(tagSetKey)) {
-                // Add to exact matches or partial matches based on match type
-                if (isExactMatch) {
-                    exactMatches.push(tagData);
-                } else {
-                    partialMatches.push(tagData);
-                }
-
-                addedTags.add(tagSetKey);
-
-                // Check if we've reached the maximum suggestions limit combining both arrays
-                if (exactMatches.length + partialMatches.length >= settingValues.maxSuggestions) {
-                    // Return the combined results, prioritizing exact matches
-                    const result = [...exactMatches, ...partialMatches].slice(0, settingValues.maxSuggestions);
-
-                    if (settingValues._logprocessingTime) {
-                        const endTime = performance.now();
-                        const duration = endTime - startTime;
-                        console.debug(`[Autocomplete-Plus] Search for "${partialTag}" took ${duration.toFixed(2)}ms. Found ${result.length} candidates (max reached).`);
-                    }
-
-                    return result; // Early exit
-                }
+            if (matched && addCandidate(tagData, candidates, addedTags)) {
+                sourceMatchCount++;
+                if (sourceMatchCount >= sourceResultLimit) break;
             }
         }
     }
 
-    // Combine results, with exact matches first
-    const candidates = [...exactMatches, ...partialMatches];
+    const rankedCandidates = rankCandidates(candidates, queryVariations, sources);
 
     if (settingValues._logprocessingTime) {
         const endTime = performance.now();
         const duration = endTime - startTime;
-        console.debug(`[Autocomplete-Plus] Search for "${partialTag}" took ${duration.toFixed(2)}ms. Found ${candidates.length} candidates.`);
+        console.debug(`[Autocomplete-Plus] Search for "${partialTag}" took ${duration.toFixed(2)}ms. Ranked ${rankedCandidates.length} candidates from ${candidates.length} matches.`);
     }
 
-    return candidates;
+    return rankedCandidates;
 }
 
 /**
@@ -207,17 +219,16 @@ function sequentialSearch(partialTag, queryVariations) {
 function searchWithFlexSearch(partialTag, queryVariations) {
     const startTime = performance.now();
 
-    let mergedResult = [];
+    const collectedResults = [];
     let totalSearchCount = 0;
 
     const sources = getEnabledTagSourceInPriorityOrder();
     for (const source of sources) {
         if (!autoCompleteData[source].flexSearchDocument) continue;
-        if (mergedResult.length >= settingValues.maxSuggestions) break;
 
         // Use the FlexSearch Document to search
         // NOTE: The limit param is reflected separately for "tag" and "alias".
-        let searchResult = autoCompleteData[source].flexSearchDocument.search(partialTag, {
+        const searchResult = autoCompleteData[source].flexSearchDocument.search(partialTag, {
             field: ["tag", "alias"],
             limit: Math.min(settingValues.maxSuggestions * 10, 500),
             merge: true,
@@ -227,38 +238,20 @@ function searchWithFlexSearch(partialTag, queryVariations) {
 
         if (!searchResult || searchResult.length <= 0) continue;
 
-        // Sort results based on exact matches and counts
-        searchResult = searchResult
-            .map(r => autoCompleteData[source].sortedTags[r.id])
-            .sort((aTag, bTag) => {
-                if (matchWord(bTag.tag, queryVariations).isExactMatch) {
-                    return 999999999999;
-                }
-                if (matchWord(aTag.tag, queryVariations).isExactMatch) {
-                    return -999999999999;
-                }
-                if (bTag.alias && bTag.alias.some(alias => matchWord(alias, queryVariations).isExactMatch)) {
-                    return 999999999999;
-                }
-                if (aTag.alias && aTag.alias.some(alias => matchWord(alias, queryVariations).isExactMatch)) {
-                    return -999999999999;
-                }
-                return bTag.count - aTag.count;
-            });
-
-        // Merge results into the final array
-        mergedResult = mergedResult.concat(searchResult.slice(0, settingValues.maxSuggestions - mergedResult.length));
+        collectedResults.push(...searchResult.map(r => autoCompleteData[source].sortedTags[r.id]));
 
         totalSearchCount += searchResult.length;
     }
 
+    const rankedCandidates = rankCandidates(collectedResults, queryVariations, sources);
+
     if (settingValues._logprocessingTime) {
         const endTime = performance.now();
         const duration = endTime - startTime;
-        console.debug(`[Autocomplete-Plus] Fast Search for "${partialTag}" took ${duration.toFixed(2)}ms.Found ${mergedResult.length} candidates within ${totalSearchCount} searches from flexsearch.`);
+        console.debug(`[Autocomplete-Plus] Fast Search for "${partialTag}" took ${duration.toFixed(2)}ms. Ranked ${rankedCandidates.length} candidates within ${totalSearchCount} FlexSearch matches.`);
     }
 
-    return mergedResult;
+    return rankedCandidates;
 }
 
 /**
@@ -323,21 +316,6 @@ function insertTagToTextArea(inputElement, tagDataToInsert) {
     const text = inputElement.value;
     const cursorPos = inputElement.selectionStart;
 
-    const tagRange = getCurrentTagRange(text, cursorPos);
-    let tagStart, tagEnd, currentTag;
-
-    if (!tagRange) {
-        // Fallback: insert at cursor position
-        tagStart = cursorPos;
-        tagEnd = cursorPos;
-        currentTag = '';
-    } else {
-        ({ start: tagStart, end: tagEnd, tag: currentTag } = tagRange);
-    }
-
-    const replaceStart = Math.min(cursorPos, tagStart);
-    let replaceEnd = cursorPos;
-
     let normalizedTag;
     if (tagDataToInsert.source === ModelTagSource.Lora) {
         // If the tag is from a LoRA source, add weight to it
@@ -349,44 +327,14 @@ function insertTagToTextArea(inputElement, tagDataToInsert) {
         normalizedTag = normalizeTagToInsert(tagDataToInsert.tag);
     }
 
-    const currentTagAfterCursor = text.substring(cursorPos, tagEnd).trimEnd();
-    if (normalizedTag.lastIndexOf(currentTagAfterCursor) !== -1) {
-        replaceEnd = cursorPos + currentTagAfterCursor.length;
-    }
-
-    // Add space if the previous separator was a comma and we are not at the beginning
-    const needsSpaceBefore = text[replaceStart - 1] === ',';
-    const prefix = needsSpaceBefore ? ' ' : '';
-
     const prefixArtist = tagDataToInsert.categoryText == 'artist' ? settingValues.prefixArtist : '';
-
-    // Standard separator (comma + space, or empty if autoInsertComma is disabled)
-    const needsSuffixAfter = !",:".includes(text[replaceEnd]); // TODO: If ":" is part of the emoticon, a suffix is ​​required (e.g. ":o")
-    const suffix = (needsSuffixAfter && settingValues.autoInsertComma) ? ', ' : '';
-
-    const textToInsertWithAffixes = prefix + prefixArtist + normalizedTag + suffix;
-
-    // --- Use execCommand for Undo support ---
-    // 1. Select the text range to be replaced
-    inputElement.focus(); // Ensure the element has focus
-    inputElement.setSelectionRange(replaceStart, replaceEnd);
-
-    // 2. Execute the 'insertText' command
-    // This replaces the selection and should add the change to the undo stack
-    const insertTextSuccess = document.execCommand('insertText', false, textToInsertWithAffixes);
-
-    // Fallback for browsers where execCommand might fail or is not supported
-    if (!insertTextSuccess) {
-        console.warn('[Autocomplete-Plus] execCommand("insertText") failed. Falling back to direct value manipulation (Undo might not work).');
-        const textBefore = text.substring(0, replaceStart);
-        const textAfter = text.substring(replaceEnd);
-        inputElement.value = textBefore + textToInsertWithAffixes + textAfter;
-        // Manually set cursor position after the inserted text
-        const newCursorPos = replaceStart + textToInsertWithAffixes.length;
-        inputElement.selectionStart = inputElement.selectionEnd = newCursorPos;
-        // Trigger input event manually as a fallback
-        inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+    const edit = buildAutocompleteInsertionEdit(
+        text,
+        cursorPos,
+        prefixArtist + normalizedTag,
+        settingValues.autoInsertComma
+    );
+    applyTextInsertionEdit(inputElement, text, edit);
 
     // Let the related-tags handler display co-occurrences for the completed
     // tag regardless of whether it was accepted by keyboard or mouse.
@@ -473,9 +421,7 @@ class AutocompleteUI {
 
         const partialTag = getCurrentPartialTag(textareaElement);
         const invalidPrefix = ["#", "/"].some(prefix => partialTag.startsWith(prefix));
-        const explicitQuery = isExplicitLoraManagerQuery(partialTag);
-        const needsSupplement = explicitQuery || localCandidates.length < settingValues.maxSuggestions;
-        if (!partialTag || invalidPrefix || isLongText(partialTag) || !needsSupplement) return;
+        if (!partialTag || invalidPrefix || isLongText(partialTag)) return;
 
         const supplemental = await searchLoraManagerCandidates(partialTag, {
             limit: settingValues.maxSuggestions,
@@ -486,11 +432,9 @@ class AutocompleteUI {
         });
         if (requestId !== this._requestId || textareaElement !== this.target) return;
 
-        const reservedCount = explicitQuery ? Math.min(3, supplemental.length) : 0;
-        const primary = reservedCount > 0
-            ? localCandidates.slice(0, settingValues.maxSuggestions - reservedCount)
-            : localCandidates;
-        this.candidates = mergeSupplementalCandidates(primary, supplemental, settingValues.maxSuggestions);
+        const sources = getEnabledTagSourceInPriorityOrder();
+        const combined = [...localCandidates, ...supplemental];
+        this.candidates = rankCandidates(combined, createQueryVariations(partialTag), sources);
         if (this.candidates.length > 0) this.#displayCandidates();
     }
 
@@ -594,18 +538,10 @@ class AutocompleteUI {
         tagRow.dataset.index = tagDataIndex;
         tagRow.dataset.tagCategory = categoryText; // Used to color by CSS
 
-        // Tag icon and name
-        const tagSourceIconHtml = `<svg class="autocomplete-plus-tag-icon-svg"><use xlink:href="#autocomplete-plus-icon-${tagData.source}"></use></svg>`;
+        // Category icon and tag name
         const tagName = document.createElement('span');
         tagName.className = 'autocomplete-plus-tag-name';
-        if (settingValues.tagSourceIconPosition == 'hidden') {
-            tagName.textContent = tagData.tag;
-        } else {
-            const escapedTag = escapeHtml(tagData.tag);
-            tagName.innerHTML = settingValues.tagSourceIconPosition == 'left'
-                ? `${tagSourceIconHtml} ${escapedTag}`
-                : `${escapedTag} ${tagSourceIconHtml}`;
-        }
+        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition);
 
         // grayout tag name if it already exists
         if (isExisting) {

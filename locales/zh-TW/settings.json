@@ -1,6 +1,7 @@
 {
     "AutocompletePlus_TagSource_IconPosition": {
-        "name": "標籤來源圖示位置",
+        "name": "標籤類別圖示位置",
+        "tooltip": "為每筆候選顯示對應類別的圖示，將游標停在圖示上可查看類別說明。",
         "options": {
             "left": "左",
             "right": "右",

@@ -1,6 +1,7 @@
 {
     "AutocompletePlus_TagSource_IconPosition": {
-        "name": "标签来源图标位置",
+        "name": "标签类别图标位置",
+        "tooltip": "为每条候选显示对应类别的图标，悬浮图标可查看类别说明。",
         "options": {
             "left": "左",
             "right": "右",

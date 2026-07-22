@@ -1,5 +1,7 @@
 import { TagCategory, TagData, TagSource, autoCompleteData, getEnabledTagSourceInPriorityOrder } from './data.js';
 import { settingValues } from './settings.js';
+import { renderTagNameWithCategoryIcon } from './tag-presentation.js';
+import { applyTextInsertionEdit, buildRelatedTagInsertionEdit } from './tag-insertion.js';
 import {
     extractTagsFromTextArea,
     findAllTagPositions,
@@ -142,51 +144,14 @@ function insertTagToTextArea(inputElement, tagToInsert) {
         }
     }
 
-    // Find the current tag boundaries
-    const lastComma = text.lastIndexOf(',', cursorPos - 1);
-    const lastNewLine = text.lastIndexOf('\n', cursorPos - 1);
-    const lastSeparator = Math.max(lastComma, lastNewLine);
-    const startPos = lastSeparator === -1 ? 0 : lastSeparator + 1;
-
-    // Find the end of the current tag
-    let endPosComma = text.indexOf(',', startPos);
-    let endPosNewline = text.indexOf('\n', startPos);
-
-    if (endPosComma === -1) endPosComma = text.length;
-    if (endPosNewline === -1) endPosNewline = text.length;
-
-    const endPos = Math.min(endPosComma, endPosNewline);
-
-    const prefix = startPos != endPos ? ', ' : ' ';
-    // Prepare the text to insert
     const normalizedTag = normalizeTagToInsert(tagToInsert);
-    let textToInsert = prefix + normalizedTag;
-
-    // --- Use execCommand for Undo support ---
-    // 1. Select the range where the tag will be inserted
-    inputElement.focus();
-    inputElement.setSelectionRange(endPos, endPos);
-
-    // 2. Execute the insertText command to add the tag
-    const insertTextSuccess = document.execCommand('insertText', false, textToInsert);
-
-    // Fallback for browsers where execCommand might not be supported or might fail
-    if (!insertTextSuccess) {
-        console.warn('[Autocomplete-Plus] execCommand("insertText") failed. Falling back to direct value manipulation (Undo might not work).');
-
-        const textBefore = text.substring(0, endPos);
-        const textAfter = text.substring(endPos);
-
-        // Insert the tag directly into the value
-        inputElement.value = textBefore + textToInsert + textAfter;
-
-        // Set cursor position after the newly inserted tag
-        const newCursorPos = endPos + textToInsert.length;
-        inputElement.selectionStart = inputElement.selectionEnd = newCursorPos;
-
-        // Trigger input event to notify ComfyUI about the change
-        inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+    const edit = buildRelatedTagInsertionEdit(
+        text,
+        cursorPos,
+        normalizedTag,
+        settingValues.autoInsertComma
+    );
+    applyTextInsertionEdit(inputElement, text, edit);
 }
 
 // --- RelatedTags UI Class ---
@@ -479,14 +444,7 @@ class RelatedTagsUI {
         tagName.dataset.tagCategory = categoryText;
         tagName.dataset.tagSource = tagData.source;
         tagName.dataset.tagName = tagData.tag;
-        if (tagData.source && ['left', 'right'].includes(settingValues.tagSourceIconPosition)) {
-            const tagSourceIconHtml = `<svg class="autocomplete-plus-tag-icon-svg"><use xlink:href="#autocomplete-plus-icon-${tagData.source}"></use></svg>`;
-            tagName.innerHTML = settingValues.tagSourceIconPosition == 'left'
-                ? `${tagSourceIconHtml} ${tagData.tag}`
-                : `${tagData.tag} ${tagSourceIconHtml}`;
-        } else {
-            tagName.textContent += tagData.tag;
-        }
+        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition);
 
         if (!tagData.hasWikiPage) {
             tagName.classList.add('disabled');
@@ -568,7 +526,7 @@ class RelatedTagsUI {
         // Tag name
         const tagName = document.createElement('span');
         tagName.className = 'related-tag-name';
-        tagName.textContent = tagData.tag;
+        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition);
 
         // grayout tag name if it already exists
         if (isExisting) {

@@ -1,6 +1,7 @@
 {
     "AutocompletePlus_TagSource_IconPosition": {
-        "name": "タグソースのアイコン位置",
+        "name": "タグカテゴリのアイコン位置",
+        "tooltip": "候補ごとにカテゴリ別アイコンを表示します。アイコンにカーソルを合わせるとカテゴリを確認できます。",
         "options": {
             "left": "左",
             "right": "右",

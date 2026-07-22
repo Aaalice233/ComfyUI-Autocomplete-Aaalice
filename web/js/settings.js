@@ -2,7 +2,7 @@ export const settingValues = {
     // Tag source settings
     tagSource: 'all', // 'danbooru', 'e621', 'all'
     primaryTagSource: 'danbooru', // 'danbooru', 'e621'
-    tagSourceIconPosition: 'left', // 'left', 'right', 'hidden'
+    tagSourceIconPosition: 'left', // Legacy key retained for category icon position: 'left', 'right', 'hidden'
 
     // Autocomplete feature settings
     enabled: true,

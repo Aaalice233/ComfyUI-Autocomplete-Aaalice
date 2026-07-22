@@ -1,33 +1,7 @@
+import { getTagCategoryLabel } from './tag-presentation.js';
+
 const API_ROOT = "/autocomplete-plus/live-tags";
 const CATEGORY_NAMES = ["general", "artist", "unused", "copyright", "character", "meta"];
-
-const CATEGORY_LABELS = {
-    en: Object.fromEntries(CATEGORY_NAMES.map(category => [category, category])),
-    zh: {
-        general: "general（通用）",
-        artist: "artist（艺术家）",
-        unused: "unused（未使用）",
-        copyright: "copyright（版权作品）",
-        character: "character（角色）",
-        meta: "meta（元标签）",
-    },
-    "zh-TW": {
-        general: "general（一般）",
-        artist: "artist（繪師）",
-        unused: "unused（未使用）",
-        copyright: "copyright（版權作品）",
-        character: "character（角色）",
-        meta: "meta（元標籤）",
-    },
-    ja: {
-        general: "general（一般）",
-        artist: "artist（アーティスト）",
-        unused: "unused（未使用）",
-        copyright: "copyright（作品）",
-        character: "character（キャラクター）",
-        meta: "meta（メタ）",
-    },
-};
 
 const TEXT = {
     en: {
@@ -381,17 +355,18 @@ export async function openLiveTagsManager(app) {
     const categoryInputs = {};
     for (const category of CATEGORY_NAMES) {
         const row = createElement("div", "autocomplete-plus-live-tags-category-row");
-        const categoryName = createElement("strong", "autocomplete-plus-live-tags-category-name", CATEGORY_LABELS[locale][category]);
+        const categoryLabel = getTagCategoryLabel(category, locale);
+        const categoryName = createElement("strong", "autocomplete-plus-live-tags-category-name", categoryLabel);
         row.append(categoryName);
         const mode = document.createElement("select");
-        mode.ariaLabel = `${CATEGORY_LABELS[locale][category]} ${text.policy}`;
+        mode.ariaLabel = `${categoryLabel} ${text.policy}`;
         for (const [value, label] of [["disabled", text.disabled], ["all", text.all], ["threshold", text.threshold]]) {
             const option = new Option(label, value, false, config.categories[category].mode === value);
             mode.add(option);
         }
         const thresholdSlot = createElement("div", "autocomplete-plus-live-tags-threshold-slot");
         const threshold = createNumberInput(config.categories[category].threshold, 0, Number.MAX_SAFE_INTEGER);
-        threshold.ariaLabel = `${CATEGORY_LABELS[locale][category]} ${text.thresholdValue}`;
+        threshold.ariaLabel = `${categoryLabel} ${text.thresholdValue}`;
         const policyHint = createElement("span", "autocomplete-plus-live-tags-policy-hint");
         const updateThresholdState = () => {
             const usesThreshold = mode.value === "threshold";
