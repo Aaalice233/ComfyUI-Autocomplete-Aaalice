@@ -6,6 +6,8 @@ import server
 from aiohttp import web
 
 from . import downloader as dl
+from .live_tags_service import JobConflictError, LiveTagsManager
+from .live_tags_store import LiveTagsStore
 
 # Get the absolute path to the 'data' directory
 # __file__ is the path to the current script (api.py)
@@ -18,6 +20,19 @@ E621_PREFIX = "e621"
 
 TAGS_SUFFIX = "tags"
 COOCCURRENCE_SUFFIX = "tags_cooccurrence"
+
+LIVE_TAGS_USER_DIR = os.path.join(folder_paths.get_user_directory(), "autocomplete-plus")
+LIVE_TAGS_CONFIG_FILE = os.path.join(LIVE_TAGS_USER_DIR, "config.json")
+LIVE_TAGS_DATABASE_FILE = os.path.join(LIVE_TAGS_USER_DIR, "live_tags.sqlite3")
+LIVE_TAGS_CSV_FILE = os.path.join(DATA_DIR, "danbooru_tags_live.csv")
+BASE_DANBOORU_CSV_FILE = os.path.join(DATA_DIR, "danbooru_tags.csv")
+
+live_tags_store = LiveTagsStore(LIVE_TAGS_DATABASE_FILE, LIVE_TAGS_CSV_FILE)
+live_tags_manager = LiveTagsManager(
+    LIVE_TAGS_CONFIG_FILE,
+    live_tags_store,
+    BASE_DANBOORU_CSV_FILE,
+)
 
 
 def get_csv_file_status():
@@ -230,6 +245,65 @@ async def get_last_check_time(_request):
     except (IOError, json.JSONDecodeError) as e:
         print(f"[Autocomplete-Plus] Error reading csv_meta.json: {e}")
         return web.json_response({"last_check_time": None, "error": str(e)}, status=500)
+
+
+@server.PromptServer.instance.routes.get("/autocomplete-plus/live-tags/config")
+async def get_live_tags_config(_request):
+    try:
+        return web.json_response(live_tags_manager.get_config())
+    except Exception as error:
+        return web.json_response({"error": str(error)}, status=500)
+
+
+@server.PromptServer.instance.routes.put("/autocomplete-plus/live-tags/config")
+async def save_live_tags_config(request):
+    try:
+        payload = await request.json()
+        return web.json_response(live_tags_manager.save_config(payload))
+    except (ValueError, json.JSONDecodeError) as error:
+        return web.json_response({"error": str(error)}, status=400)
+    except Exception as error:
+        return web.json_response({"error": str(error)}, status=500)
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/live-tags/scan")
+async def start_live_tags_scan(_request):
+    try:
+        job_id = live_tags_manager.start_scan()
+        return web.json_response({"accepted": True, "job_id": job_id}, status=202)
+    except JobConflictError as error:
+        return web.json_response({"error": str(error)}, status=409)
+    except Exception as error:
+        return web.json_response({"error": str(error)}, status=500)
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/live-tags/translate")
+async def start_live_tags_translation(request):
+    try:
+        payload = await request.json()
+        job_id = live_tags_manager.start_translation(payload.get("locale"), payload.get("mode", "missing"))
+        return web.json_response({"accepted": True, "job_id": job_id}, status=202)
+    except JobConflictError as error:
+        return web.json_response({"error": str(error)}, status=409)
+    except (ValueError, json.JSONDecodeError) as error:
+        return web.json_response({"error": str(error)}, status=400)
+    except Exception as error:
+        return web.json_response({"error": str(error)}, status=500)
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/live-tags/cancel")
+async def cancel_live_tags_task(_request):
+    cancelled = live_tags_manager.cancel()
+    return web.json_response({"cancelled": cancelled})
+
+
+@server.PromptServer.instance.routes.get("/autocomplete-plus/live-tags/status")
+async def get_live_tags_status(request):
+    try:
+        locale = request.query.get("locale")
+        return web.json_response(live_tags_manager.status(locale))
+    except Exception as error:
+        return web.json_response({"error": str(error)}, status=500)
 
 
 @server.PromptServer.instance.routes.get("/autocomplete-plus/embeddings")

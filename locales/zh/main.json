@@ -2,9 +2,10 @@
   "settingsCategories": {
     "Autocomplete Plus": "Autocomplete Plus",
     "Tag Source": "标签来源",
-    "Autocompletion": "自动完成",
+    "Autocompletion": "自动补全",
     "Related Tags": "相关标签",
     "Display": "显示",
-    "AutoFormatter": "自动格式化"
+    "AutoFormatter": "自动格式化",
+    "Live Tags": "实时标签"
   }
 }

@@ -4,7 +4,7 @@ import urllib.request
 import urllib.error
 import shutil
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from tqdm import tqdm
 

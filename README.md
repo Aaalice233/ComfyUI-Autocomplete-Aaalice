@@ -18,6 +18,7 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 - Support for text inputs rendered by **Nodes 2.0**.
 - Support for promoted text inputs on **subgraph nodes**, including resolving the original inner node and widget.
 - Improved autocomplete/related-tags handoff: partial tags reopen autocomplete, accepting a completed tag immediately shows related tags, trailing commas resolve to the preceding tag, and empty related-tags panels no longer replace useful completion suggestions.
+- Optional Danbooru live-tag scanning with per-category popularity filters, plus resumable DeepSeek translation and a persistent local cache.
 - Simplified Chinese documentation and continued localization maintenance.
 
 The original project remains the foundation of this fork. Existing features and credits are preserved wherever possible.
@@ -35,6 +36,7 @@ The original project remains the foundation of this fork. Existing features and 
 - **:art:Design**: Supports both light and dark themes of ComfyUI.
 - **:pencil:User CSV**: Allows users to add their own CSV files for autocomplete suggestions.
 - **:twisted_rightwards_arrows:Modern ComfyUI Compatibility**: Supports Nodes 2.0 and promoted text inputs on subgraph nodes.
+- **:arrows_counterclockwise:Live Tag Supplement**: Fetches tags missing from the bundled Danbooru CSV and can translate them through DeepSeek.
 
 ## Installation
 
@@ -212,6 +214,19 @@ For example, by preparing the following CSV, you can quickly insert correspondin
   - **Manual**: Format only via keyboard shortcut (default: `Alt+Shift+F`)
 - **Use Trailing Comma**: When enabled, ensures all lines end with a trailing comma when formatting. If disabled, removes trailing commas.
 - **Trim Surrounding Spaces**: When enabled, trim any blank lines or spaces from the beginning and end of the prompt.
+
+### Danbooru Live Tags
+
+Open **Autocomplete Plus → Live Tags → Manage Danbooru Live Tags** to use the optional live-tag manager. This feature never modifies the Hugging Face base CSV.
+
+1. Choose `Do not fetch`, `Fetch all`, or `Minimum post count` independently for each Danbooru category.
+2. Optionally configure a Danbooru login and API key, then click **Scan tags**. Only tags missing from `danbooru_tags.csv` are written to `data/danbooru_tags_live.csv`.
+3. Review the candidate and estimated request counts before starting DeepSeek translation. Translation follows the current ComfyUI language; English does not require translation.
+4. Refresh the page after the CSV changes so the autocomplete index is rebuilt.
+
+DeepSeek translation uses configurable batches, concurrency, retries, model, and system prompt. Successful translations are cached by tag and language in SQLite, so later runs only send uncached or explicitly retried tags. Interrupted and cancelled jobs keep completed results.
+
+Configuration and cache files are stored under the ComfyUI user directory in `autocomplete-plus/`. API keys are never returned by the backend or written to logs. Treat this as a local/private-instance feature: any user who can access the ComfyUI server can start a translation job and incur API charges.
 
 ## Advanced Settings
 

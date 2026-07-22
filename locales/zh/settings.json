@@ -26,28 +26,28 @@
     },
     "AutocompletePlus_Autocompletion_UseFastSearch": {
         "name": "启用快速搜索",
-        "tooltip": "标签搜索处理更快，提高文本输入时的响应速度"
+        "tooltip": "使用更快的标签搜索方式，提高输入时的响应速度。"
     },
     "AutocompletePlus_Autocompletion_EnableModels": {
-        "name": "显示Lora和Embedding"
+        "name": "显示 LoRA 和 Embedding"
     },
     "AutocompletePlus_Autocompletion_PrefixArtist": {
-        "name": "在艺术家标签前添加的字符串",
-        "tooltip": "通过自动完成插入艺术家标签时，在标签前添加的文本。\n例： '{'@'}' -> '{'@'}artist_name'."
+        "name": "艺术家标签前缀",
+        "tooltip": "通过自动补全插入艺术家标签时，在标签前添加指定文本。\n例如：设置为 '{'@'}' 后，将插入 '{'@'}artist_name'。"
     },
     "AutocompletePlus_Autocompletion_ReplaceUnderscoreWithSpace": {
-        "name": "将'_'替换为'空格'",
-        "tooltip": "此设置也会影响相关标签显示"
+        "name": "将下划线替换为空格",
+        "tooltip": "插入标签时将下划线替换为空格；此设置也会影响相关标签的显示。"
     },
     "AutocompletePlus_Autocompletion_AutoInsertComma": {
-        "name": "自动插入逗号",
-        "tooltip": "从自动完成插入标签时自动在标签后添加逗号"
+        "name": "自动添加逗号",
+        "tooltip": "通过自动补全插入标签时，自动在标签末尾添加逗号。"
     },
     "AutocompletePlus_Autocompletion_MaxSuggestions": {
-        "name": "最大提示数"
+        "name": "最大补全候选数"
     },
     "AutocompletePlus_Autocompletion_Enable": {
-        "name": "启用自动完成"
+        "name": "启用自动补全"
     },
     "AutocompletePlus_RelatedTags_RelatedTagsTriggerMode": {
         "name": "显示相关标签的操作",
@@ -89,6 +89,9 @@
     },
     "AutocompletePlus_AutoFormatter_EnableAutoFormat": {
         "name": "启用自动格式化"
+    },
+    "AutocompletePlus_LiveTags_Manager": {
+        "name": "管理 Danbooru 实时标签"
     },
     "AutocompletePlus_AutoFormatter_TrimSurroundingSpaces": {
         "name": "去除首尾空白",

@@ -18,6 +18,7 @@
 - 支持 **Nodes 2.0** 渲染的文本输入框。
 - 支持**子图节点**提升后的文本输入框，并能追溯到子图内部的真实节点和字段。
 - 改进自动补全与相关标签的衔接：点击未完成标签会恢复补全，确认完整标签后立即显示相关标签，光标位于尾逗号后仍能识别前一个标签，并避免空的相关标签面板遮挡有效补全候选。
+- 支持按类别热度规则从 Danbooru 补充最新标签，并通过可续跑的 DeepSeek 翻译任务和本地缓存补充译名。
 - 提供简体中文 README，并继续维护本地化内容。
 
 上游项目仍是本分支的基础，原有功能和致谢信息会尽可能保留。
@@ -35,6 +36,7 @@
 - **:art:界面适配**：支持 ComfyUI 浅色和深色主题。
 - **:pencil:用户 CSV**：可以添加自定义 CSV 作为补全数据。
 - **:twisted_rightwards_arrows:新版 ComfyUI 兼容**：支持 Nodes 2.0 和子图节点提升后的文本输入框。
+- **:arrows_counterclockwise:实时标签补充**：拉取基础 Danbooru CSV 中缺失的标签，并可使用 DeepSeek 翻译。
 
 ## 安装
 
@@ -207,6 +209,19 @@ worst_quality,5,9999999,
   - **Manual**：仅通过快捷键手动格式化，默认为 `Alt+Shift+F`。
 - **Use Trailing Comma**：启用时确保每行以逗号结尾，关闭时移除行尾逗号。
 - **Trim Surrounding Spaces**：移除提示词开头和结尾的空行或空格。
+
+### Danbooru 实时标签
+
+在 **Autocomplete Plus → 实时标签 → 管理 Danbooru 实时标签** 中打开管理面板。该功能不会修改 Hugging Face 基础 CSV。
+
+1. 可为每个 Danbooru 类别独立选择“不拉取”“全部拉取”或“最低热度”。
+2. 可选填 Danbooru 用户名和 API Key，然后点击“扫描标签”。只有 `danbooru_tags.csv` 中不存在的标签会写入 `data/danbooru_tags_live.csv`。
+3. 查看新增候选数和预计请求数后，再手动启动 DeepSeek 翻译。目标语言跟随当前 ComfyUI 界面；英文界面不需要翻译。
+4. CSV 更新后刷新页面，使自动补全重新建立索引。
+
+DeepSeek 的批量数、最大并发、重试次数、模型和 system prompt 均可配置。成功译文按“标签 + 语言”写入 SQLite 缓存，后续只发送未命中缓存或明确要求重试的标签；任务中断或取消不会丢失已经完成的结果。
+
+配置和缓存位于 ComfyUI 用户目录下的 `autocomplete-plus/`。后端不会回传 API Key 明文，也不会把密钥写入日志。该功能面向本地或私人实例：任何能访问 ComfyUI 服务的人都可能启动翻译并产生 API 费用。
 
 ## 高级设置
 
