@@ -114,6 +114,45 @@ class LiveTagsStoreTests(unittest.TestCase):
         failed, _cached = self.store.translation_work("ja", "failed")
         self.assertEqual([row["name"] for row in failed], ["failed_tag"])
 
+    def test_cancelled_scan_keeps_checkpoint_and_partial_csv_for_resume(self):
+        job_id = self.store.create_job("scan", options={"categories": DEFAULT_CONFIG["categories"]})
+        self.store.initialize_scan_partitions(job_id, ["general"], [(1, 100)])
+        self.store.stage_tags(job_id, [_tag(10, "partial_tag", 0, 50)])
+        self.store.checkpoint_scan_partition(job_id, "general", 1, 10, 1, 1)
+        self.store.update_job(job_id, status="cancelled", phase="cancelled")
+
+        self.assertEqual(self.store.latest_resumable_job()["id"], job_id)
+        self.assertEqual(self.store.pending_scan_partitions(job_id)[0]["cursor"], 10)
+        self.store.export_csv(job_id)
+        with open(self.csv_path, encoding="utf-8", newline="") as csv_file:
+            self.assertEqual(next(csv.DictReader(csv_file))["tag"], "partial_tag")
+
+    def test_translation_queue_preserves_unfinished_items_after_cancel(self):
+        job_id = self.store.create_job("translate", "zh", mode="all")
+        work = [
+            {"name": "one", "category": 0, "post_count": 20},
+            {"name": "two", "category": 4, "post_count": 10},
+        ]
+        self.store.initialize_translation_queue(job_id, work)
+        self.store.complete_translation_items(job_id, ["one"])
+        self.store.update_job(job_id, status="cancelled", phase="cancelled")
+
+        self.assertEqual([item["name"] for item in self.store.pending_translation_work(job_id)], ["two"])
+        self.assertEqual(self.store.translation_queue_progress(job_id), {"total": 2, "completed": 1})
+
+    def test_statistics_and_dictionary_are_queryable(self):
+        self.store.sync_base_tags([{"name": "base", "category": 0, "post_count": 10, "aliases": []}])
+        job_id = self.store.create_job("scan")
+        self.store.stage_tags(job_id, [_tag(2, "live", 4, 20)])
+        self.store.commit_scan(job_id)
+        self.store.save_translation_successes("zh", {"live": "实时"}, "model", "prompt", 1)
+
+        summary = self.store.tag_statistics()
+        self.assertEqual(summary["base_count"], 1)
+        self.assertEqual(summary["live_count"], 1)
+        self.assertEqual(self.store.tag_list(source="live")["items"][0]["name"], "live")
+        self.assertEqual(self.store.translation_dictionary("zh")["items"][0]["text"], "实时")
+
     def test_base_tags_missing_current_locale_enter_translation_work(self):
         self.store.sync_base_tags(
             [
@@ -122,6 +161,16 @@ class LiveTagsStoreTests(unittest.TestCase):
                 {"name": "japanese_only", "category": 0, "post_count": 60, "aliases": ["ロングヘアー"]},
             ]
         )
+        job_id = self.store.create_job("scan")
+        self.store.stage_tags(
+            job_id,
+            [
+                _tag(1, "already_zh", 0, 100),
+                _tag(2, "missing_zh", 4, 80),
+                _tag(3, "japanese_only", 0, 60),
+            ],
+        )
+        self.store.commit_scan(job_id)
 
         pending, cached = self.store.translation_work("zh", "missing")
 
@@ -133,6 +182,9 @@ class LiveTagsStoreTests(unittest.TestCase):
         self.store.sync_base_tags(
             [{"name": "base_tag", "category": 3, "post_count": 123, "aliases": ["existing alias"]}]
         )
+        job_id = self.store.create_job("scan")
+        self.store.stage_tags(job_id, [_tag(1, "base_tag", 3, 123)])
+        self.store.commit_scan(job_id)
         self.store.save_translation_successes("zh", {"base_tag": "基础标签"}, "model", "prompt", 1)
 
         self.assertEqual(self.store.export_csv(), 1)
@@ -187,7 +239,7 @@ class LiveTagsManagerTests(unittest.TestCase):
         params = client._with_auth({"limit": "1"})
         self.assertEqual(params, {"limit": "1", "login": "user", "api_key": "secret"})
 
-    def test_base_csv_names_are_loaded_for_deduplication(self):
+    def test_base_csv_is_loaded_as_translation_fallback_only(self):
         with tempfile.TemporaryDirectory() as directory:
             base_csv = os.path.join(directory, "danbooru_tags.csv")
             with open(base_csv, "w", encoding="utf-8", newline="") as csv_file:
@@ -199,7 +251,7 @@ class LiveTagsManagerTests(unittest.TestCase):
             manager = LiveTagsManager(os.path.join(directory, "config.json"), store, base_csv)
             self.assertEqual(manager._load_base_names(), {"existing_tag", "another_tag"})
             self.assertEqual(manager.status("zh")["statistics"]["base_tags"], 2)
-            self.assertEqual(manager.status("zh")["statistics"]["base_missing"], 2)
+            self.assertEqual(manager.status("zh")["statistics"]["base_missing"], 0)
 
     def test_locale_mapping(self):
         self.assertEqual(normalize_locale("zh_CN"), "zh")
@@ -220,7 +272,7 @@ class LiveTagsManagerAsyncTests(unittest.IsolatedAsyncioTestCase):
             await limiter.release(successful=True)
         self.assertEqual(limiter.current_limit, 5)
 
-    async def test_scan_filters_base_tags_and_exports_only_new_candidates(self):
+    async def test_scan_replaces_base_source_with_complete_api_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
             base_csv = os.path.join(directory, "danbooru_tags.csv")
             with open(base_csv, "w", encoding="utf-8", newline="") as csv_file:
@@ -246,10 +298,10 @@ class LiveTagsManagerAsyncTests(unittest.IsolatedAsyncioTestCase):
                 await manager._task
 
             self.assertEqual(store.latest_job()["status"], "completed")
-            self.assertEqual(store.candidate_count(), 1)
+            self.assertEqual(store.candidate_count(), 2)
             with open(store.csv_path, encoding="utf-8", newline="") as csv_file:
                 rows = list(csv.DictReader(csv_file))
-            self.assertEqual([row["tag"] for row in rows], ["new_tag"])
+            self.assertEqual([row["tag"] for row in rows], ["existing_tag", "new_tag"])
 
 
 class DeepSeekRetryTests(unittest.IsolatedAsyncioTestCase):
@@ -326,7 +378,7 @@ class StubDanbooruClient:
     async def get_max_tag_id(self):
         return 100
 
-    async def iter_category(self, category_name, policy, id_range=None):
+    async def iter_category(self, category_name, policy, id_range=None, cursor=None):
         if id_range[0] != 1:
             return
         yield [

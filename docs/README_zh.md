@@ -22,7 +22,7 @@
 - 别名展示会按当前 ComfyUI 界面语言初步过滤，完整别名仍可用于检索。
 - 实时标签的网络、认证、CSV 和翻译错误会跟随 ComfyUI 界面语言显示，未知诊断信息仍会保留。
 - Danbooru 同步使用兼容 Cloudflare 的产品标识，避免部分边缘规则拒绝包含 `ComfyUI` 的 User-Agent。
-- Danbooru 扫描使用可配置的自适应并发（1–16，默认 8）处理 16 个 ID 分片；扫描只显示已处理数量，翻译继续显示准确进度。
+- Danbooru 扫描使用可配置的自适应并发（1–16，默认 8）处理 16 个可续扫 ID 分片；翻译以多段进度条显示缓存、成功、失败和待处理数量。
 - 提供 LoRA Manager 兼容层，通过其本地标签、LoRA、Embedding 和 Wildcard API 补充候选，并避免在 LoRA Manager 自有输入框中重复触发补全。
 - 为通用、艺术家、作品、角色、元标签、模型等类别提供不同 Emoji 标记和本地化悬浮说明。
 - 将 Danbooru、e621 和 LoRA Manager 候选统一按相关度排序，不再按数据源分段显示。
@@ -44,7 +44,7 @@
 - **:art:界面适配**：支持 ComfyUI 浅色和深色主题。
 - **:pencil:用户 CSV**：可以添加自定义 CSV 作为补全数据。
 - **:twisted_rightwards_arrows:新版 ComfyUI 兼容**：支持 Nodes 2.0 和子图节点提升后的文本输入框。
-- **:arrows_counterclockwise:实时标签补充**：拉取基础 Danbooru CSV 中缺失的标签，并可使用 DeepSeek 翻译。
+- **:arrows_counterclockwise:实时标签源**：从 Danbooru 获取完整筛选快照，替代 Hugging Face 标签源，并可使用 DeepSeek 翻译。
 - **:link:LoRA Manager 兼容**：复用 LoRA Manager 的本地索引，补充标签、LoRA、Embedding 和 Wildcard 候选。
 
 ## 安装
@@ -230,19 +230,19 @@ worst_quality,5,9999999,
 
 ### Danbooru 实时标签
 
-在 **Autocomplete Plus → 实时标签 → 管理 Danbooru 实时标签** 中打开管理面板。该功能不会修改 Hugging Face 基础 CSV。
+在 **Autocomplete Plus → 实时标签 → 管理 Danbooru 实时标签** 中打开管理面板。生成 Danbooru 快照后，自动补全只使用这份实时标签源，LoRA Manager 兼容补全仍会保留；Hugging Face 文件继续留在本地作为回退。
 
 1. 可为每个 Danbooru 类别独立选择“不拉取”“全部拉取”或“最低热度”。
-2. 可选填 Danbooru 用户名和 API Key，然后点击“扫描标签”。只有 `danbooru_tags.csv` 中不存在的标签会写入 `data/danbooru_tags_live.csv`。
+2. 可选填 Danbooru 用户名和 API Key，然后点击“扫描标签”。完整的筛选快照会写入 `data/danbooru_tags_live.csv`，并作为 Danbooru 自动补全数据源。
    凭据区域同时提供“打开 Danbooru”快捷按钮，会在新标签页打开官方网站。
-3. 查看新增候选数、基础表缺失翻译数和预计请求数后，再手动启动 DeepSeek 翻译。目标语言跟随当前 ComfyUI 界面；英文界面不需要翻译。
+3. 查看当前标签总数、缺失翻译数和预计请求数后，再手动启动 DeepSeek 翻译。目标语言跟随当前 ComfyUI 界面；英文界面不需要翻译。
 4. CSV 更新后刷新页面，使自动补全重新建立索引。
 
-DeepSeek 会同时处理新扫描标签，以及基础 CSV 的别名中缺少当前界面语言的条目。批量数、最大并发、重试次数、模型和 system prompt 均可配置。成功译文按“标签 + 语言”写入 SQLite 缓存，后续只发送未命中缓存或明确要求重试的标签。生成的额外 CSV 会保留基础条目的类别、热度和原别名，只追加缓存译文，不会修改原基础 CSV；任务中断或取消不会丢失已经完成的结果。
+DeepSeek 可选择“跳过已有翻译”或“全部重新翻译”。成功译文按“标签 + 语言”写入本地 SQLite 词典并合并进生成的 CSV。管理面板通过侧边栏分为任务概览、标签获取、翻译设置、标签统计、本地词典和凭据设置；底栏只显示当前页面最重要的操作，重试与全部重译收进翻译页面。统计页可按类别和来源查看数量及标签列表。扫描会边执行边写入 CSV 和断点，扫描与翻译在异常退出、失败或主动取消后都可以继续。翻译进度使用彩色多段条显示词典命中、完成、失败和待处理数量。
 
 Danbooru 扫描使用独立的 `Autocomplete-Plus` User-Agent。部分 Cloudflare 边缘线路会拒绝产品标识中包含 `ComfyUI` 的请求，即使相同的 `aiohttp` 请求和网络出口在换用正常产品标识后可以访问。
 
-Danbooru 无法低成本提供这类筛选扫描的稳定总数，因此扫描阶段改为实时显示已扫描标签数，不再展示误导性的百分比进度条。各类别会拆成 16 个互不重叠的标签 ID 区间，扫描并发可设置为 1–16，默认 8。遇到 HTTP 429 时会自动把当前并发减半，连续请求成功后再逐步恢复。翻译任务开始前已经知道工作总数，所以仍保留正常进度条。
+Danbooru 无法低成本提供这类筛选扫描的稳定总数，因此扫描阶段显示已扫描标签数、类别分布、完成分片和实时速度，不再展示误导性的百分比。各类别会拆成 16 个互不重叠的标签 ID 区间，扫描并发可设置为 1–16，默认 8。遇到 HTTP 429 时会自动把当前并发减半，连续请求成功后再逐步恢复。
 
 补全列表与相关标签面板只展示符合当前 ComfyUI 界面语言的别名。这只影响显示，完整别名仍会进入搜索索引。
 

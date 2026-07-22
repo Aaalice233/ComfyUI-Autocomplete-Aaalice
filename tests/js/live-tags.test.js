@@ -203,6 +203,16 @@ describe("live tags manager UI", () => {
         expect(link.href).toBe("https://danbooru.donmai.us/");
         expect(link.target).toBe("_blank");
         expect(link.rel).toBe("noopener noreferrer");
+
+        const credentialsNavigation = [...document.querySelectorAll(".autocomplete-plus-live-tags-nav-item")]
+            .find(button => button.textContent.includes("凭据设置"));
+        credentialsNavigation.click();
+        const activePage = document.querySelector(".autocomplete-plus-live-tags-page.is-active");
+        expect(activePage.textContent).toContain("Danbooru 用户名（可选）");
+        expect(activePage.textContent).toContain("DeepSeek API Key");
+        const footerButtons = [...document.querySelectorAll(".autocomplete-plus-live-tags-actions button")]
+            .filter(button => !button.hidden);
+        expect(footerButtons.map(button => button.textContent)).toEqual(["保存设置"]);
     });
 
     test("shows a scan counter without an unknowable progress maximum", async () => {

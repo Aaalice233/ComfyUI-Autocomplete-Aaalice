@@ -86,6 +86,7 @@ def get_csv_file_status():
         data[prefix] = {
             "base_tags": tags_base_exists,
             "extra_tags": tags_extra_files,
+            "live_tags_active": prefix == DANBOORU_PREFIX and "danbooru_tags_live.csv" in tags_extra_files,
             "base_cooccurrence": cooccurrence_base_exists,
             "extra_cooccurrence": cooccurrence_extra_files,
         }
@@ -306,11 +307,59 @@ async def cancel_live_tags_task(_request):
     return web.json_response({"cancelled": cancelled})
 
 
+@server.PromptServer.instance.routes.post("/autocomplete-plus/live-tags/resume")
+async def resume_live_tags_task(_request):
+    try:
+        job_id = live_tags_manager.resume_latest()
+        return web.json_response({"accepted": True, "job_id": job_id}, status=202)
+    except JobConflictError as error:
+        return web.json_response(_live_tags_error_payload(error), status=409)
+    except LiveTagsError as error:
+        return web.json_response(_live_tags_error_payload(error), status=400)
+    except Exception as error:
+        return web.json_response(_live_tags_error_payload(error), status=500)
+
+
 @server.PromptServer.instance.routes.get("/autocomplete-plus/live-tags/status")
 async def get_live_tags_status(request):
     try:
         locale = request.query.get("locale")
         return web.json_response(live_tags_manager.status(locale))
+    except Exception as error:
+        return web.json_response(_live_tags_error_payload(error), status=500)
+
+
+@server.PromptServer.instance.routes.get("/autocomplete-plus/live-tags/statistics")
+async def get_live_tags_statistics(request):
+    try:
+        return web.json_response(
+            live_tags_manager.tag_statistics(
+                category=request.query.get("category"),
+                source=request.query.get("source", "all"),
+                query=request.query.get("q", ""),
+                limit=request.query.get("limit", 100),
+                offset=request.query.get("offset", 0),
+            )
+        )
+    except (LiveTagsError, ValueError) as error:
+        return web.json_response(_live_tags_error_payload(error), status=400)
+    except Exception as error:
+        return web.json_response(_live_tags_error_payload(error), status=500)
+
+
+@server.PromptServer.instance.routes.get("/autocomplete-plus/live-tags/dictionary")
+async def get_live_tags_dictionary(request):
+    try:
+        return web.json_response(
+            live_tags_manager.translation_dictionary(
+                locale=request.query.get("locale"),
+                query=request.query.get("q", ""),
+                limit=request.query.get("limit", 100),
+                offset=request.query.get("offset", 0),
+            )
+        )
+    except ValueError as error:
+        return web.json_response(_live_tags_error_payload(error), status=400)
     except Exception as error:
         return web.json_response(_live_tags_error_payload(error), status=500)
 

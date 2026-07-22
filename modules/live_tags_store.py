@@ -119,14 +119,41 @@ class LiveTagsStore:
                     error TEXT,
                     error_code TEXT,
                     locale TEXT,
+                    mode TEXT,
+                    options_json TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS scan_partitions (
+                    job_id INTEGER NOT NULL,
+                    category TEXT NOT NULL,
+                    range_start INTEGER NOT NULL,
+                    range_end INTEGER NOT NULL,
+                    cursor INTEGER,
+                    scanned INTEGER NOT NULL DEFAULT 0,
+                    candidates INTEGER NOT NULL DEFAULT 0,
+                    done INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(job_id, category, range_start),
+                    FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS translation_queue (
+                    job_id INTEGER NOT NULL,
+                    tag_name TEXT NOT NULL,
+                    category INTEGER NOT NULL,
+                    post_count INTEGER NOT NULL,
+                    state TEXT NOT NULL DEFAULT 'pending',
+                    PRIMARY KEY(job_id, tag_name),
+                    FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
                 );
                 """
             )
             job_columns = {row["name"] for row in connection.execute("PRAGMA table_info(jobs)")}
             if "error_code" not in job_columns:
                 connection.execute("ALTER TABLE jobs ADD COLUMN error_code TEXT")
+            if "mode" not in job_columns:
+                connection.execute("ALTER TABLE jobs ADD COLUMN mode TEXT")
+            if "options_json" not in job_columns:
+                connection.execute("ALTER TABLE jobs ADD COLUMN options_json TEXT")
             now = utc_now()
             connection.execute(
                 """
@@ -138,15 +165,15 @@ class LiveTagsStore:
                 (now,),
             )
 
-    def create_job(self, kind, locale=None):
+    def create_job(self, kind, locale=None, mode=None, options=None):
         now = utc_now()
         with self._connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO jobs(kind, status, phase, locale, created_at, updated_at)
-                VALUES (?, 'queued', 'queued', ?, ?, ?)
+                INSERT INTO jobs(kind, status, phase, locale, mode, options_json, created_at, updated_at)
+                VALUES (?, 'queued', 'queued', ?, ?, ?, ?, ?)
                 """,
-                (kind, locale, now, now),
+                (kind, locale, mode, json.dumps(options, ensure_ascii=False) if options is not None else None, now, now),
             )
             return cursor.lastrowid
 
@@ -179,9 +206,140 @@ class LiveTagsStore:
             row = connection.execute("SELECT * FROM jobs ORDER BY id DESC LIMIT 1").fetchone()
         return dict(row) if row else None
 
+    def latest_resumable_job(self):
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM jobs
+                 WHERE status IN ('interrupted', 'cancelled', 'failed')
+                   AND ((kind = 'scan' AND EXISTS (SELECT 1 FROM scan_partitions p WHERE p.job_id = jobs.id AND p.done = 0))
+                     OR (kind = 'translate' AND EXISTS (SELECT 1 FROM translation_queue q WHERE q.job_id = jobs.id AND q.state = 'pending')))
+                 ORDER BY id DESC LIMIT 1
+                """
+            ).fetchone()
+        return dict(row) if row else None
+
+    def job(self, job_id):
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        return dict(row) if row else None
+
+    def discard_resumable_jobs(self, kind):
+        with self._connect() as connection:
+            job_ids = [
+                row[0]
+                for row in connection.execute(
+                    "SELECT id FROM jobs WHERE kind = ? AND status IN ('interrupted', 'cancelled', 'failed')",
+                    (kind,),
+                )
+            ]
+            for job_id in job_ids:
+                connection.execute("DELETE FROM scan_staging WHERE job_id = ?", (job_id,))
+                connection.execute("DELETE FROM scan_partitions WHERE job_id = ?", (job_id,))
+                connection.execute("DELETE FROM translation_queue WHERE job_id = ?", (job_id,))
+
+    def initialize_scan_partitions(self, job_id, categories, id_ranges):
+        rows = [
+            (job_id, category, range_start, range_end)
+            for category in categories
+            for range_start, range_end in id_ranges
+        ]
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO scan_partitions(job_id, category, range_start, range_end)
+                VALUES (?, ?, ?, ?)
+                """,
+                rows,
+            )
+
+    def pending_scan_partitions(self, job_id):
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT category, range_start, range_end, cursor, scanned, candidates
+                  FROM scan_partitions WHERE job_id = ? AND done = 0
+                 ORDER BY category, range_start
+                """,
+                (job_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def checkpoint_scan_partition(self, job_id, category, range_start, cursor, scanned, candidates, done=False):
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE scan_partitions
+                   SET cursor = ?, scanned = scanned + ?, candidates = candidates + ?, done = ?
+                 WHERE job_id = ? AND category = ? AND range_start = ?
+                """,
+                (cursor, scanned, candidates, int(done), job_id, category, range_start),
+            )
+
+    def scan_progress(self, job_id):
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT category, SUM(scanned) AS scanned, SUM(candidates) AS candidates,
+                       SUM(done) AS completed_partitions, COUNT(*) AS total_partitions
+                  FROM scan_partitions WHERE job_id = ? GROUP BY category ORDER BY category
+                """,
+                (job_id,),
+            ).fetchall()
+        categories = [dict(row) for row in rows]
+        return {
+            "categories": categories,
+            "scanned": sum(row["scanned"] or 0 for row in categories),
+            "candidates": sum(row["candidates"] or 0 for row in categories),
+            "completed_partitions": sum(row["completed_partitions"] or 0 for row in categories),
+            "total_partitions": sum(row["total_partitions"] or 0 for row in categories),
+        }
+
+    def initialize_translation_queue(self, job_id, work):
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO translation_queue(job_id, tag_name, category, post_count)
+                VALUES (?, ?, ?, ?)
+                """,
+                [(job_id, item["name"], item["category"], item["post_count"]) for item in work],
+            )
+
+    def pending_translation_work(self, job_id):
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT tag_name AS name, category, post_count FROM translation_queue
+                 WHERE job_id = ? AND state = 'pending' ORDER BY post_count DESC, tag_name
+                """,
+                (job_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def complete_translation_items(self, job_id, tag_names):
+        if not tag_names:
+            return
+        with self._connect() as connection:
+            connection.executemany(
+                "UPDATE translation_queue SET state = 'done' WHERE job_id = ? AND tag_name = ?",
+                [(job_id, tag_name) for tag_name in tag_names],
+            )
+
+    def translation_queue_progress(self, job_id):
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS total, SUM(state = 'done') AS completed
+                  FROM translation_queue WHERE job_id = ?
+                """,
+                (job_id,),
+            ).fetchone()
+        return {"total": row["total"] or 0, "completed": row["completed"] or 0}
+
     def clear_staging(self, job_id):
         with self._connect() as connection:
             connection.execute("DELETE FROM scan_staging WHERE job_id = ?", (job_id,))
+            connection.execute("DELETE FROM scan_partitions WHERE job_id = ?", (job_id,))
 
     def stage_tags(self, job_id, tags):
         rows = [
@@ -277,38 +435,27 @@ class LiveTagsStore:
         if mode not in {"missing", "failed", "all"}:
             raise ValueError(f"Invalid translation mode: {mode}")
         conditions = {
-            "missing": "COALESCE(tr.status, '') != 'success'",
+            "missing": f"COALESCE(tr.status, '') != 'success' AND COALESCE(b.{LOCALE_ALIAS_COLUMNS.get(locale, 'has_zh_alias')}, 0) = 0",
             "failed": "tr.status = 'failed'",
             "all": "1 = 1",
         }
         locale_column = LOCALE_ALIAS_COLUMNS.get(locale)
         if not locale_column:
             return [], 0
-        eligible = f"""
-            SELECT name, category, post_count FROM tags WHERE active = 1
-            UNION ALL
-            SELECT b.name, b.category, b.post_count
-              FROM base_tags b
-             WHERE b.{locale_column} = 0
-               AND NOT EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = b.name)
-        """
         query = f"""
-            WITH eligible AS ({eligible})
-            SELECT e.name, e.category, e.post_count, tr.status
-              FROM eligible e
-         LEFT JOIN translations tr ON tr.tag_name = e.name AND tr.locale = ?
-             WHERE {conditions[mode]}
-          ORDER BY e.post_count DESC, e.name ASC
+            SELECT t.name, t.category, t.post_count, tr.status
+              FROM tags t
+         LEFT JOIN base_tags b ON b.name = t.name
+         LEFT JOIN translations tr ON tr.tag_name = t.name AND tr.locale = ?
+             WHERE t.active = 1 AND {conditions[mode]}
+          ORDER BY t.post_count DESC, t.name ASC
         """
         with self._connect() as connection:
             rows = connection.execute(query, (locale,)).fetchall()
             cached = connection.execute(
-                f"""
-                WITH eligible AS ({eligible})
-                SELECT COUNT(*)
-                  FROM eligible e
-                  JOIN translations tr ON tr.tag_name = e.name
-                 WHERE tr.locale = ? AND tr.status = 'success'
+                """
+                SELECT COUNT(*) FROM tags t JOIN translations tr ON tr.tag_name = t.name
+                 WHERE t.active = 1 AND tr.locale = ? AND tr.status = 'success'
                 """,
                 (locale,),
             ).fetchone()[0]
@@ -355,11 +502,11 @@ class LiveTagsStore:
                     tag_name, locale, text, status, attempts, model, prompt_hash, error, updated_at
                 ) VALUES (?, ?, NULL, 'failed', ?, ?, ?, ?, ?)
                 ON CONFLICT(tag_name, locale) DO UPDATE SET
-                    status = 'failed',
+                    status = CASE WHEN translations.status = 'success' THEN 'success' ELSE 'failed' END,
                     attempts = excluded.attempts,
                     model = excluded.model,
                     prompt_hash = excluded.prompt_hash,
-                    error = excluded.error,
+                    error = CASE WHEN translations.status = 'success' THEN translations.error ELSE excluded.error END,
                     updated_at = excluded.updated_at
                 """,
                 rows,
@@ -369,36 +516,22 @@ class LiveTagsStore:
         with self._connect() as connection:
             candidates = connection.execute("SELECT COUNT(*) FROM tags WHERE active = 1").fetchone()[0]
             base_missing = 0
-            live_translated = 0
             translated = 0
             failed = 0
             locale_column = LOCALE_ALIAS_COLUMNS.get(locale)
             if locale_column:
                 base_missing = connection.execute(
                     f"""
-                    SELECT COUNT(*)
-                      FROM base_tags b
-                 LEFT JOIN translations tr ON tr.tag_name = b.name AND tr.locale = ?
-                     WHERE b.{locale_column} = 0
+                    SELECT COUNT(*) FROM tags t
+                 LEFT JOIN base_tags b ON b.name = t.name
+                 LEFT JOIN translations tr ON tr.tag_name = t.name AND tr.locale = ?
+                     WHERE t.active = 1
+                       AND COALESCE(b.{locale_column}, 0) = 0
                        AND COALESCE(tr.status, '') != 'success'
-                       AND NOT EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = b.name)
                     """,
                     (locale,),
                 ).fetchone()[0]
-                eligible = f"""
-                    SELECT name FROM tags WHERE active = 1
-                    UNION
-                    SELECT name FROM base_tags WHERE {locale_column} = 0
-                """
                 translated = connection.execute(
-                    f"""
-                    WITH eligible AS ({eligible})
-                    SELECT COUNT(*) FROM eligible e JOIN translations tr ON tr.tag_name = e.name
-                     WHERE tr.locale = ? AND tr.status = 'success'
-                    """,
-                    (locale,),
-                ).fetchone()[0]
-                live_translated = connection.execute(
                     """
                     SELECT COUNT(*) FROM tags t JOIN translations tr ON tr.tag_name = t.name
                      WHERE t.active = 1 AND tr.locale = ? AND tr.status = 'success'
@@ -406,14 +539,13 @@ class LiveTagsStore:
                     (locale,),
                 ).fetchone()[0]
                 failed = connection.execute(
-                    f"""
-                    WITH eligible AS ({eligible})
-                    SELECT COUNT(*) FROM eligible e JOIN translations tr ON tr.tag_name = e.name
-                     WHERE tr.locale = ? AND tr.status = 'failed'
+                    """
+                    SELECT COUNT(*) FROM tags t JOIN translations tr ON tr.tag_name = t.name
+                     WHERE t.active = 1 AND tr.locale = ? AND tr.status = 'failed'
                     """,
                     (locale,),
                 ).fetchone()[0]
-        untranslated = max(candidates - live_translated + base_missing, 0)
+        untranslated = base_missing
         return {
             "candidates": candidates,
             "base_missing": base_missing,
@@ -423,8 +555,101 @@ class LiveTagsStore:
             "estimated_requests": (untranslated + batch_size - 1) // batch_size,
         }
 
-    def export_csv(self):
-        rows = self._export_rows()
+    def tag_statistics(self):
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                WITH counts AS (
+                    SELECT category, 'base' AS source, COUNT(*) AS count FROM base_tags GROUP BY category
+                    UNION ALL
+                    SELECT category, 'live' AS source, COUNT(*) AS count FROM tags WHERE active = 1 GROUP BY category
+                )
+                SELECT category,
+                       SUM(CASE WHEN source = 'base' THEN count ELSE 0 END) AS base_count,
+                       SUM(CASE WHEN source = 'live' THEN count ELSE 0 END) AS live_count
+                  FROM counts GROUP BY category ORDER BY category
+                """
+            ).fetchall()
+            last_scan = connection.execute(
+                "SELECT updated_at FROM jobs WHERE kind = 'scan' AND status = 'completed' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        categories = [dict(row) for row in rows]
+        live_count = sum(row["live_count"] or 0 for row in categories)
+        for row in categories:
+            row["total_count"] = (row["live_count"] or 0) if live_count else (row["base_count"] or 0)
+        return {
+            "categories": categories,
+            "base_count": sum(row["base_count"] or 0 for row in categories),
+            "live_count": live_count,
+            "total_count": sum(row["total_count"] or 0 for row in categories),
+            "last_scan_at": last_scan["updated_at"] if last_scan else None,
+        }
+
+    def tag_list(self, category=None, source="all", query="", limit=100, offset=0):
+        if source not in {"all", "base", "live"}:
+            raise ValueError("Invalid tag source")
+        parts = []
+        params = []
+        if source in {"all", "base"}:
+            parts.append("SELECT name, category, post_count, 'base' AS source FROM base_tags")
+        if source in {"all", "live"}:
+            parts.append("SELECT name, category, post_count, 'live' AS source FROM tags WHERE active = 1")
+        filters = []
+        if category is not None:
+            filters.append("category = ?")
+            params.append(category)
+        if query:
+            filters.append("name LIKE ? ESCAPE '\\'")
+            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            params.append(f"%{escaped}%")
+        where = f"WHERE {' AND '.join(filters)}" if filters else ""
+        union = " UNION ALL ".join(parts)
+        with self._connect() as connection:
+            total = connection.execute(f"SELECT COUNT(*) FROM ({union}) {where}", params).fetchone()[0]
+            rows = connection.execute(
+                f"""
+                SELECT name, category, post_count, source FROM ({union}) {where}
+                 ORDER BY post_count DESC, name ASC LIMIT ? OFFSET ?
+                """,
+                (*params, limit, offset),
+            ).fetchall()
+        return {"total": total, "items": [dict(row) for row in rows]}
+
+    def translation_dictionary(self, locale=None, query="", limit=100, offset=0):
+        filters = []
+        params = []
+        if locale:
+            filters.append("locale = ?")
+            params.append(locale)
+        if query:
+            filters.append("(tag_name LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\')")
+            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            params.extend((f"%{escaped}%", f"%{escaped}%"))
+        where = f"WHERE {' AND '.join(filters)}" if filters else ""
+        with self._connect() as connection:
+            summary_rows = connection.execute(
+                """
+                SELECT locale, status, COUNT(*) AS count FROM translations
+                 GROUP BY locale, status ORDER BY locale, status
+                """
+            ).fetchall()
+            total = connection.execute(f"SELECT COUNT(*) FROM translations {where}", params).fetchone()[0]
+            rows = connection.execute(
+                f"""
+                SELECT tag_name, locale, text, status, attempts, model, updated_at
+                  FROM translations {where}
+                 ORDER BY updated_at DESC, tag_name LIMIT ? OFFSET ?
+                """,
+                (*params, limit, offset),
+            ).fetchall()
+        return {
+            "summary": [dict(row) for row in summary_rows],
+            "total": total,
+            "items": [dict(row) for row in rows],
+        }
+
+    def export_csv(self, staging_job_id=None):
+        rows = self._export_rows(staging_job_id)
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
         file_descriptor, temp_path = tempfile.mkstemp(
             prefix="danbooru-tags-live-",
@@ -443,33 +668,42 @@ class LiveTagsStore:
             raise
         return len(rows)
 
-    def _export_rows(self):
+    def _export_rows(self, staging_job_id=None):
         with self._connect() as connection:
+            if staging_job_id is None:
+                live_tags = "SELECT name, category, post_count FROM tags WHERE active = 1"
+                live_params = ()
+            else:
+                live_tags = """
+                    SELECT name, category, post_count FROM scan_staging WHERE job_id = ?
+                    UNION ALL
+                    SELECT t.name, t.category, t.post_count FROM tags t
+                     WHERE t.active = 1
+                       AND NOT EXISTS (
+                           SELECT 1 FROM scan_staging s WHERE s.job_id = ? AND s.name = t.name
+                       )
+                """
+                live_params = (staging_job_id, staging_job_id)
             tag_rows = connection.execute(
-                """
-                SELECT name, category, post_count, '[]' AS aliases_json, 0 AS is_base
-                  FROM tags
-                 WHERE active = 1
-                UNION ALL
-                SELECT b.name, b.category, b.post_count, b.aliases_json, 1 AS is_base
-                  FROM base_tags b
-                 WHERE EXISTS (
-                    SELECT 1 FROM translations tr
-                     WHERE tr.tag_name = b.name AND tr.status = 'success' AND tr.text IS NOT NULL
-                 )
-                   AND NOT EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = b.name)
-                """
+                f"""
+                WITH live AS ({live_tags})
+                SELECT live.name, live.category, live.post_count,
+                       COALESCE(b.aliases_json, '[]') AS aliases_json, 0 AS is_base
+                  FROM live LEFT JOIN base_tags b ON b.name = live.name
+                """,
+                live_params,
             ).fetchall()
             translation_rows = connection.execute(
-                """
+                f"""
+                WITH live AS ({live_tags})
                 SELECT tr.tag_name, tr.locale, tr.text
                   FROM translations tr
                  WHERE tr.status = 'success' AND tr.text IS NOT NULL
                    AND (
-                       EXISTS (SELECT 1 FROM tags t WHERE t.active = 1 AND t.name = tr.tag_name)
-                       OR EXISTS (SELECT 1 FROM base_tags b WHERE b.name = tr.tag_name)
-                   )
-                """
+                       EXISTS (SELECT 1 FROM live WHERE live.name = tr.tag_name)
+                    )
+                """,
+                live_params,
             ).fetchall()
 
         translations = {}

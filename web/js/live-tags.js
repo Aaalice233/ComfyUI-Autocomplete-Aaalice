@@ -2,20 +2,21 @@ import { getTagCategoryLabel } from './tag-presentation.js';
 
 const API_ROOT = "/autocomplete-plus/live-tags";
 const CATEGORY_NAMES = ["general", "artist", "unused", "copyright", "character", "meta"];
+const CATEGORY_IDS = { general: 0, artist: 1, unused: 2, copyright: 3, character: 4, meta: 5 };
 
 const TEXT = {
     en: {
         title: "Danbooru Live Tags",
         open: "Open manager",
-        description: "Scan new Danbooru tags and complete missing base CSV translations with DeepSeek.",
+        description: "Build a current Danbooru tag snapshot and translate it with DeepSeek.",
         overview: "Sync overview",
         categories: "Category filters",
-        categoriesDescription: "Choose which tag groups to include and control their size.",
+        categoriesDescription: "Choose which tag groups the snapshot includes and control its size.",
         credentials: "Credentials",
         credentialsDescription: "Keys are stored only in the local ComfyUI user directory.",
         openDanbooru: "Open Danbooru",
         translation: "DeepSeek translation",
-        translationDescription: "Translate new tags and base tags missing the current interface language.",
+        translationDescription: "Skip existing translations or retranslate the entire active snapshot.",
         advanced: "Advanced prompt",
         policy: "Fetch policy",
         thresholdValue: "Minimum post count",
@@ -43,10 +44,39 @@ const TEXT = {
         retranslate: "Retranslate all",
         cancel: "Cancel task",
         refresh: "Refresh page",
+        resume: "Resume task",
+        navigationOverview: "Task overview",
+        navigationScan: "Tag scanning",
+        navigationTranslation: "Translation",
+        scanDetails: "Task details",
+        scanCandidates: "Tags saved",
+        scanPartitions: "Ranges completed",
+        processingRate: "Processing speed",
+        perSecond: "/s",
+        remaining: "Remaining",
         close: "Close",
         baseTags: "Base tags",
-        baseMissing: "Base translations missing",
-        candidates: "New candidates",
+        baseMissing: "Translations missing",
+        candidates: "Active tags",
+        navigationStatistics: "Tag statistics",
+        statisticsTitle: "Tag library details",
+        statisticsDescription: "Compare the fallback base CSV and active Danbooru snapshot by category.",
+        totalTags: "Total tags",
+        baseSource: "Base CSV",
+        liveSource: "Danbooru snapshot",
+        allSources: "All sources",
+        lastScan: "Last completed scan",
+        neverScanned: "Not scanned yet",
+        searchTags: "Search tags",
+        tagName: "Tag",
+        source: "Source",
+        postCount: "Post count",
+        navigationDictionary: "Local dictionary",
+        navigationCredentials: "Credentials",
+        dictionaryTitle: "Translation dictionary",
+        dictionaryDescription: "Cached DeepSeek translations stored locally by tag and language.",
+        translationText: "Translation",
+        status: "Status",
         translated: "Cached translations",
         pending: "Pending translations",
         requests: "Estimated requests",
@@ -79,6 +109,7 @@ const TEXT = {
             jobConflict: "Another scan or translation task is already running.",
             englishTranslationNotRequired: "English does not require translation.",
             translationModeInvalid: "The selected translation mode is invalid.",
+            resumeNotAvailable: "There is no paused task to resume.",
         },
         jobStates: {
             queued: "Queued", running: "Running", cancelling: "Cancelling", loading_base: "Loading base CSV",
@@ -89,15 +120,15 @@ const TEXT = {
     zh: {
         title: "Danbooru 实时标签",
         open: "打开管理面板",
-        description: "扫描 Danbooru 新标签，并使用 DeepSeek 补全基础表缺失的翻译。",
+        description: "构建最新的 Danbooru 标签快照，并使用 DeepSeek 完成翻译。",
         overview: "同步概览",
         categories: "类别筛选",
-        categoriesDescription: "决定需要补充的标签类别，并控制候选数据规模。",
+        categoriesDescription: "决定快照包含哪些标签类别，并控制数据规模。",
         credentials: "凭据",
         credentialsDescription: "密钥仅保存在本机 ComfyUI 用户目录。",
         openDanbooru: "打开 Danbooru",
         translation: "DeepSeek 翻译",
-        translationDescription: "翻译新增标签，并补全基础表中缺少当前界面语言的条目。",
+        translationDescription: "可跳过已有翻译，也可重新翻译整个当前快照。",
         advanced: "高级提示词",
         policy: "拉取策略",
         thresholdValue: "最低热度",
@@ -125,10 +156,39 @@ const TEXT = {
         retranslate: "重新翻译全部",
         cancel: "取消任务",
         refresh: "刷新页面",
+        resume: "继续任务",
+        navigationOverview: "任务概览",
+        navigationScan: "标签获取",
+        navigationTranslation: "翻译设置",
+        scanDetails: "任务明细",
+        scanCandidates: "已保存标签",
+        scanPartitions: "完成分片",
+        processingRate: "处理速度",
+        perSecond: "/秒",
+        remaining: "剩余",
         close: "关闭",
         baseTags: "基础标签数",
-        baseMissing: "基础表缺失翻译",
-        candidates: "新增候选数",
+        baseMissing: "缺失翻译",
+        candidates: "当前标签数",
+        navigationStatistics: "标签统计",
+        statisticsTitle: "标签库详情",
+        statisticsDescription: "按类别对比备用基础 CSV 与当前 Danbooru 快照。",
+        totalTags: "标签总数",
+        baseSource: "基础 CSV",
+        liveSource: "Danbooru 快照",
+        allSources: "全部来源",
+        lastScan: "上次完整扫描",
+        neverScanned: "尚未扫描",
+        searchTags: "搜索标签",
+        tagName: "标签",
+        source: "来源",
+        postCount: "热度",
+        navigationDictionary: "本地词典",
+        navigationCredentials: "凭据设置",
+        dictionaryTitle: "翻译词典",
+        dictionaryDescription: "按标签和语言保存在本机的 DeepSeek 翻译缓存。",
+        translationText: "译文",
+        status: "状态",
         translated: "已缓存翻译",
         pending: "待翻译数",
         requests: "预计请求数",
@@ -161,6 +221,7 @@ const TEXT = {
             jobConflict: "已有扫描或翻译任务正在运行。",
             englishTranslationNotRequired: "英文标签不需要翻译。",
             translationModeInvalid: "所选翻译模式无效。",
+            resumeNotAvailable: "当前没有可继续的暂停任务。",
         },
         jobStates: {
             queued: "等待开始", running: "正在运行", cancelling: "正在取消", loading_base: "正在读取基础 CSV",
@@ -171,15 +232,15 @@ const TEXT = {
     "zh-TW": {
         title: "Danbooru 即時標籤",
         open: "開啟管理面板",
-        description: "掃描 Danbooru 新標籤，並使用 DeepSeek 補全基礎表缺少的翻譯。",
+        description: "建立最新的 Danbooru 標籤快照，並使用 DeepSeek 完成翻譯。",
         overview: "同步概覽",
         categories: "類別篩選",
-        categoriesDescription: "決定需要補充的標籤類別，並控制候選資料規模。",
+        categoriesDescription: "決定快照包含哪些標籤類別，並控制資料規模。",
         credentials: "憑證",
         credentialsDescription: "金鑰僅儲存在本機 ComfyUI 使用者目錄。",
         openDanbooru: "開啟 Danbooru",
         translation: "DeepSeek 翻譯",
-        translationDescription: "翻譯新增標籤，並補全基礎表中缺少目前介面語言的項目。",
+        translationDescription: "可略過已有翻譯，也可重新翻譯整個目前快照。",
         advanced: "進階提示詞",
         policy: "擷取策略",
         thresholdValue: "最低熱度",
@@ -207,10 +268,39 @@ const TEXT = {
         retranslate: "重新翻譯全部",
         cancel: "取消工作",
         refresh: "重新整理頁面",
+        resume: "繼續工作",
+        navigationOverview: "工作概覽",
+        navigationScan: "標籤擷取",
+        navigationTranslation: "翻譯設定",
+        scanDetails: "工作明細",
+        scanCandidates: "已儲存標籤",
+        scanPartitions: "完成分片",
+        processingRate: "處理速度",
+        perSecond: "/秒",
+        remaining: "剩餘",
         close: "關閉",
         baseTags: "基礎標籤數",
-        baseMissing: "基礎表缺少翻譯",
-        candidates: "新增候選數",
+        baseMissing: "缺少翻譯",
+        candidates: "目前標籤數",
+        navigationStatistics: "標籤統計",
+        statisticsTitle: "標籤庫詳情",
+        statisticsDescription: "依類別比較備用基礎 CSV 與目前 Danbooru 快照。",
+        totalTags: "標籤總數",
+        baseSource: "基礎 CSV",
+        liveSource: "Danbooru 快照",
+        allSources: "全部來源",
+        lastScan: "上次完整掃描",
+        neverScanned: "尚未掃描",
+        searchTags: "搜尋標籤",
+        tagName: "標籤",
+        source: "來源",
+        postCount: "熱度",
+        navigationDictionary: "本機詞典",
+        navigationCredentials: "憑證設定",
+        dictionaryTitle: "翻譯詞典",
+        dictionaryDescription: "依標籤和語言儲存在本機的 DeepSeek 翻譯快取。",
+        translationText: "譯文",
+        status: "狀態",
         translated: "已快取翻譯",
         pending: "待翻譯數",
         requests: "預估請求數",
@@ -243,6 +333,7 @@ const TEXT = {
             jobConflict: "已有掃描或翻譯工作正在執行。",
             englishTranslationNotRequired: "英文標籤不需要翻譯。",
             translationModeInvalid: "所選翻譯模式無效。",
+            resumeNotAvailable: "目前沒有可繼續的暫停工作。",
         },
         jobStates: {
             queued: "等待開始", running: "執行中", cancelling: "正在取消", loading_base: "正在讀取基礎 CSV",
@@ -253,15 +344,15 @@ const TEXT = {
     ja: {
         title: "Danbooru ライブタグ",
         open: "管理画面を開く",
-        description: "Danbooru の新規タグを取得し、基本 CSV の不足翻訳を DeepSeek で補完します。",
+        description: "最新の Danbooru タグスナップショットを作成し、DeepSeek で翻訳します。",
         overview: "同期サマリー",
         categories: "カテゴリフィルター",
-        categoriesDescription: "取得するタグカテゴリを選び、候補データの規模を調整します。",
+        categoriesDescription: "スナップショットに含めるカテゴリとデータ規模を調整します。",
         credentials: "認証情報",
         credentialsDescription: "キーはローカルの ComfyUI ユーザーディレクトリにのみ保存されます。",
         openDanbooru: "Danbooru を開く",
         translation: "DeepSeek 翻訳",
-        translationDescription: "新規タグと、現在の表示言語がない基本タグを翻訳します。",
+        translationDescription: "既存翻訳をスキップするか、現在のスナップショット全体を再翻訳します。",
         advanced: "詳細プロンプト",
         policy: "取得方法",
         thresholdValue: "最低投稿数",
@@ -289,10 +380,39 @@ const TEXT = {
         retranslate: "すべて再翻訳",
         cancel: "タスクをキャンセル",
         refresh: "ページを更新",
+        resume: "タスクを再開",
+        navigationOverview: "タスク概要",
+        navigationScan: "タグ取得",
+        navigationTranslation: "翻訳設定",
+        scanDetails: "タスク詳細",
+        scanCandidates: "保存済みタグ",
+        scanPartitions: "完了範囲",
+        processingRate: "処理速度",
+        perSecond: "/秒",
+        remaining: "残り",
         close: "閉じる",
         baseTags: "基本タグ数",
-        baseMissing: "基本タグの翻訳不足",
-        candidates: "新規候補数",
+        baseMissing: "翻訳不足",
+        candidates: "現在のタグ数",
+        navigationStatistics: "タグ統計",
+        statisticsTitle: "タグライブラリ詳細",
+        statisticsDescription: "予備の基本 CSV と現在の Danbooru スナップショットをカテゴリ別に比較します。",
+        totalTags: "タグ総数",
+        baseSource: "基本 CSV",
+        liveSource: "Danbooru スナップショット",
+        allSources: "すべてのソース",
+        lastScan: "最終完了スキャン",
+        neverScanned: "未スキャン",
+        searchTags: "タグを検索",
+        tagName: "タグ",
+        source: "ソース",
+        postCount: "投稿数",
+        navigationDictionary: "ローカル辞書",
+        navigationCredentials: "認証設定",
+        dictionaryTitle: "翻訳辞書",
+        dictionaryDescription: "タグと言語ごとにローカル保存された DeepSeek 翻訳キャッシュです。",
+        translationText: "翻訳",
+        status: "状態",
         translated: "キャッシュ済み翻訳",
         pending: "未翻訳数",
         requests: "推定リクエスト数",
@@ -325,6 +445,7 @@ const TEXT = {
             jobConflict: "別のスキャンまたは翻訳タスクが実行中です。",
             englishTranslationNotRequired: "英語タグは翻訳不要です。",
             translationModeInvalid: "選択した翻訳モードは無効です。",
+            resumeNotAvailable: "再開できる一時停止中のタスクはありません。",
         },
         jobStates: {
             queued: "開始待ち", running: "実行中", cancelling: "キャンセル中", loading_base: "基本 CSV を読み込み中",
@@ -362,6 +483,7 @@ const ERROR_MESSAGE_KEYS = {
     job_conflict: "jobConflict",
     english_translation_not_required: "englishTranslationNotRequired",
     translation_mode_invalid: "translationModeInvalid",
+    resume_not_available: "resumeNotAvailable",
 };
 
 const LEGACY_ERROR_CODES = [
@@ -478,7 +600,19 @@ export async function openLiveTagsManager(app) {
     const progress = createElement("progress", "autocomplete-plus-live-tags-progress");
     progress.max = 100;
     progress.value = 0;
-    taskStatus.append(taskCopy, jobCounters, progress);
+    const translationProgress = createElement("div", "autocomplete-plus-live-tags-segmented-progress");
+    const progressSegments = {};
+    for (const key of ["cached", "completed", "failed", "pending"]) {
+        progressSegments[key] = createElement("span", `is-${key}`);
+        progressSegments[key].title = {
+            cached: text.cached,
+            completed: text.completed,
+            failed: text.failed,
+            pending: text.pending,
+        }[key];
+        translationProgress.append(progressSegments[key]);
+    }
+    taskStatus.append(taskCopy, jobCounters, progress, translationProgress);
     form.append(taskStatus);
 
     let config;
@@ -515,9 +649,61 @@ export async function openLiveTagsManager(app) {
     statisticsSection.append(statisticsHeading, statistics);
     form.append(statisticsSection);
 
-    const workspace = createElement("div", "autocomplete-plus-live-tags-workspace");
-    const leftColumn = createElement("div", "autocomplete-plus-live-tags-column");
-    const rightColumn = createElement("div", "autocomplete-plus-live-tags-column");
+    const body = createElement("div", "autocomplete-plus-live-tags-body");
+    const sidebar = createElement("nav", "autocomplete-plus-live-tags-sidebar");
+    sidebar.ariaLabel = text.title;
+    const content = createElement("div", "autocomplete-plus-live-tags-content");
+    const overviewPanel = createElement("section", "autocomplete-plus-live-tags-page is-active");
+    const scanPanel = createElement("section", "autocomplete-plus-live-tags-page");
+    const translationPanel = createElement("section", "autocomplete-plus-live-tags-page");
+    const statisticsPanel = createElement("section", "autocomplete-plus-live-tags-page");
+    const dictionaryPanel = createElement("section", "autocomplete-plus-live-tags-page");
+    const credentialsPanel = createElement("section", "autocomplete-plus-live-tags-page");
+    const scanDetails = createElement("section", "autocomplete-plus-live-tags-scan-details");
+    scanDetails.append(createElement("h3", "", text.scanDetails));
+    const detailMetrics = createElement("div", "autocomplete-plus-live-tags-detail-metrics");
+    const detailValues = {};
+    const detailLabels = {};
+    for (const [key, label] of [
+        ["candidates", text.scanCandidates],
+        ["partitions", text.scanPartitions],
+        ["rate", text.processingRate],
+        ["remaining", text.remaining],
+    ]) {
+        const metric = createElement("div", "autocomplete-plus-live-tags-detail-metric");
+        detailValues[key] = createElement("strong", "", "0");
+        detailLabels[key] = createElement("span", "", label);
+        metric.append(detailValues[key], detailLabels[key]);
+        detailMetrics.append(metric);
+    }
+    const categoryProgress = createElement("div", "autocomplete-plus-live-tags-category-progress");
+    scanDetails.append(detailMetrics, categoryProgress);
+    overviewPanel.append(taskStatus, statisticsSection, scanDetails);
+
+    const pages = {
+        overview: overviewPanel,
+        scan: scanPanel,
+        translation: translationPanel,
+        statistics: statisticsPanel,
+        dictionary: dictionaryPanel,
+        credentials: credentialsPanel,
+    };
+    const navigationButtons = {};
+    for (const [key, label, icon] of [
+        ["overview", text.navigationOverview, "pi-chart-bar"],
+        ["scan", text.navigationScan, "pi-download"],
+        ["translation", text.navigationTranslation, "pi-language"],
+        ["statistics", text.navigationStatistics, "pi-table"],
+        ["dictionary", text.navigationDictionary, "pi-book"],
+        ["credentials", text.navigationCredentials, "pi-key"],
+    ]) {
+        const button = actionButton(label, icon, "autocomplete-plus-live-tags-nav-item");
+        button.type = "button";
+        button.classList.toggle("is-active", key === "overview");
+        button.onclick = () => setActivePage(key);
+        navigationButtons[key] = button;
+        sidebar.append(button);
+    }
 
     const categorySection = createSection(
         text.categories,
@@ -555,9 +741,8 @@ export async function openLiveTagsManager(app) {
         categorySection.append(row);
         categoryInputs[category] = { mode, threshold };
     }
-    leftColumn.append(categorySection);
 
-    const credentialsSection = createDisclosureSection(
+    const credentialsSection = createSection(
         text.credentials,
         "autocomplete-plus-live-tags-grid autocomplete-plus-live-tags-credentials",
         text.credentialsDescription,
@@ -570,22 +755,28 @@ export async function openLiveTagsManager(app) {
     danbooruLink.title = text.openDanbooru;
     danbooruLink.ariaLabel = text.openDanbooru;
     danbooruLink.append(createIcon("pi-external-link"), createElement("span", "", text.openDanbooru));
-    danbooruLink.onclick = event => event.stopPropagation();
-    credentialsSection.querySelector("summary").append(danbooruLink);
+    credentialsSection.querySelector(".autocomplete-plus-live-tags-section-header").append(danbooruLink);
     const danbooruLogin = createField(credentialsSection, text.danbooruLogin, "text", config.danbooru.login);
     const danbooruKey = createField(credentialsSection, text.danbooruKey, "password", config.danbooru.api_key);
+    const deepseekKey = createField(credentialsSection, text.deepseekKey, "password", config.deepseek.api_key);
+    deepseekKey.parentElement.classList.add("autocomplete-plus-live-tags-wide");
+    if (config.deepseek.api_key_configured) deepseekKey.placeholder = text.configured;
+    if (config.danbooru.api_key_configured) danbooruKey.placeholder = text.configured;
+
+    const scanOptionsSection = createSection(
+        text.scan,
+        "autocomplete-plus-live-tags-grid autocomplete-plus-live-tags-scan-options",
+        text.categoriesDescription,
+        "pi-sliders-h",
+    );
     const scanConcurrency = createField(
-        credentialsSection,
+        scanOptionsSection,
         text.scanConcurrency,
         "number",
         config.danbooru.scan_concurrency,
         1,
         16,
     );
-    const deepseekKey = createField(credentialsSection, text.deepseekKey, "password", config.deepseek.api_key);
-    deepseekKey.parentElement.classList.add("autocomplete-plus-live-tags-wide");
-    if (config.danbooru.api_key_configured) danbooruKey.placeholder = text.configured;
-    if (config.deepseek.api_key_configured) deepseekKey.placeholder = text.configured;
 
     const translationSection = createSection(
         text.translation,
@@ -613,25 +804,190 @@ export async function openLiveTagsManager(app) {
     promptLabel.append(prompt);
     promptDetails.append(promptSummary, promptLabel);
     translationSection.append(promptDetails);
-    rightColumn.append(translationSection, credentialsSection);
-    workspace.append(leftColumn, rightColumn);
-    form.append(workspace);
+    const scanWorkspace = createElement("div", "autocomplete-plus-live-tags-workspace");
+    scanWorkspace.append(categorySection, scanOptionsSection);
+    scanPanel.append(scanWorkspace);
+    translationPanel.append(translationSection);
+    credentialsPanel.append(credentialsSection);
+    const statisticsHeader = createElement("div", "autocomplete-plus-live-tags-statistics-header");
+    const statisticsCopy = createElement("div");
+    statisticsCopy.append(
+        createElement("h3", "", text.statisticsTitle),
+        createElement("p", "", text.statisticsDescription),
+    );
+    const lastScanValue = createElement("span", "autocomplete-plus-live-tags-last-scan", text.neverScanned);
+    statisticsHeader.append(statisticsCopy, lastScanValue);
+    const sourceSummary = createElement("div", "autocomplete-plus-live-tags-source-summary");
+    const sourceValues = {};
+    for (const [key, label] of [
+        ["total_count", text.totalTags],
+        ["base_count", text.baseSource],
+        ["live_count", text.liveSource],
+    ]) {
+        const card = createElement("div", "autocomplete-plus-live-tags-source-card");
+        sourceValues[key] = createElement("strong", "", "0");
+        card.append(sourceValues[key], createElement("span", "", label));
+        sourceSummary.append(card);
+    }
+    const statisticsFilters = createElement("div", "autocomplete-plus-live-tags-statistics-filters");
+    const tagSearch = document.createElement("input");
+    tagSearch.type = "search";
+    tagSearch.placeholder = text.searchTags;
+    const categoryFilter = document.createElement("select");
+    categoryFilter.add(new Option(text.categories, ""));
+    for (const category of CATEGORY_NAMES) categoryFilter.add(new Option(getTagCategoryLabel(category, locale), category));
+    const sourceFilter = document.createElement("select");
+    sourceFilter.add(new Option(text.allSources, "all"));
+    sourceFilter.add(new Option(text.baseSource, "base"));
+    sourceFilter.add(new Option(text.liveSource, "live"));
+    statisticsFilters.append(tagSearch, categoryFilter, sourceFilter);
+    const distribution = createElement("div", "autocomplete-plus-live-tags-distribution");
+    const tagTable = createElement("div", "autocomplete-plus-live-tags-tag-table");
+    statisticsPanel.append(statisticsHeader, sourceSummary, distribution, statisticsFilters, tagTable);
+    const dictionaryHeader = createElement("div", "autocomplete-plus-live-tags-statistics-header");
+    const dictionaryCopy = createElement("div");
+    dictionaryCopy.append(createElement("h3", "", text.dictionaryTitle), createElement("p", "", text.dictionaryDescription));
+    const dictionaryTotal = createElement("strong", "autocomplete-plus-live-tags-last-scan", "0");
+    dictionaryHeader.append(dictionaryCopy, dictionaryTotal);
+    const dictionarySearch = document.createElement("input");
+    dictionarySearch.type = "search";
+    dictionarySearch.placeholder = text.searchTags;
+    dictionarySearch.className = "autocomplete-plus-live-tags-dictionary-search";
+    const dictionarySummary = createElement("div", "autocomplete-plus-live-tags-source-summary");
+    const dictionaryTable = createElement("div", "autocomplete-plus-live-tags-tag-table");
+    dictionaryPanel.append(dictionaryHeader, dictionarySummary, dictionarySearch, dictionaryTable);
+    content.append(overviewPanel, scanPanel, translationPanel, statisticsPanel, dictionaryPanel, credentialsPanel);
+    body.append(sidebar, content);
+    form.append(body);
 
     const actions = createElement("div", "autocomplete-plus-live-tags-actions");
     const secondaryActions = createElement("div", "autocomplete-plus-live-tags-action-group");
     const primaryActions = createElement("div", "autocomplete-plus-live-tags-action-group autocomplete-plus-live-tags-action-group-primary");
     const saveButton = actionButton(text.save, "pi-save", "is-quiet");
+    const resumeButton = actionButton(text.resume, "pi-play", "is-accent");
     const failedButton = actionButton(text.retryFailed, "pi-replay", "is-quiet");
     const allButton = actionButton(text.retranslate, "pi-refresh", "is-quiet");
     const cancelButton = actionButton(text.cancel, "pi-stop-circle", "is-danger");
     const refreshButton = actionButton(text.refresh, "pi-refresh", "is-accent");
     const scanButton = actionButton(text.scan, "pi-search", "is-primary");
     const translateButton = actionButton(text.translate, "pi-language", "is-primary");
+    const translationActions = createElement("div", "autocomplete-plus-live-tags-inline-actions");
+    translationActions.append(failedButton, allButton);
+    translationPanel.append(translationActions);
     refreshButton.hidden = true;
-    secondaryActions.append(saveButton, failedButton, allButton);
-    primaryActions.append(cancelButton, refreshButton, scanButton, translateButton);
+    resumeButton.hidden = true;
+    cancelButton.hidden = true;
+    secondaryActions.append(saveButton);
+    primaryActions.append(resumeButton, cancelButton, refreshButton, scanButton, translateButton);
     actions.append(secondaryActions, primaryActions);
     form.append(actions);
+
+    let activePage = "overview";
+    let taskActive = false;
+    const refreshActionBar = () => {
+        actions.hidden = ![saveButton, resumeButton, cancelButton, refreshButton, scanButton, translateButton]
+            .some(button => !button.hidden);
+    };
+    function setActivePage(page) {
+        activePage = page;
+        for (const [key, panel] of Object.entries(pages)) panel.classList.toggle("is-active", key === page);
+        for (const [key, button] of Object.entries(navigationButtons)) button.classList.toggle("is-active", key === page);
+        saveButton.hidden = !["scan", "translation", "credentials"].includes(page);
+        scanButton.hidden = taskActive || page !== "scan";
+        translateButton.hidden = taskActive || page !== "translation";
+        resumeButton.hidden = taskActive || page !== "overview" || resumeButton.dataset.available !== "true";
+        if (page === "statistics") runAction(loadStatistics, message, locale);
+        if (page === "dictionary") runAction(loadDictionary, message, locale);
+        refreshActionBar();
+    }
+    setActivePage(activePage);
+
+    let statisticsTimer = null;
+    async function loadStatistics() {
+        const params = new URLSearchParams({
+            category: categoryFilter.value,
+            source: sourceFilter.value,
+            q: tagSearch.value.trim(),
+            limit: "100",
+        });
+        const payload = await requestJson(`${API_ROOT}/statistics?${params}`);
+        for (const [key, value] of Object.entries(payload.summary || {})) {
+            if (sourceValues[key]) sourceValues[key].textContent = String(value || 0);
+        }
+        lastScanValue.textContent = payload.summary?.last_scan_at
+            ? `${text.lastScan}: ${new Date(payload.summary.last_scan_at).toLocaleString()}`
+            : text.neverScanned;
+        distribution.replaceChildren(...(payload.summary?.categories || []).map(item => {
+            const row = createElement("div", "autocomplete-plus-live-tags-distribution-row");
+            row.append(
+                createElement("strong", "", getTagCategoryLabel(
+                    CATEGORY_NAMES.find(name => CATEGORY_IDS[name] === item.category),
+                    locale,
+                )),
+                createElement("span", "", `${text.baseSource} ${item.base_count || 0}`),
+                createElement("span", "", `${text.liveSource} ${item.live_count || 0}`),
+                createElement("span", "", `${text.totalTags} ${item.total_count || 0}`),
+            );
+            return row;
+        }));
+        const header = createElement("div", "autocomplete-plus-live-tags-tag-row is-header");
+        header.append(
+            createElement("span", "", text.tagName),
+            createElement("span", "", text.categories),
+            createElement("span", "", text.source),
+            createElement("span", "", text.postCount),
+        );
+        tagTable.replaceChildren(header, ...(payload.list?.items || []).map(item => {
+            const row = createElement("div", "autocomplete-plus-live-tags-tag-row");
+            const category = CATEGORY_NAMES.find(name => CATEGORY_IDS[name] === item.category);
+            row.append(
+                createElement("strong", "", item.name),
+                createElement("span", "", getTagCategoryLabel(category, locale)),
+                createElement("span", "", item.source === "base" ? text.baseSource : text.liveSource),
+                createElement("span", "", String(item.post_count)),
+            );
+            return row;
+        }));
+    }
+    for (const control of [categoryFilter, sourceFilter]) control.onchange = () => runAction(loadStatistics, message, locale);
+    tagSearch.oninput = () => {
+        clearTimeout(statisticsTimer);
+        statisticsTimer = setTimeout(() => runAction(loadStatistics, message, locale), 250);
+    };
+    async function loadDictionary() {
+        const params = new URLSearchParams({ locale, q: dictionarySearch.value.trim(), limit: "100" });
+        const payload = await requestJson(`${API_ROOT}/dictionary?${params}`);
+        dictionaryTotal.textContent = String(payload.total || 0);
+        dictionarySummary.replaceChildren(...(payload.summary || []).map(item => {
+            const card = createElement("div", "autocomplete-plus-live-tags-source-card");
+            card.append(
+                createElement("strong", "", String(item.count || 0)),
+                createElement("span", "", `${item.locale} · ${item.status}`),
+            );
+            return card;
+        }));
+        const header = createElement("div", "autocomplete-plus-live-tags-tag-row is-header");
+        header.append(
+            createElement("span", "", text.tagName),
+            createElement("span", "", text.translationText),
+            createElement("span", "", text.locale),
+            createElement("span", "", text.status),
+        );
+        dictionaryTable.replaceChildren(header, ...(payload.items || []).map(item => {
+            const row = createElement("div", "autocomplete-plus-live-tags-tag-row");
+            row.append(
+                createElement("strong", "", item.tag_name),
+                createElement("span", "", item.text || "—"),
+                createElement("span", "", item.locale),
+                createElement("span", "", item.status),
+            );
+            return row;
+        }));
+    }
+    dictionarySearch.oninput = () => {
+        clearTimeout(statisticsTimer);
+        statisticsTimer = setTimeout(() => runAction(loadDictionary, message, locale), 250);
+    };
 
     const collectConfig = () => ({
         categories: Object.fromEntries(CATEGORY_NAMES.map(category => [category, {
@@ -684,6 +1040,7 @@ export async function openLiveTagsManager(app) {
         message,
         locale,
     );
+    resumeButton.onclick = () => runAction(() => start("resume"), message, locale);
     refreshButton.onclick = () => window.location.reload();
 
     let pollTimer = null;
@@ -694,6 +1051,7 @@ export async function openLiveTagsManager(app) {
         }
         const job = status.job;
         const active = Boolean(status.active);
+        taskActive = active;
         const isScanJob = job?.kind === "scan";
         stateBadge.classList.toggle("is-active", active);
         stateBadge.classList.toggle("is-idle", !active);
@@ -703,6 +1061,11 @@ export async function openLiveTagsManager(app) {
         scanButton.disabled = active;
         for (const button of [translateButton, failedButton, allButton]) button.disabled = active || locale === "en";
         cancelButton.disabled = !active;
+        cancelButton.hidden = !active;
+        resumeButton.dataset.available = String(Boolean(status.resumable));
+        resumeButton.hidden = active || !status.resumable || activePage !== "overview";
+        scanButton.hidden = active || activePage !== "scan";
+        translateButton.hidden = active || activePage !== "translation";
         if (job) {
             message.textContent = job.error
                 ? localizeLiveTagsError(job.error_code, job.error, locale)
@@ -716,6 +1079,48 @@ export async function openLiveTagsManager(app) {
                     `${text.failed}: ${job.failed || 0}`,
                 ].join(" · ");
             progress.hidden = isScanJob;
+            translationProgress.hidden = isScanJob;
+            if (!isScanJob) {
+                const segmentTotal = Math.max((job.total || 0) + (job.cached || 0), 1);
+                const segmentValues = {
+                    cached: job.cached || 0,
+                    completed: Math.max((job.completed || 0) - (job.failed || 0), 0),
+                    failed: job.failed || 0,
+                    pending: Math.max((job.total || 0) - (job.completed || 0), 0),
+                };
+                for (const [key, value] of Object.entries(segmentValues)) {
+                    progressSegments[key].style.width = `${(value / segmentTotal) * 100}%`;
+                }
+            }
+            const details = status.details || {};
+            scanDetails.hidden = false;
+            detailValues.rate.textContent = `${Number(details.rate || 0).toFixed(1)}${text.perSecond}`;
+            if (isScanJob) {
+                detailLabels.candidates.textContent = text.scanCandidates;
+                detailLabels.partitions.textContent = text.scanPartitions;
+                detailValues.candidates.textContent = String(details.candidates || 0);
+                detailValues.partitions.textContent = `${details.completed_partitions || 0}/${details.total_partitions || 0}`;
+                detailValues.remaining.textContent = String(Math.max(
+                    (details.total_partitions || 0) - (details.completed_partitions || 0),
+                    0,
+                ));
+                categoryProgress.replaceChildren(...(details.categories || []).map(item => {
+                    const row = createElement("div", "autocomplete-plus-live-tags-category-progress-row");
+                    row.append(
+                        createElement("strong", "", getTagCategoryLabel(item.category, locale)),
+                        createElement("span", "", `${text.scanned}: ${item.scanned || 0}`),
+                        createElement("span", "", `${item.completed_partitions || 0}/${item.total_partitions || 0}`),
+                    );
+                    return row;
+                }));
+            } else {
+                detailLabels.candidates.textContent = text.cached;
+                detailLabels.partitions.textContent = text.completed;
+                detailValues.candidates.textContent = String(job.cached || 0);
+                detailValues.partitions.textContent = `${job.completed || 0}/${job.total || 0}`;
+                detailValues.remaining.textContent = String(Math.max((job.total || 0) - (job.completed || 0), 0));
+                categoryProgress.replaceChildren();
+            }
             if (!isScanJob && job.total > 0) {
                 progress.removeAttribute("data-indeterminate");
                 progress.value = Math.min((job.completed / job.total) * 100, 100);
@@ -734,11 +1139,14 @@ export async function openLiveTagsManager(app) {
             jobCounters.textContent = "";
             progress.hidden = false;
             progress.value = 0;
+            translationProgress.hidden = true;
+            scanDetails.hidden = true;
         }
         if (!active && pollTimer !== null) {
             clearInterval(pollTimer);
             pollTimer = null;
         }
+        refreshActionBar();
         return status;
     };
     const startPolling = () => {

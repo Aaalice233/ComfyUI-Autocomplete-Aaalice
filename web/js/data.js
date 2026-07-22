@@ -427,7 +427,10 @@ async function initializeDataFromCSV(csvListData, source) {
             return;
         }
 
-        const extraTagsFileList = csvListData[source].extra_tags || [];
+        const allExtraTags = csvListData[source].extra_tags || [];
+        const extraTagsFileList = csvListData[source].live_tags_active
+            ? allExtraTags.filter(filename => filename === "danbooru_tags_live.csv")
+            : allExtraTags;
         const extraCooccurrenceFileList = csvListData[source].extra_cooccurrence || [];
 
         const tagsUrl = `/autocomplete-plus/csv/${source}/tags`;
@@ -439,7 +442,7 @@ async function initializeDataFromCSV(csvListData, source) {
             for (let i = 0; i < extraTagsFileList.length; i++) {
                 promiseChain = promiseChain.then(() => loadTags(`${tagsUrl}/extra/${i}`, source));
             }
-            if (csvListData[source].base_tags) {
+            if (csvListData[source].base_tags && !csvListData[source].live_tags_active) {
                 promiseChain = promiseChain.then(() => loadTags(`${tagsUrl}/base`, source));
             }
             return promiseChain;

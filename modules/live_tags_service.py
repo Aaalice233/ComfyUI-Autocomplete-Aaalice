@@ -4,6 +4,7 @@ import json
 import math
 import os
 import random
+import time
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
@@ -102,9 +103,8 @@ class DanbooruClient:
         except (KeyError, TypeError, ValueError) as error:
             raise LiveTagsError("Danbooru returned an invalid tag ID", "danbooru_invalid_response") from error
 
-    async def iter_category(self, category_name, policy, id_range=None):
+    async def iter_category(self, category_name, policy, id_range=None, cursor=None):
         category_id = CATEGORY_IDS[category_name]
-        cursor = None
         while True:
             self._raise_if_cancelled()
             params = {
@@ -386,6 +386,7 @@ class LiveTagsManager:
         self._base_names = None
         self._base_count = 0
         self._base_mtime_ns = None
+        self._runtime_progress = None
         try:
             self._load_base_names()
         except LiveTagsError:
@@ -398,6 +399,26 @@ class LiveTagsManager:
     def save_config(self, raw_config):
         return mask_config(self.config_store.save(raw_config))
 
+    def tag_statistics(self, category=None, source="all", query="", limit=100, offset=0):
+        category_id = CATEGORY_IDS.get(category) if category else None
+        if category and category_id is None:
+            raise LiveTagsError("Unknown tag category", "statistics_filter_invalid")
+        limit = min(max(int(limit), 1), 200)
+        offset = max(int(offset), 0)
+        return {
+            "summary": self.store.tag_statistics(),
+            "list": self.store.tag_list(category_id, source, query.strip(), limit, offset),
+        }
+
+    def translation_dictionary(self, locale=None, query="", limit=100, offset=0):
+        normalized_locale = normalize_locale(locale) if locale else None
+        return self.store.translation_dictionary(
+            normalized_locale,
+            query.strip(),
+            min(max(int(limit), 1), 200),
+            max(int(offset), 0),
+        )
+
     def status(self, locale=None):
         config = self.config_store.load()
         normalized_locale = normalize_locale(locale)
@@ -405,17 +426,32 @@ class LiveTagsManager:
         statistics = self.store.statistics(normalized_locale, config["deepseek"]["batch_size"])
         statistics["base_tags"] = self._base_count
         job = self.store.latest_job()
+        resumable = self.store.latest_resumable_job()
+        details = None
+        if job:
+            if job["kind"] == "scan":
+                details = self.store.scan_progress(job["id"])
+            elif job["kind"] == "translate":
+                details = self.store.translation_queue_progress(job["id"])
+        if self._runtime_progress and job and self._runtime_progress["job_id"] == job["id"]:
+            elapsed = max(time.monotonic() - self._runtime_progress["started_at"], 0.001)
+            details = details or {}
+            details["rate"] = max(job["completed"] - self._runtime_progress["baseline"], 0) / elapsed
         return {
             "active": bool(self._task and not self._task.done()),
             "job": job,
             "statistics": statistics,
             "locale": normalized_locale,
             "csv_path": self.store.csv_path,
+            "details": details,
+            "resumable": resumable,
         }
 
     def start_scan(self):
         self._ensure_idle()
-        job_id = self.store.create_job("scan")
+        self.store.discard_resumable_jobs("scan")
+        config = self.config_store.load()
+        job_id = self.store.create_job("scan", options={"categories": config["categories"]})
         self._cancel_event = asyncio.Event()
         self._task = asyncio.create_task(self._run_scan(job_id))
         return job_id
@@ -434,10 +470,26 @@ class LiveTagsManager:
                 "Configure a DeepSeek API key before starting translation",
                 "deepseek_key_missing",
             )
-        job_id = self.store.create_job("translate", locale)
+        self.store.discard_resumable_jobs("translate")
+        job_id = self.store.create_job("translate", locale, mode=mode)
         self._cancel_event = asyncio.Event()
         self._task = asyncio.create_task(self._run_translation(job_id, locale, mode))
         return job_id
+
+    def resume_latest(self):
+        self._ensure_idle()
+        job = self.store.latest_resumable_job()
+        if not job:
+            raise LiveTagsError("No interrupted task can be resumed", "resume_not_available")
+        self._cancel_event = asyncio.Event()
+        self.store.update_job(job["id"], status="queued", phase="queued", error=None, error_code=None)
+        if job["kind"] == "scan":
+            self._task = asyncio.create_task(self._run_scan(job["id"], resume=True))
+        else:
+            self._task = asyncio.create_task(
+                self._run_translation(job["id"], job["locale"], job.get("mode") or "missing", resume=True)
+            )
+        return job["id"]
 
     def cancel(self):
         if not self._task or self._task.done():
@@ -452,15 +504,21 @@ class LiveTagsManager:
         if self._task and not self._task.done():
             raise JobConflictError("Another live tags task is already running")
 
-    async def _run_scan(self, job_id):
+    async def _run_scan(self, job_id, resume=False):
         self.store.update_job(job_id, status="running", phase="loading_base", message="Loading base CSV")
-        self.store.clear_staging(job_id)
+        if not resume:
+            self.store.clear_staging(job_id)
         try:
-            base_names = await asyncio.to_thread(self._load_base_names)
+            await asyncio.to_thread(self._load_base_names)
             config = self.config_store.load()
+            job = self.store.job(job_id)
+            options = json.loads(job["options_json"] or "{}")
+            categories = options.get("categories", config["categories"])
             timeout = aiohttp.ClientTimeout(total=60)
-            scanned = 0
-            candidates = 0
+            initial_progress = self.store.scan_progress(job_id)
+            scanned = initial_progress["scanned"]
+            candidates = initial_progress["candidates"]
+            self._runtime_progress = {"job_id": job_id, "started_at": time.monotonic(), "baseline": scanned}
             async with self.session_factory(timeout=timeout) as session:
                 scan_concurrency = config["danbooru"]["scan_concurrency"]
                 request_limiter = AdaptiveRequestLimiter(scan_concurrency)
@@ -470,41 +528,66 @@ class LiveTagsManager:
                     self._cancel_event,
                     request_limiter=request_limiter,
                 )
-                max_tag_id = await client.get_max_tag_id()
-                id_ranges = split_id_ranges(max_tag_id, DANBOORU_SCAN_SHARDS)
-                partitions = [
-                    (category_name, policy, id_range)
-                    for category_name, policy in config["categories"].items()
-                    if policy["mode"] != "disabled"
-                    for id_range in id_ranges
-                ]
+                if not self.store.pending_scan_partitions(job_id):
+                    max_tag_id = await client.get_max_tag_id()
+                    id_ranges = split_id_ranges(max_tag_id, DANBOORU_SCAN_SHARDS)
+                    enabled_categories = [name for name, policy in categories.items() if policy["mode"] != "disabled"]
+                    self.store.initialize_scan_partitions(job_id, enabled_categories, id_ranges)
+                partitions = self.store.pending_scan_partitions(job_id)
                 queue = asyncio.Queue()
                 for partition in partitions:
                     queue.put_nowait(partition)
                 counter_lock = asyncio.Lock()
                 stage_lock = asyncio.Lock()
+                last_live_export = 0.0
 
                 async def scan_worker():
-                    nonlocal scanned, candidates
+                    nonlocal scanned, candidates, last_live_export
                     while not self._cancel_event.is_set():
                         try:
-                            category_name, policy, id_range = queue.get_nowait()
+                            partition = queue.get_nowait()
                         except asyncio.QueueEmpty:
                             return
-                        async for page in client.iter_category(category_name, policy, id_range):
-                            new_tags = [tag for tag in page if tag["name"] not in base_names]
+                        category_name = partition["category"]
+                        policy = categories[category_name]
+                        id_range = (partition["range_start"], partition["range_end"])
+                        last_cursor = partition["cursor"]
+                        async for page in client.iter_category(category_name, policy, id_range, last_cursor):
+                            fetched_tags = page
                             # SQLite remains a single writer while network requests run concurrently.
                             async with stage_lock:
-                                await asyncio.to_thread(self.store.stage_tags, job_id, new_tags)
+                                await asyncio.to_thread(self.store.stage_tags, job_id, fetched_tags)
+                                last_cursor = min(tag["id"] for tag in page)
+                                self.store.checkpoint_scan_partition(
+                                    job_id,
+                                    category_name,
+                                    partition["range_start"],
+                                    last_cursor,
+                                    len(page),
+                                    len(fetched_tags),
+                                )
+                                now = time.monotonic()
+                                if now - last_live_export >= 2:
+                                    await asyncio.to_thread(self.store.export_csv, job_id)
+                                    last_live_export = now
                             async with counter_lock:
                                 scanned += len(page)
-                                candidates += len(new_tags)
+                                candidates += len(fetched_tags)
                                 self.store.update_job(
                                     job_id,
                                     phase="scanning",
                                     completed=scanned,
                                     message=f"Scanning {category_name}: {scanned} tags, {candidates} new",
                                 )
+                        self.store.checkpoint_scan_partition(
+                            job_id,
+                            category_name,
+                            partition["range_start"],
+                            last_cursor,
+                            0,
+                            0,
+                            done=True,
+                        )
                         queue.task_done()
 
                 workers = [
@@ -533,10 +616,10 @@ class LiveTagsManager:
                 message=f"Scan complete: {exported} new tags exported",
             )
         except RequestCancelled:
-            self.store.clear_staging(job_id)
-            self.store.update_job(job_id, status="cancelled", phase="cancelled", message="Scan cancelled")
+            await asyncio.to_thread(self.store.export_csv, job_id)
+            self.store.update_job(job_id, status="cancelled", phase="cancelled", message="Scan paused; progress was saved")
         except Exception as error:
-            self.store.clear_staging(job_id)
+            await asyncio.to_thread(self.store.export_csv, job_id)
             self.store.update_job(
                 job_id,
                 status="failed",
@@ -545,17 +628,31 @@ class LiveTagsManager:
                 error=str(error)[:2000],
                 error_code=getattr(error, "code", "live_tags_error"),
             )
+        finally:
+            self._runtime_progress = None
 
-    async def _run_translation(self, job_id, locale, mode):
+    async def _run_translation(self, job_id, locale, mode, resume=False):
         config = self.config_store.load()
         deepseek_config = config["deepseek"]
-        work, cached = self.store.translation_work(locale, mode)
-        total = len(work)
+        if resume:
+            work = self.store.pending_translation_work(job_id)
+            queue_progress = self.store.translation_queue_progress(job_id)
+            total = queue_progress["total"]
+            completed = queue_progress["completed"]
+            cached = 0
+        else:
+            work, cached = self.store.translation_work(locale, mode)
+            if mode == "all":
+                cached = 0
+            self.store.initialize_translation_queue(job_id, work)
+            total = len(work)
+            completed = 0
         self.store.update_job(
             job_id,
             status="running",
             phase="translating",
             total=total,
+            completed=completed,
             cached=cached,
             message=f"Preparing {total} tags",
         )
@@ -573,13 +670,13 @@ class LiveTagsManager:
         for batch in batches:
             queue.put_nowait(batch)
 
-        completed = 0
         failed = 0
         retries = 0
         export_checkpoint = 0
         counter_lock = asyncio.Lock()
         timeout = aiohttp.ClientTimeout(total=deepseek_config["timeout_seconds"])
         connector = aiohttp.TCPConnector(limit=deepseek_config["concurrency"])
+        self._runtime_progress = {"job_id": job_id, "started_at": time.monotonic(), "baseline": completed}
 
         try:
             async with self.session_factory(timeout=timeout, connector=connector) as session:
@@ -601,6 +698,7 @@ class LiveTagsManager:
                                     deepseek_config["system_prompt"],
                                     1,
                                 )
+                                self.store.complete_translation_items(job_id, translations)
 
                         result = await client.translate(batch, locale, save_partial)
                         async with self._writer_lock:
@@ -618,6 +716,10 @@ class LiveTagsManager:
                                 deepseek_config["system_prompt"],
                                 result.attempts,
                                 "Translation failed validation or exhausted retries",
+                            )
+                            self.store.complete_translation_items(
+                                job_id,
+                                [*result.translations, *result.failures],
                             )
                         async with counter_lock:
                             batch_completed = len(result.translations)
@@ -683,6 +785,8 @@ class LiveTagsManager:
                 error=str(error)[:2000],
                 error_code=getattr(error, "code", "live_tags_error"),
             )
+        finally:
+            self._runtime_progress = None
 
     def _load_base_names(self):
         try:
