@@ -7,7 +7,10 @@ import server
 from aiohttp import web
 
 from . import downloader as dl
-from .danbooru_service import DanbooruSearchService
+from .completion_cache_store import CompletionCacheStore
+from .completion_service import CompletionSearchService
+from .danbooru_service import DanbooruProvider, DanbooruRelatedTagProvider
+from .translation_config import OnlineServiceConfig
 from .translation_service import TranslationManager
 from .translation_store import TranslationStore
 
@@ -20,12 +23,20 @@ COOCCURRENCE_SUFFIX = "tags_cooccurrence"
 RETIRED_LIVE_TAGS_FILE = "danbooru_tags_live.csv"
 
 USER_DATA_DIR = os.path.join(folder_paths.get_user_directory(), "autocomplete-plus")
-TRANSLATION_CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
+ONLINE_SERVICE_CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
 TRANSLATION_DATABASE_FILE = os.path.join(USER_DATA_DIR, "translations.sqlite3")
+COMPLETION_CACHE_DATABASE_FILE = os.path.join(USER_DATA_DIR, "completion_cache.sqlite3")
 
 translation_store = TranslationStore(TRANSLATION_DATABASE_FILE)
-translation_manager = TranslationManager(TRANSLATION_CONFIG_FILE, translation_store)
-danbooru_search = DanbooruSearchService()
+online_service_config = OnlineServiceConfig(ONLINE_SERVICE_CONFIG_FILE)
+translation_manager = TranslationManager(
+    ONLINE_SERVICE_CONFIG_FILE,
+    translation_store,
+    config_store=online_service_config,
+)
+completion_cache_store = CompletionCacheStore(COMPLETION_CACHE_DATABASE_FILE)
+danbooru_search = CompletionSearchService(DanbooruProvider(), completion_cache_store)
+danbooru_related_search = CompletionSearchService(DanbooruRelatedTagProvider(), completion_cache_store)
 
 
 def get_csv_file_status():
@@ -145,10 +156,21 @@ async def save_translation_config(request):
 async def get_translation_status(_request):
     try:
         csv_status = get_csv_file_status()
+        danbooru_status = await danbooru_search.status()
+        related_status = await danbooru_related_search.status()
+        if related_status["state"] == "error":
+            completion_message = danbooru_status.get("message") or danbooru_status["state"]
+            danbooru_status["state"] = "error"
+            danbooru_status["message"] = (
+                f"Completion: {completion_message}; related tags: {related_status['message']}"
+            )
+        danbooru_status["related"] = {
+            key: value for key, value in related_status.items() if key != "cache"
+        }
         return web.json_response(
             {
                 **translation_manager.status(),
-                "danbooru": danbooru_search.status(),
+                "danbooru": danbooru_status,
                 "huggingface": {
                     "available": csv_status[DANBOORU_PREFIX]["base_tags"],
                 },
@@ -208,15 +230,81 @@ async def resolve_translations(request):
 
 @server.PromptServer.instance.routes.get("/autocomplete-plus/danbooru/search")
 async def search_danbooru(request):
+    if not online_service_config.load()["features"]["danbooru_completion"]:
+        return web.json_response(
+            {
+                "results": [],
+                "page_info": {"raw_count": 0, "result_count": 0, "has_more": False},
+                "cache": {"state": "disabled", "fetched_at": None},
+            }
+        )
     try:
-        results = await danbooru_search.search(
+        result_page = await danbooru_search.search(
             request.query.get("q", ""),
             request.query.get("limit", 10),
             request.query.get("page", 1),
+            request.query.get("refresh") == "1",
         )
     except (TypeError, ValueError):
-        results = []
-    return web.json_response({"results": results})
+        result_page = {
+            "items": [],
+            "raw_count": 0,
+            "has_more": False,
+            "cache": {"state": "error", "fetched_at": None},
+        }
+    return web.json_response(
+        {
+            "results": result_page["items"],
+            "page_info": {
+                "raw_count": result_page["raw_count"],
+                "result_count": len(result_page["items"]),
+                "has_more": result_page["has_more"],
+            },
+            "cache": result_page["cache"],
+        }
+    )
+
+
+@server.PromptServer.instance.routes.get("/autocomplete-plus/danbooru/related")
+async def get_related_danbooru_tags(request):
+    if not online_service_config.load()["features"]["danbooru_completion"]:
+        return web.json_response(
+            {
+                "results": [],
+                "page_info": {"raw_count": 0, "result_count": 0, "has_more": False},
+                "cache": {"state": "disabled", "fetched_at": None},
+            }
+        )
+    try:
+        result_page = await danbooru_related_search.search(
+            request.query.get("q", ""),
+            request.query.get("limit", 500),
+            1,
+            request.query.get("refresh") == "1",
+        )
+    except (TypeError, ValueError):
+        result_page = {
+            "items": [],
+            "raw_count": 0,
+            "has_more": False,
+            "cache": {"state": "error", "fetched_at": None},
+        }
+    return web.json_response(
+        {
+            "results": result_page["items"],
+            "page_info": {
+                "raw_count": result_page["raw_count"],
+                "result_count": len(result_page["items"]),
+                "has_more": False,
+            },
+            "cache": result_page["cache"],
+        }
+    )
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/danbooru/cache/clear")
+async def clear_danbooru_cache(_request):
+    return web.json_response({"deleted": await danbooru_search.clear_cache()})
 
 
 @server.PromptServer.instance.routes.get("/autocomplete-plus/embeddings")

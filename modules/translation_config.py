@@ -10,7 +10,11 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 DEFAULT_CONFIG = {
-    "version": 2,
+    "version": 3,
+    "features": {
+        "danbooru_completion": True,
+        "translation": True,
+    },
     "deepseek": {
         "api_key": "",
         "model": "deepseek-v4-flash",
@@ -34,7 +38,19 @@ def validate_config(raw_config, current_config=None):
         raise ValueError("Configuration must be an object")
 
     config = copy.deepcopy(current_config or DEFAULT_CONFIG)
+    config.setdefault("features", copy.deepcopy(DEFAULT_CONFIG["features"]))
+    config.setdefault("deepseek", copy.deepcopy(DEFAULT_CONFIG["deepseek"]))
     config["version"] = DEFAULT_CONFIG["version"]
+    raw_features = raw_config.get("features", {})
+    if not isinstance(raw_features, dict):
+        raise ValueError("features must be an object")
+    for key in ("danbooru_completion", "translation"):
+        if key not in raw_features:
+            continue
+        if not isinstance(raw_features[key], bool):
+            raise ValueError(f"features.{key} must be a boolean")
+        config["features"][key] = raw_features[key]
+
     raw_deepseek = raw_config.get("deepseek", {})
     if not isinstance(raw_deepseek, dict):
         raise ValueError("deepseek must be an object")
@@ -78,7 +94,7 @@ def mask_config(config):
     return masked
 
 
-class TranslationConfig:
+class OnlineServiceConfig:
     def __init__(self, path):
         self.path = path
 

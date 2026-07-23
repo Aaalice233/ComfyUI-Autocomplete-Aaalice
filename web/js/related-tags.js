@@ -1,9 +1,16 @@
 import { TagCategory, TagData, TagSource, autoCompleteData, getEnabledTagSourceInPriorityOrder } from './data.js';
 import { settingValues } from './settings.js';
-import { getTagCategoryLabel, renderTagNameWithCategoryIcon } from './tag-presentation.js';
+import {
+    createTagOriginMarkers,
+    getTagCategoryLabel,
+    renderTagNameWithCategoryIcon,
+} from './tag-presentation.js';
 import { applyTextInsertionEdit, buildRelatedTagInsertionEdit } from './tag-insertion.js';
 import { filterAliasesForLocale, getCurrentInterfaceLocale, getInterfaceText } from './localization.js';
+import { searchDanbooruRelatedTags } from './integrations/danbooru-provider.js';
 import { resolveCandidateTranslations } from './integrations/translation-provider.js';
+import { VirtualKeyedList } from './list-utils.js';
+import { mergeDuplicateCandidate } from './candidate-ranking.js';
 import {
     extractTagsFromTextArea,
     findAllTagPositions,
@@ -20,6 +27,8 @@ import {
 // --- RelatedTags Logic ---
 
 const relatedTagsCache = new WeakMap();
+const TRANSLATION_PREFETCH_LIMIT = 300;
+const DANBOORU_RELATED_LIMIT = 500;
 
 /**
  * Calculates the Jaccard similarity between two tags.
@@ -82,21 +91,10 @@ export function searchRelatedTags(tag, resultLimit = settingValues.maxRelatedTag
     }
 
     const cooccurrences = autoCompleteData[tagSource].cooccurrenceMap.get(tag);
-    let cache = relatedTagsCache.get(cooccurrences);
-    if (!cache) {
-        cache = new Map();
-        relatedTagsCache.set(cooccurrences, cache);
-    }
-    if (cache.has(resultLimit)) {
-        return cache.get(resultLimit);
-    }
+    const cached = relatedTagsCache.get(cooccurrences);
+    if (cached) return cached.slice(0, resultLimit);
 
     const relatedTags = [];
-    const evaluationLimit = Math.max(resultLimit * 20, 100);
-    let evaluated = 0;
-
-    // Co-occurrence CSV rows are loaded in descending frequency order. Evaluating
-    // a bounded head avoids scanning tens of thousands of pairs on every click.
     for (const [coTag] of cooccurrences) {
         // Skip the tag itself
         if (coTag === tag) continue;
@@ -116,18 +114,18 @@ export function searchRelatedTags(tag, resultLimit = settingValues.maxRelatedTag
             source: tagData.source,
             count: tagData.count,
             categoryText: tagData.categoryText,
-            hasWikiPage: tagData.hasWikiPage
+            hasWikiPage: tagData.hasWikiPage,
+            origin: tagData.origin,
+            origins: tagData.origins,
         });
-        evaluated++;
-        if (evaluated >= evaluationLimit) break;
     }
 
     // Sort by similarity (highest first)
     relatedTags.sort((a, b) => b.similarity - a.similarity);
 
     // Limit to max number of suggestions
+    relatedTagsCache.set(cooccurrences, relatedTags);
     const result = relatedTags.slice(0, resultLimit);
-    cache.set(resultLimit, result);
 
     if (settingValues._logprocessingTime) {
         const endTime = performance.now();
@@ -136,6 +134,32 @@ export function searchRelatedTags(tag, resultLimit = settingValues.maxRelatedTag
     }
 
     return result;
+}
+
+/**
+ * Keeps the complete local ranking stable and appends API-only candidates.
+ * This prevents a delayed online response from moving the user's selection or
+ * scroll position while still filling gaps in an older local snapshot.
+ */
+export function mergeRelatedTagCandidates(localCandidates, onlineCandidates, resultLimit) {
+    const safeLimit = Math.max(Number(resultLimit) || 0, 0);
+    if (safeLimit === 0) return [];
+
+    const merged = [];
+    const indexByTag = new Map();
+    for (const candidate of [...localCandidates, ...onlineCandidates]) {
+        const key = String(candidate?.tag || "").toLowerCase();
+        if (!key) continue;
+        const existingIndex = indexByTag.get(key);
+        if (existingIndex === undefined) {
+            if (merged.length >= safeLimit) continue;
+            indexByTag.set(key, merged.length);
+            merged.push(candidate);
+        } else {
+            merged[existingIndex] = mergeDuplicateCandidate(merged[existingIndex], candidate);
+        }
+    }
+    return merged;
 }
 
 /**
@@ -256,6 +280,16 @@ class RelatedTagsUI {
         this.tagsContainer = document.createElement('div');
         this.tagsContainer.id = 'related-tags-list';
         this.root.appendChild(this.tagsContainer);
+        this.virtualList = new VirtualKeyedList(this.tagsContainer, {
+            getKey: tagData => `${tagData.source}\0${tagData.tag}`,
+            getSignature: () => '',
+            createElement: tagData => this.#createTagElement(tagData, false),
+            updateElement: (row, _tagData, index) => {
+                row.dataset.index = index;
+                row.classList.toggle('autocomplete-plus-row-even', index % 2 === 0);
+                row.classList.toggle('autocomplete-plus-row-odd', index % 2 !== 0);
+            },
+        });
 
         // Add to DOM
         document.body.appendChild(this.root);
@@ -264,9 +298,9 @@ class RelatedTagsUI {
         this.selectedIndex = -1;
         this.relatedTags = [];
         this.translationRequestId = 0;
-        this._pageCount = 1;
-        this._hasMorePages = false;
-        this._loadingNextPage = false;
+        this.relatedRequestId = 0;
+        this.relatedAbortController = null;
+        this._scrollFrame = null;
 
         // Timer ID for auto-refresh
         this.autoRefreshTimerId = null;
@@ -302,16 +336,12 @@ class RelatedTagsUI {
         });
 
         this.tagsContainer.addEventListener('scroll', () => {
-            const remaining = this.tagsContainer.scrollHeight
-                - this.tagsContainer.scrollTop
-                - this.tagsContainer.clientHeight;
-            if (remaining <= 48) this.#loadNextPage();
-        }, { passive: true });
-        this.tagsContainer.addEventListener('wheel', (event) => {
-            const remaining = this.tagsContainer.scrollHeight
-                - this.tagsContainer.scrollTop
-                - this.tagsContainer.clientHeight;
-            if (event.deltaY > 0 && remaining <= 48) this.#loadNextPage();
+            if (this._scrollFrame !== null) return;
+            this._scrollFrame = requestAnimationFrame(() => {
+                this._scrollFrame = null;
+                this.virtualList.render();
+                this.#highlightItem(false);
+            });
         }, { passive: true });
     }
 
@@ -348,11 +378,14 @@ class RelatedTagsUI {
         }
 
         this.target = textareaElement;
+        this.tagsContainer.scrollTop = 0;
+        this.selectedIndex = -1;
+        const relatedRequestId = ++this.relatedRequestId;
+        this.relatedAbortController?.abort();
+        this.relatedAbortController = new AbortController();
 
-        this._pageCount = 1;
-        const pageSize = Math.max(Number(settingValues.maxRelatedTags) || 15, 1);
-        this.relatedTags = searchRelatedTags(this.currentTag, pageSize);
-        this._hasMorePages = this.relatedTags.length >= pageSize;
+        const resultLimit = Math.max(Number(settingValues.maxRelatedTags) || 25_000, 1);
+        this.relatedTags = searchRelatedTags(this.currentTag, resultLimit);
 
         // Click-triggered related tags should not replace useful autocomplete
         // suggestions with an empty panel. Manual triggers keep the empty-state
@@ -368,20 +401,29 @@ class RelatedTagsUI {
 
         // Make visible
         this.root.style.display = 'block';
+        this.virtualList.render();
 
         // This function must be called after the content is updated and the root is displayed.
         this.#highlightItem();
 
         const translationRequestId = ++this.translationRequestId;
-        const translationCandidates = [this.getCurrentTagData(), ...this.relatedTags].filter(Boolean);
+        const translationCandidates = [
+            this.getCurrentTagData(),
+            ...this.relatedTags.slice(0, TRANSLATION_PREFETCH_LIMIT),
+        ].filter(Boolean);
         resolveCandidateTranslations(translationCandidates, getCurrentInterfaceLocale()).then(() => {
             if (translationRequestId !== this.translationRequestId || textareaElement !== this.target) return;
-            const preserveScrollTop = this.tagsContainer.scrollTop;
             this.#updateHeader();
             this.#updateContent();
-            this.#highlightItem();
-            this.tagsContainer.scrollTop = preserveScrollTop;
+            this.#highlightItem(false);
         });
+        void this.#appendDanbooruRelatedTags(
+            this.currentTag,
+            resultLimit,
+            relatedRequestId,
+            textareaElement,
+            this.relatedAbortController.signal,
+        );
 
         // Update initialization status if not already done
         if (!autoCompleteData[TagSource.Danbooru].initialized) {
@@ -396,51 +438,14 @@ class RelatedTagsUI {
         return true;
     }
 
-    #loadNextPage() {
-        if (this._loadingNextPage || !this._hasMorePages || !this.target || !this.relatedTags) return;
-        const textareaElement = this.target;
-        const currentTag = this.currentTag;
-        const preserveScrollTop = this.tagsContainer.scrollTop;
-        this._loadingNextPage = true;
-
-        setTimeout(() => {
-            try {
-                if (textareaElement !== this.target || currentTag !== this.currentTag) return;
-                const previousLength = this.relatedTags.length;
-                const pageSize = Math.max(Number(settingValues.maxRelatedTags) || 15, 1);
-                const requestedLimit = (this._pageCount + 1) * pageSize;
-                const nextTags = searchRelatedTags(currentTag, requestedLimit);
-                this._hasMorePages = nextTags.length >= requestedLimit;
-                if (nextTags.length <= previousLength) return;
-
-                this._pageCount++;
-                this.relatedTags = nextTags;
-                this.#updateContent();
-                this.#highlightItem();
-                this.tagsContainer.scrollTop = preserveScrollTop;
-
-                const translationRequestId = ++this.translationRequestId;
-                resolveCandidateTranslations(
-                    nextTags.slice(previousLength),
-                    getCurrentInterfaceLocale(),
-                ).then(() => {
-                    if (translationRequestId !== this.translationRequestId || textareaElement !== this.target) return;
-                    const scrollTop = this.tagsContainer.scrollTop;
-                    this.#updateContent();
-                    this.#highlightItem();
-                    this.tagsContainer.scrollTop = scrollTop;
-                });
-            } finally {
-                this._loadingNextPage = false;
-            }
-        }, 0);
-    }
-
     /**
      * Hides the related tags UI.
      */
     hide() {
         this.translationRequestId++;
+        this.relatedRequestId++;
+        this.relatedAbortController?.abort();
+        this.relatedAbortController = null;
         if (this.autoRefreshTimerId) {
             clearTimeout(this.autoRefreshTimerId);
         }
@@ -448,6 +453,7 @@ class RelatedTagsUI {
         this.root.style.display = 'none';
         this.selectedIndex = -1;
         this.relatedTags = null;
+        this.virtualList.clear();
         this.target = null;
         // Reset pinned state when hiding, unless hide was called by escape key while pinned
         if (document.activeElement !== this.pinBtn) { // Avoid unpinning if pin button was just clicked to hide
@@ -461,11 +467,6 @@ class RelatedTagsUI {
      */
     navigate(direction) {
         if (this.relatedTags.length === 0) return;
-
-        if (direction > 0 && this.selectedIndex >= this.relatedTags.length - 1 && this._hasMorePages) {
-            this.#loadNextPage();
-            return;
-        }
 
         if (this.selectedIndex == -1) {
             // Initialize selection based on navigation direction
@@ -506,6 +507,50 @@ class RelatedTagsUI {
         }
 
         return null; // No valid selection
+    }
+
+    async #appendDanbooruRelatedTags(tag, resultLimit, requestId, textareaElement, signal) {
+        const resultPage = await searchDanbooruRelatedTags(tag, {
+            limit: Math.min(DANBOORU_RELATED_LIMIT, resultLimit),
+            signal,
+        });
+        if (
+            signal.aborted
+            || requestId !== this.relatedRequestId
+            || textareaElement !== this.target
+            || tag !== this.currentTag
+            || resultPage.candidates.length === 0
+        ) {
+            return;
+        }
+
+        const merged = mergeRelatedTagCandidates(this.relatedTags, resultPage.candidates, resultLimit);
+        const changed = merged.length !== this.relatedTags.length
+            || merged.some((candidate, index) => candidate !== this.relatedTags[index]);
+        if (!changed) return;
+
+        const previousTags = new Set(this.relatedTags.map(candidate => candidate.tag));
+        const appended = merged.filter(candidate => !previousTags.has(candidate.tag));
+        this.relatedTags = merged;
+        this.#updateContent();
+        this.virtualList.render();
+        this.#highlightItem(false);
+
+        const translationRequestId = this.translationRequestId;
+        await resolveCandidateTranslations(
+            appended.slice(0, TRANSLATION_PREFETCH_LIMIT),
+            getCurrentInterfaceLocale(),
+        );
+        if (
+            signal.aborted
+            || requestId !== this.relatedRequestId
+            || translationRequestId !== this.translationRequestId
+            || textareaElement !== this.target
+        ) {
+            return;
+        }
+        this.#updateContent();
+        this.#highlightItem(false);
     }
 
     /**
@@ -582,8 +627,6 @@ class RelatedTagsUI {
      * Updates the content of the related tags panel with the provided tags.
      */
     #updateContent() {
-        this.tagsContainer.innerHTML = '';
-
         if (!autoCompleteData[TagSource.Danbooru].initialized) {
             // Show loading message
             const messageDiv = document.createElement('div');
@@ -591,7 +634,7 @@ class RelatedTagsUI {
             messageDiv.textContent = getInterfaceText('initializingCooccurrence', {
                 progress: autoCompleteData[TagSource.Danbooru].baseLoadingProgress.cooccurrence,
             });
-            this.tagsContainer.appendChild(messageDiv);
+            this.tagsContainer.replaceChildren(messageDiv);
             return;
         }
 
@@ -600,21 +643,31 @@ class RelatedTagsUI {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'related-tags-message';
             messageDiv.textContent = getInterfaceText('noRelatedTags');
-            this.tagsContainer.appendChild(messageDiv);
+            this.tagsContainer.replaceChildren(messageDiv);
             return;
         }
 
         // Toggle column class based on settings
         this.tagsContainer.classList.toggle('no-alias', settingValues.hideAlias);
 
-        const existingTags = extractTagsFromTextArea(this.target);
+        const existingTags = new Set(extractTagsFromTextArea(this.target));
 
-        // Create tag rows
-        this.relatedTags.forEach(tagData => {
-            const isExisting = existingTags.includes(tagData.tag);
-            const tagRow = this.#createTagElement(tagData, isExisting);
-            this.tagsContainer.appendChild(tagRow);
-        });
+        this.virtualList.options.getSignature = tagData => [
+            tagData.source,
+            tagData.tag,
+            tagData.category,
+            tagData.count,
+            tagData.similarity,
+            tagData.origins?.join(','),
+            filterAliasesForLocale(tagData.alias).join(', '),
+            settingValues.hideAlias,
+            settingValues.tagSourceIconPosition,
+            existingTags.has(tagData.tag),
+        ].join('\0');
+        this.virtualList.options.createElement = tagData => (
+            this.#createTagElement(tagData, existingTags.has(tagData.tag))
+        );
+        this.virtualList.setItems(this.relatedTags);
     }
 
     /**
@@ -635,7 +688,8 @@ class RelatedTagsUI {
         // Tag name
         const tagName = document.createElement('span');
         tagName.className = 'related-tag-name';
-        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition);
+        tagName.title = tagData.tag;
+        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition, false);
 
         // grayout tag name if it already exists
         if (isExisting) {
@@ -670,6 +724,10 @@ class RelatedTagsUI {
         similarity.className = 'related-tag-similarity';
         similarity.textContent = `${(tagData.similarity * 100).toFixed(2)}%`;
 
+        const origins = document.createElement('span');
+        origins.className = 'autocomplete-plus-origin-cell';
+        origins.append(...createTagOriginMarkers(tagData));
+
         // Create tooltip with more info
         const localizedCategory = getTagCategoryLabel(categoryText);
         let tooltipText = `${getInterfaceText('similarity')}: ${(tagData.similarity * 100).toFixed(2)}%\n` +
@@ -688,6 +746,7 @@ class RelatedTagsUI {
         }
 
         tagRow.appendChild(similarity);
+        tagRow.appendChild(origins);
 
         return tagRow;
     }
@@ -702,8 +761,9 @@ class RelatedTagsUI {
         // Measure the element size without causing reflow
         this.root.style.visibility = 'hidden';
         this.root.style.display = 'block';
+        this.root.style.width = '';
         this.root.style.maxWidth = '';
-        this.tagsContainer.style.maxHeight = '';
+        this.tagsContainer.style.maxHeight = 'min(320px, calc(100vh - 24px))';
         const rootRect = this.root.getBoundingClientRect();
 
         // Get the optimal placement area
@@ -712,6 +772,7 @@ class RelatedTagsUI {
         // Apply position and size
         this.root.style.left = `${placementArea.x}px`;
         this.root.style.top = `${placementArea.y}px`;
+        this.root.style.width = `${placementArea.width}px`;
         this.root.style.maxWidth = `${placementArea.width}px`;
 
         const newHeaderRect = this.header.getBoundingClientRect();
@@ -726,17 +787,12 @@ class RelatedTagsUI {
     }
 
     /** Highlights the item (row) at the given index */
-    #highlightItem() {
+    #highlightItem(ensureVisible = true) {
         if (this.getSelectedTagData() === null) return; // No valid selection
 
-        const items = this.tagsContainer.children; // Get rows
-        for (let i = 0; i < items.length; i++) {
-            if (i === this.selectedIndex) {
-                items[i].classList.add('selected'); // Use CSS class for selection
-                items[i].scrollIntoView({ block: 'nearest' });
-            } else {
-                items[i].classList.remove('selected');
-            }
+        if (ensureVisible) this.virtualList.scrollToIndex(this.selectedIndex);
+        for (const item of this.tagsContainer.querySelectorAll('.related-tag-item')) {
+            item.classList.toggle('selected', Number(item.dataset.index) === this.selectedIndex);
         }
     }
 

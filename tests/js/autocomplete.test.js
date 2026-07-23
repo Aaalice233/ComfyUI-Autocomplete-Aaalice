@@ -21,7 +21,6 @@ const {
     searchWithFlexSearch,
     shouldUseFastSearch,
     getSearchCandidateLimit,
-    isNearScrollEnd,
     matchWord,
     getCurrentPartialTag,
     insertTagToTextArea
@@ -176,11 +175,6 @@ describe('Autocomplete Functions', () => {
         settingValues.maxSuggestions = 25;
         expect(getSearchCandidateLimit()).toBe(100);
         expect(getSearchCandidateLimit(45)).toBe(180);
-    });
-
-    test('detects the scroll threshold used to request the next page', () => {
-        expect(isNearScrollEnd({ scrollHeight: 500, scrollTop: 352, clientHeight: 100 })).toBe(true);
-        expect(isNearScrollEnd({ scrollHeight: 500, scrollTop: 300, clientHeight: 100 })).toBe(false);
     });
 
     test('coalesces rapid keystrokes before running indexed search', async () => {

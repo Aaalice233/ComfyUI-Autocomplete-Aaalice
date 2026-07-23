@@ -12,8 +12,10 @@
   --autocomplete-plus-text-color-disabled: var(--p-gray-400);
   --autocomplete-plus-list-color-even: var(--p-neutral-300);
   --autocomplete-plus-list-color-odd: var(--p-neutral-400);
-  --autocomplete-plus-list-color-selected: color-mix(in srgb, var(--p-blue-500) 30%, var(--p-neutral-200));
+ --autocomplete-plus-list-color-selected: color-mix(in srgb, var(--p-blue-500) 30%, var(--p-neutral-200));
   --autocomplete-plus-list-selection-accent: var(--p-blue-600);
+  --autocomplete-plus-popup-width: 42rem;
+  --autocomplete-plus-alias-column-width: 11rem;
   --wiki-icon-text-color: var(--input-text);
   --wiki-icon-opacity-normal: 0.7;
   --wiki-icon-opacity-hover: 1.0;
@@ -48,7 +50,7 @@ body.dark-theme {
   top: 0;
   left: 0;
   display: none;
-  width: fit-content;
+  width: min(var(--autocomplete-plus-popup-width), calc(100vw - 24px));
   background-color: var(--comfy-input-bg);
   color: var(--input-text);
 }
@@ -113,17 +115,22 @@ body.dark-theme {
   display: grid;
   overflow: hidden auto;
   box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+  contain: layout paint;
   grid-auto-rows: auto;
-  grid-template-columns: minmax(8rem, max-content) max-content minmax(6rem, 1fr) auto;
+  grid-template-columns: minmax(10rem, 1fr) 2.25rem var(--autocomplete-plus-alias-column-width) 4.5rem 5.25rem;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
 }
 
 #autocomplete-plus-list.no-alias {
-  grid-template-columns: max-content max-content auto;
+  grid-template-columns: minmax(10rem, 1fr) 2.25rem 4.5rem 5.25rem;
 }
 
 .autocomplete-plus-item {
   display: grid;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border-color);
+  block-size: 32px;
   cursor: pointer;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
@@ -135,11 +142,11 @@ body.dark-theme {
 }
 
 /* Alternating row colors */
-.autocomplete-plus-item:nth-child(even) {
+.autocomplete-plus-item.autocomplete-plus-row-even {
   background-color: var(--autocomplete-plus-list-color-even);
 }
 
-.autocomplete-plus-item:nth-child(odd) {
+.autocomplete-plus-item.autocomplete-plus-row-odd {
   background-color: var(--autocomplete-plus-list-color-odd);
 }
 
@@ -198,8 +205,8 @@ body.dark-theme {
   transform: scale(1.08);
 }
 
-.autocomplete-plus-item .autocomplete-plus-online-origin-marker,
-.related-tag-item .autocomplete-plus-online-origin-marker {
+.autocomplete-plus-item .autocomplete-plus-origin-marker,
+.related-tag-item .autocomplete-plus-origin-marker {
   display: inline-flex;
   height: 12px;
   flex: 0 0 auto;
@@ -221,11 +228,20 @@ body.dark-theme {
   transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
 }
 
-.autocomplete-plus-item .autocomplete-plus-online-origin-marker:hover,
-.related-tag-item .autocomplete-plus-online-origin-marker:hover {
+.autocomplete-plus-item .autocomplete-plus-origin-marker:hover,
+.related-tag-item .autocomplete-plus-origin-marker:hover {
   border-color: color-mix(in srgb, currentcolor 58%, transparent);
   background: color-mix(in srgb, currentcolor 14%, transparent);
   opacity: 1;
+}
+
+.autocomplete-plus-origin-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  white-space: nowrap;
 }
 
 .autocomplete-plus-item .autocomplete-plus-category-icon,
@@ -239,6 +255,7 @@ body.dark-theme {
 
 .autocomplete-plus-item .autocomplete-plus-alias {
   overflow: hidden;
+  min-width: 0;
   color: var(--descrip-text);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -277,7 +294,7 @@ body.dark-theme {
   top: 0;
   left: 0;
   display: none;
-  width: fit-content;
+  width: min(var(--autocomplete-plus-popup-width), calc(100vw - 24px));
   background-color: var(--comfy-input-bg);
   color: var(--input-text);
 }
@@ -414,18 +431,23 @@ body.dark-theme {
 #related-tags-list {
   display: grid;
   box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+  contain: layout paint;
   grid-auto-rows: auto;
-  grid-template-columns: max-content max-content 1fr auto;
+  grid-template-columns: minmax(10rem, 1fr) 2.25rem var(--autocomplete-plus-alias-column-width) 4.5rem 5.25rem;
+  overflow-anchor: none;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 #related-tags-list.no-alias {
-  grid-template-columns: max-content max-content auto;
+  grid-template-columns: minmax(10rem, 1fr) 2.25rem 4.5rem 5.25rem;
 }
 
 .related-tag-item {
   display: grid;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border-color);
+  block-size: 32px;
   cursor: pointer;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
@@ -437,11 +459,11 @@ body.dark-theme {
   padding: 4px 8px;
 }
 
-.related-tag-item:nth-child(even) {
+.related-tag-item.autocomplete-plus-row-even {
   background-color: var(--autocomplete-plus-list-color-even);
 }
 
-.related-tag-item:nth-child(odd) {
+.related-tag-item.autocomplete-plus-row-odd {
   background-color: var(--autocomplete-plus-list-color-odd);
 }
 
@@ -455,8 +477,11 @@ body.dark-theme {
 
 .related-tag-item .related-tag-name {
   display: inline-flex;
+  overflow: hidden;
+  min-width: 0;
   align-items: center;
   gap: 6px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -466,6 +491,7 @@ body.dark-theme {
 
 .related-tag-item .related-tag-alias {
   overflow: hidden;
+  min-width: 0;
   color: var(--descrip-text);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -630,8 +656,40 @@ body.dark-theme {
 
 .autocomplete-plus-online-status-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   padding-top: 10px;
+  gap: 8px;
+}
+
+.autocomplete-plus-virtual-spacer {
+  grid-column: 1 / -1;
+  min-block-size: 0;
+  pointer-events: none;
+}
+
+.autocomplete-plus-online-cache-summary {
+  margin-right: auto;
+  color: var(--descrip-text);
+  font-size: 0.78rem;
+}
+
+.autocomplete-plus-online-toggle-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.autocomplete-plus-online-toggle {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--comfy-input-bg);
+  cursor: pointer;
+  font-size: 0.82rem;
+  gap: 8px;
 }
 
 .autocomplete-plus-online-status-actions .p-button {
@@ -714,7 +772,8 @@ body.dark-theme {
 
 @media (width <= 620px) {
   .autocomplete-plus-online-status-grid,
-  .autocomplete-plus-online-grid {
+  .autocomplete-plus-online-grid,
+  .autocomplete-plus-online-toggle-grid {
     grid-template-columns: 1fr;
   }
 

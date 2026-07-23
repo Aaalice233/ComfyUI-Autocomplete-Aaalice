@@ -2,8 +2,10 @@
 
 import { jest } from '@jest/globals';
 import { openOnlineServicesPanel } from '../../web/js/online-settings.js';
+import { getOnlineServiceFeatures, updateOnlineServiceFeatures } from '../../web/js/online-service-state.js';
 
 const config = {
+    features: { danbooru_completion: true, translation: true },
     deepseek: {
         api_key: '********',
         api_key_configured: true,
@@ -21,12 +23,17 @@ const status = {
     cache_count: 12,
     configured: true,
     huggingface: { available: true },
-    danbooru: { state: 'idle', message: '' },
+    danbooru: {
+        state: 'idle',
+        message: '',
+        cache: { entries: 3, fresh_entries: 2, stale_entries: 1, size_bytes: 2048 },
+    },
     deepseek: { state: 'idle', message: '' },
 };
 
 describe('online services settings panel', () => {
     beforeEach(() => {
+        updateOnlineServiceFeatures(config.features);
         document.documentElement.lang = 'en';
         document.body.replaceChildren();
         HTMLDialogElement.prototype.showModal = jest.fn();
@@ -40,7 +47,27 @@ describe('online services settings panel', () => {
                 return { ok: false, status: 404, json: async () => ({}) };
             }
             if (String(url).startsWith('/autocomplete-plus/danbooru/search')) {
-                return { ok: true, json: async () => ({ results: [] }) };
+                return {
+                    ok: true,
+                    json: async () => ({
+                        results: [],
+                        page_info: { has_more: false },
+                        cache: { state: 'refreshed' },
+                    }),
+                };
+            }
+            if (String(url).startsWith('/autocomplete-plus/danbooru/related')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        results: [],
+                        page_info: { has_more: false },
+                        cache: { state: 'refreshed' },
+                    }),
+                };
+            }
+            if (String(url).endsWith('/danbooru/cache/clear')) {
+                return { ok: true, json: async () => ({ deleted: 3 }) };
             }
             if (String(url).endsWith('/models')) {
                 return { ok: true, json: async () => ({ models: ['deepseek-v4-flash', 'deepseek-v4-pro'] }) };
@@ -66,6 +93,7 @@ describe('online services settings panel', () => {
         expect(dialog.textContent).toContain('Waiting for first completion');
         expect(dialog.textContent).toContain('Waiting for fallback');
         expect(dialog.textContent).toContain('Waiting for model test');
+        expect(dialog.textContent).toContain('Persistent Danbooru result cache: 3 pages');
         expect(dialog.textContent).not.toMatch(/scan|resume|cancel/i);
     });
 
@@ -100,9 +128,39 @@ describe('online services settings panel', () => {
             expect.objectContaining({ cache: 'no-store' }),
         );
         expect(global.fetch).toHaveBeenCalledWith(
-            '/autocomplete-plus/danbooru/search?q=blue&limit=1',
+            '/autocomplete-plus/danbooru/search?q=blue&limit=1&refresh=1',
+            expect.any(Object),
+        );
+        expect(global.fetch).toHaveBeenCalledWith(
+            '/autocomplete-plus/danbooru/related?q=blue_archive&limit=1&refresh=1',
             expect.any(Object),
         );
         expect(checkButton.disabled).toBe(false);
+    });
+
+    test('saves independent Danbooru and translation switches into runtime state', async () => {
+        await openOnlineServicesPanel({});
+        const dialog = document.querySelector('dialog');
+        const toggles = [...dialog.querySelectorAll('input[type="checkbox"]')];
+        toggles[0].checked = false;
+        toggles[1].checked = false;
+        const saveButton = [...dialog.querySelectorAll('button')].find(button => button.textContent === 'Save');
+        global.fetch.mockImplementationOnce(async () => ({
+            ok: true,
+            json: async () => ({ ...config, features: { danbooru_completion: false, translation: false } }),
+        }));
+
+        saveButton.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const saveCall = global.fetch.mock.calls.find(([, options]) => options?.method === 'PUT');
+        expect(JSON.parse(saveCall[1].body).features).toEqual({
+            danbooru_completion: false,
+            translation: false,
+        });
+        expect(getOnlineServiceFeatures()).toEqual({
+            danbooru_completion: false,
+            translation: false,
+        });
     });
 });

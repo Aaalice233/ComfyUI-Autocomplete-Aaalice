@@ -11,6 +11,7 @@ import { createOnlineServicesSetting } from "./online-settings.js";
 import { isInputOwnedByAnotherExtension } from "./integrations/input-compatibility.js";
 import { getCurrentInterfaceLocale, getInterfaceText, setInterfaceLocalizationApp } from "./localization.js";
 import { loadTranslationCatalog } from "./integrations/translation-provider.js";
+import { loadOnlineServiceFeatures } from "./online-service-state.js";
 
 // --- Constants ---
 const id = "AutocompletePlus";
@@ -219,13 +220,6 @@ function initializeEventHandlers() {
 }
 
 /**
- * Add Miscellaneous settings to the settings screen
- */
-async function addExtraSettings() {
-    app.ui.settings.addSetting(createOnlineServicesSetting(app, name, id));
-}
-
-/**
  * Registration of the extension
  */
 app.registerExtension({
@@ -234,12 +228,10 @@ app.registerExtension({
     async setup() {
         initializeEventHandlers();
 
-        addExtraSettings();
-
         let rootPath = import.meta.url.replace("js/main.js", "");
         loadCSS(rootPath + "css/autocomplete-plus.css"); // Load CSS for autocomplete
 
-        await loadDataAsync();
+        await Promise.all([loadDataAsync(), loadOnlineServiceFeatures()]);
         void loadTranslationCatalog(getCurrentInterfaceLocale());
     },
 
@@ -286,6 +278,8 @@ app.registerExtension({
 
     // One the Settings Screen, displays reverse order in same category
     settings: [
+        createOnlineServicesSetting(app, name, id),
+
         // --- Tag source Settings ---
         {
             id: id + ".TagSource.IconPosition",
@@ -403,17 +397,17 @@ app.registerExtension({
             }
         },
         {
-            id: id + ".Autocompletion.MaxSuggestions",
-            name: "Suggestions per page",
-            tooltip: "Number of autocomplete rows loaded at a time while scrolling.",
+            id: id + ".Autocompletion.MaximumResults",
+            name: "Maximum autocomplete results",
+            tooltip: "Safety limit for the complete in-memory result snapshot. Only visible rows are rendered.",
             type: "slider",
             attrs: {
-                min: 5,
-                max: 50,
-                step: 5,
+                min: 100,
+                max: 2000,
+                step: 100,
             },
-            defaultValue: 15,
-            category: [name, "Autocompletion", "Max suggestions"],
+            defaultValue: 1000,
+            category: [name, "Autocompletion", "Maximum results"],
             onChange: (newVal, oldVal) => {
                 settingValues.maxSuggestions = newVal;
             }
@@ -455,17 +449,17 @@ app.registerExtension({
             }
         },
         {
-            id: id + ".RelatedTags.MaxRelatedTags",
-            name: "Co-occurrence tags per page",
-            tooltip: "Number of co-occurrence rows loaded at a time while scrolling.",
+            id: id + ".RelatedTags.MaximumResults",
+            name: "Maximum co-occurrence results",
+            tooltip: "Safety limit for the complete in-memory co-occurrence snapshot. Only visible rows are rendered.",
             type: "slider",
             attrs: {
-                min: 5,
-                max: 100,
-                step: 5,
+                min: 500,
+                max: 25000,
+                step: 500,
             },
-            defaultValue: 15,
-            category: [name, "Related Tags", "Max related tags"],
+            defaultValue: 25000,
+            category: [name, "Related Tags", "Maximum results"],
             onChange: (newVal, oldVal) => {
                 settingValues.maxRelatedTags = newVal;
             }

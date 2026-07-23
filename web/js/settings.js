@@ -6,7 +6,7 @@ export const settingValues = {
 
     // Autocomplete feature settings
     enabled: true,
-    maxSuggestions: 15,
+    maxSuggestions: 1000,
     enableModels: true, // Enable Lora and Embedding suggestions
     useFastSearch: true,
     replaceUnderscoreWithSpace: true, // Replace underscores with spaces in tag insertion
@@ -18,7 +18,7 @@ export const settingValues = {
 
     // Related tags feature settings
     enableRelatedTags: true,
-    maxRelatedTags: 15,
+    maxRelatedTags: 25000,
     relatedTagsDisplayPosition: 'horizontal', // 'horizontal' or 'vertical'
     relatedTagsTriggerMode: 'click', // Options: 'click', 'ctrl+Click'
 

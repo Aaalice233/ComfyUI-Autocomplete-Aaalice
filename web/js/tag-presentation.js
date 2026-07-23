@@ -3,6 +3,7 @@ import {
     getInterfaceText,
     normalizeInterfaceLocale,
 } from './localization.js';
+import { getCandidateOrigins } from './candidate-ranking.js';
 
 export { getCurrentInterfaceLocale, normalizeInterfaceLocale } from './localization.js';
 
@@ -106,29 +107,45 @@ export function createTagCategoryIcon(tagData, className = '') {
     return container;
 }
 
-export function createTagOriginMarker(tagData) {
-    if (tagData?.origin !== 'danbooru_api') return null;
-    const tooltip = getInterfaceText('danbooruOnlineFallback');
+const ORIGIN_MARKERS = {
+    csv: { label: 'CSV', tooltipKey: 'csvOrigin' },
+    lora_manager: { label: 'LM', tooltipKey: 'loraManagerOrigin' },
+    danbooru_api: { label: 'API', tooltipKey: 'danbooruOnlineFallback' },
+};
+
+function createOriginMarker(origin) {
+    const markerConfig = ORIGIN_MARKERS[origin];
+    if (!markerConfig) return null;
+    const tooltip = getInterfaceText(markerConfig.tooltipKey);
     const marker = document.createElement('span');
-    marker.className = 'autocomplete-plus-online-origin-marker';
-    marker.dataset.tagOrigin = 'danbooru_api';
+    marker.className = 'autocomplete-plus-origin-marker';
+    marker.dataset.tagOrigin = origin;
     marker.title = tooltip;
     marker.setAttribute('role', 'img');
     marker.setAttribute('aria-label', tooltip);
-    marker.textContent = 'API';
+    marker.textContent = markerConfig.label;
     return marker;
 }
 
-export function renderTagNameWithCategoryIcon(element, tagData, position = 'left') {
+export function createTagOriginMarkers(tagData) {
+    return getCandidateOrigins(tagData)
+        .map(createOriginMarker)
+        .filter(Boolean);
+}
+
+export function createTagOriginMarker(tagData) {
+    return createTagOriginMarkers(tagData)[0] || null;
+}
+
+export function renderTagNameWithCategoryIcon(element, tagData, position = 'left', includeOrigins = true) {
     element.textContent = '';
     const tagName = String(tagData?.tag || '');
-    const originMarker = createTagOriginMarker(tagData);
     const text = document.createElement('span');
     text.className = 'autocomplete-plus-tag-text';
     text.textContent = tagName;
     if (!['left', 'right'].includes(position)) {
         element.append(text);
-        if (originMarker) element.append(originMarker);
+        if (includeOrigins) element.append(...createTagOriginMarkers(tagData));
         return;
     }
 
@@ -138,5 +155,5 @@ export function renderTagNameWithCategoryIcon(element, tagData, position = 'left
     } else {
         element.append(text, icon);
     }
-    if (originMarker) element.append(originMarker);
+    if (includeOrigins) element.append(...createTagOriginMarkers(tagData));
 }

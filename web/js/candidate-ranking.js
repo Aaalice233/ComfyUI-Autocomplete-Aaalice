@@ -1,3 +1,5 @@
+import { isDanbooruCompletionEnabled } from './online-service-state.js';
+
 function normalizeComparableText(value) {
     return String(value || '')
         .trim()
@@ -54,17 +56,33 @@ export function getNormalizedPopularity(candidate, sourceMaxCounts = {}) {
     return Math.log1p(count) / Math.log1p(sourceMaximum);
 }
 
-function mergeDuplicateCandidate(primary, duplicate) {
+export function getCandidateOrigins(candidate) {
+    const origins = Array.isArray(candidate?.origins)
+        ? candidate.origins
+        : [candidate?.origin];
+    return [...new Set(origins.filter(Boolean))];
+}
+
+export function mergeDuplicateCandidate(primary, duplicate) {
     const primaryAliases = Array.isArray(primary.alias) ? primary.alias : [];
     const duplicateAliases = Array.isArray(duplicate.alias) ? duplicate.alias : [];
     const aliases = [...new Set([...primaryAliases, ...duplicateAliases].filter(Boolean))];
+    const primaryOrigins = getCandidateOrigins(primary);
+    const origins = [...new Set([...primaryOrigins, ...getCandidateOrigins(duplicate)])];
     const sameSource = primary.source === duplicate.source;
     const count = sameSource ? Math.max(Number(primary.count) || 0, Number(duplicate.count) || 0) : primary.count;
-    if (aliases.length === primaryAliases.length && count === primary.count) return primary;
+    if (
+        aliases.length === primaryAliases.length
+        && count === primary.count
+        && origins.length === primaryOrigins.length
+    ) {
+        return primary;
+    }
 
     return Object.assign(Object.create(Object.getPrototypeOf(primary)), primary, {
         alias: aliases,
         count,
+        origins,
     });
 }
 
@@ -92,8 +110,11 @@ export function rankCompletionCandidates(candidates, queryVariations, options = 
     } = options;
     const sourceRanks = new Map(sourcePriority.map((source, index) => [source, index]));
 
-    return mergeDuplicateCandidates(candidates)
-        .filter(candidate => candidate.origin !== "danbooru_api" || Number(candidate.count) > 0)
+    const eligibleCandidates = candidates
+        .filter(candidate => candidate.origin !== "danbooru_api" || isDanbooruCompletionEnabled())
+        .filter(candidate => candidate.origin !== "danbooru_api" || Number(candidate.count) > 0);
+
+    return mergeDuplicateCandidates(eligibleCandidates)
         .map((candidate, originalIndex) => ({
             candidate,
             originalIndex,

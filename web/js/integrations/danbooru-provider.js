@@ -1,30 +1,34 @@
 import { TagData, TagSource } from "../data.js";
+import { isDanbooruCompletionEnabled } from "../online-service-state.js";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 100;
 const cache = new Map();
+const relatedCache = new Map();
+const emptyPage = (state = "skipped") => ({ candidates: [], hasMore: false, cacheState: state });
 
-function getCached(key) {
-    const entry = cache.get(key);
+function getCached(key, targetCache = cache) {
+    const entry = targetCache.get(key);
     if (!entry || entry.expiresAt <= Date.now()) {
-        cache.delete(key);
+        targetCache.delete(key);
         return null;
     }
-    cache.delete(key);
-    cache.set(key, entry);
+    targetCache.delete(key);
+    targetCache.set(key, entry);
     return entry.results;
 }
 
-function setCached(key, results) {
-    cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, results });
-    while (cache.size > MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value);
+function setCached(key, results, targetCache = cache) {
+    targetCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, results });
+    while (targetCache.size > MAX_CACHE_ENTRIES) targetCache.delete(targetCache.keys().next().value);
 }
 
 export async function searchDanbooruCandidates(partialTag, options = {}) {
+    if (!isDanbooruCompletionEnabled()) return emptyPage("disabled");
     const { limit = 10, page = 1, fetchImpl = fetch, signal } = options;
     const normalized = String(partialTag || "").trim().toLowerCase().replaceAll(" ", "_");
-    if ((normalized.match(/[a-z0-9]/gi) || []).length < 2 || limit <= 0) return [];
-    const safeLimit = Math.min(Math.max(Number(limit) || 1, 1), 50);
+    if ((normalized.match(/[a-z0-9]/gi) || []).length < 2 || limit <= 0) return emptyPage();
+    const safeLimit = Math.min(Math.max(Number(limit) || 1, 1), 200);
     const safePage = Math.min(Math.max(Number(page) || 1, 1), 1000);
     const key = `${normalized}\0${safeLimit}\0${safePage}`;
     const cached = getCached(key);
@@ -40,9 +44,9 @@ export async function searchDanbooruCandidates(partialTag, options = {}) {
             cache: "no-store",
             signal,
         });
-        if (!response.ok) return [];
+        if (!response.ok) return emptyPage("error");
         const payload = await response.json();
-        const results = (Array.isArray(payload.results) ? payload.results : []).flatMap(item => {
+        const candidates = (Array.isArray(payload.results) ? payload.results : []).flatMap(item => {
             const postCount = Number(item?.post_count) || 0;
             if (!item?.name || !Number.isInteger(Number(item.category)) || postCount <= 0) return [];
             return [new TagData(
@@ -54,11 +58,76 @@ export async function searchDanbooruCandidates(partialTag, options = {}) {
                 "danbooru_api",
             )];
         });
-        setCached(key, results);
-        return results;
+        const resultPage = {
+            candidates,
+            hasMore: payload.page_info?.has_more ?? candidates.length >= safeLimit,
+            cacheState: payload.cache?.state || "unknown",
+        };
+        setCached(key, resultPage);
+        return resultPage;
     } catch (error) {
-        return [];
+        return emptyPage("error");
     }
 }
 
-export const __test__ = { cache, getCached, setCached };
+export async function searchDanbooruRelatedTags(tag, options = {}) {
+    if (!isDanbooruCompletionEnabled()) return emptyPage("disabled");
+    const { limit = 500, fetchImpl = fetch, signal } = options;
+    const normalized = String(tag || "").trim().toLowerCase().replaceAll(" ", "_").replaceAll("*", "");
+    if ((normalized.match(/[a-z0-9]/gi) || []).length < 2 || limit <= 0) return emptyPage();
+    const safeLimit = Math.min(Math.max(Number(limit) || 1, 1), 500);
+    const key = `${normalized}\0${safeLimit}`;
+    const cached = getCached(key, relatedCache);
+    if (cached) return cached;
+
+    try {
+        const params = new URLSearchParams({ q: normalized, limit: String(safeLimit) });
+        const response = await fetchImpl(`/autocomplete-plus/danbooru/related?${params}`, {
+            cache: "no-store",
+            signal,
+        });
+        if (!response.ok) return emptyPage("error");
+        const payload = await response.json();
+        const candidates = (Array.isArray(payload.results) ? payload.results : []).flatMap(item => {
+            const category = Number(item?.category);
+            const postCount = Number(item?.post_count) || 0;
+            const similarity = Number(item?.similarity);
+            if (
+                !item?.name
+                || !Number.isInteger(category)
+                || postCount <= 0
+                || !Number.isFinite(similarity)
+                || similarity < 0
+                || similarity > 1
+            ) {
+                return [];
+            }
+            const candidate = new TagData(
+                item.name,
+                category,
+                postCount,
+                [],
+                TagSource.Danbooru,
+                "danbooru_api",
+            );
+            candidate.similarity = similarity;
+            return [candidate];
+        });
+        const resultPage = {
+            candidates,
+            hasMore: false,
+            cacheState: payload.cache?.state || "unknown",
+        };
+        setCached(key, resultPage, relatedCache);
+        return resultPage;
+    } catch {
+        return emptyPage("error");
+    }
+}
+
+export function clearDanbooruSessionCache() {
+    cache.clear();
+    relatedCache.clear();
+}
+
+export const __test__ = { cache, relatedCache, getCached, setCached };

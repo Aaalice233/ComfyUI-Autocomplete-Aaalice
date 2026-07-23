@@ -62,6 +62,9 @@ describe('runtime UI localization', () => {
             'count',
             'category',
             'alias',
+            'danbooruOnlineFallback',
+            'loraManagerOrigin',
+            'csvOrigin',
             'similarity',
         ]) {
             expect(getInterfaceText(key, { progress: 0 }, locale)).not.toBe(key);

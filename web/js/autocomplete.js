@@ -27,9 +27,14 @@ import {
 } from './integrations/lora-manager-provider.js';
 import { searchDanbooruCandidates } from './integrations/danbooru-provider.js';
 import { resolveCandidateTranslations } from './integrations/translation-provider.js';
-import { getTagCategoryLabel, renderTagNameWithCategoryIcon } from './tag-presentation.js';
+import {
+    createTagOriginMarkers,
+    getTagCategoryLabel,
+    renderTagNameWithCategoryIcon,
+} from './tag-presentation.js';
 import { rankCompletionCandidates } from './candidate-ranking.js';
 import { applyTextInsertionEdit, buildAutocompleteInsertionEdit } from './tag-insertion.js';
+import { VirtualKeyedList } from './list-utils.js';
 import {
     filterAliasesForLocale,
     getCurrentInterfaceLocale,
@@ -38,10 +43,8 @@ import {
 } from './localization.js';
 
 export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
-
-function isNearScrollEnd(element, threshold = 48) {
-    return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
-}
+const TRANSLATION_PREFETCH_LIMIT = 200;
+const TRANSLATION_PREFETCH_DELAY_MS = 300;
 
 // --- Autocomplete Logic ---
 
@@ -389,6 +392,16 @@ class AutocompleteUI {
         this.tagsList = document.createElement('div');
         this.tagsList.id = 'autocomplete-plus-list';
         this.root.appendChild(this.tagsList);
+        this.virtualList = new VirtualKeyedList(this.tagsList, {
+            getKey: tagData => `${tagData.source}\0${tagData.tag}`,
+            getSignature: () => '',
+            createElement: (tagData, index) => this.#createTagElement(tagData, index, false),
+            updateElement: (row, _tagData, index) => {
+                row.dataset.index = index;
+                row.classList.toggle('autocomplete-plus-row-even', index % 2 === 0);
+                row.classList.toggle('autocomplete-plus-row-odd', index % 2 !== 0);
+            },
+        });
 
         // Add to DOM
         document.body.appendChild(this.root);
@@ -398,18 +411,17 @@ class AutocompleteUI {
         this.candidates = [];
         this._requestId = 0;
         this._abortController = null;
-        this._pageCount = 1;
-        this._hasMorePages = false;
-        this._loadingNextPage = false;
-        this._onlineCandidates = [];
-        this._nextDanbooruPage = 1;
-        this._danbooruExhausted = false;
+        this._translationTimer = null;
+        this._translationRequested = new Set();
+        this._scrollFrame = null;
 
         this.tagsList.addEventListener('scroll', () => {
-            if (isNearScrollEnd(this.tagsList)) this.#loadNextPage();
-        }, { passive: true });
-        this.tagsList.addEventListener('wheel', (event) => {
-            if (event.deltaY > 0 && isNearScrollEnd(this.tagsList)) this.#loadNextPage();
+            if (this._scrollFrame !== null) return;
+            this._scrollFrame = requestAnimationFrame(() => {
+                this._scrollFrame = null;
+                this.virtualList.render();
+                this.#highlightItem(false);
+            });
         }, { passive: true });
 
         // Add event listener for clicks on items
@@ -447,43 +459,34 @@ class AutocompleteUI {
      * @returns 
      */
     async updateDisplay(textareaElement) {
-        this._pageCount = 1;
-        this._hasMorePages = false;
-        this._loadingNextPage = false;
-        this._onlineCandidates = [];
-        this._nextDanbooruPage = 1;
-        this._danbooruExhausted = false;
-        return this.#updateDisplayPage(textareaElement, false, null);
+        this.tagsList.scrollTop = 0;
+        this.selectedIndex = -1;
+        this._translationRequested.clear();
+        clearTimeout(this._translationTimer);
+        this._translationTimer = null;
+        return this.#updateDisplaySnapshot(textareaElement);
     }
 
-    async #updateDisplayPage(textareaElement, pagination, preserveScrollTop) {
+    async #updateDisplaySnapshot(textareaElement) {
         const requestId = ++this._requestId;
         this._abortController?.abort();
         this._abortController = new AbortController();
-        const pageSize = Math.max(Number(settingValues.maxSuggestions) || 15, 1);
-        const requestedLimit = this._pageCount * pageSize;
+        const resultLimit = Math.max(Number(settingValues.maxSuggestions) || 1000, 1);
 
-        const localCandidates = searchCompletionCandidates(textareaElement, requestedLimit);
+        const localCandidates = searchCompletionCandidates(textareaElement, resultLimit);
         this.target = textareaElement;
         const partialTag = getCurrentPartialTag(textareaElement);
         const isModelQuery = isExplicitLoraManagerQuery(partialTag);
         const sources = getEnabledTagSourceInPriorityOrder();
         const queryVariations = createQueryVariations(partialTag);
-        this.candidates = this._onlineCandidates.length > 0
-            ? rankCandidates(
-                [...localCandidates, ...this._onlineCandidates],
-                queryVariations,
-                sources,
-                requestedLimit,
-            )
-            : localCandidates;
+        this.candidates = localCandidates;
 
         if (!isModelQuery) {
-            this.#enrichCandidateTranslations(localCandidates, requestId, textareaElement);
+            this.#scheduleTranslationPrefetch(localCandidates, requestId, textareaElement);
         }
 
         if (this.candidates.length > 0) {
-            this.#displayCandidates(preserveScrollTop);
+            this.#displayCandidates(true);
         } else {
             this.#hideDisplay();
         }
@@ -491,82 +494,61 @@ class AutocompleteUI {
         const invalidPrefix = ["#", "/"].some(prefix => partialTag.startsWith(prefix));
         if (!partialTag || invalidPrefix || isLongText(partialTag)) return;
 
-        const supplemental = await searchLoraManagerCandidates(partialTag, {
-            limit: requestedLimit,
-            mode: settingValues.loraManagerIntegration,
-            tagSource: settingValues.tagSource,
-            includeModels: settingValues.enableModels,
-            signal: this._abortController.signal,
-        });
+        const allowsDanbooru = ["all", "danbooru"].includes(settingValues.tagSource);
+        const shouldQueryDanbooru = !isModelQuery && allowsDanbooru;
+        const [supplemental, onlinePage] = await Promise.all([
+            searchLoraManagerCandidates(partialTag, {
+                limit: Math.min(resultLimit, 100),
+                mode: settingValues.loraManagerIntegration,
+                tagSource: settingValues.tagSource,
+                includeModels: settingValues.enableModels,
+                signal: this._abortController.signal,
+            }),
+            shouldQueryDanbooru
+                ? searchDanbooruCandidates(partialTag, {
+                    limit: Math.min(resultLimit, 200),
+                    page: 1,
+                    signal: this._abortController.signal,
+                })
+                : Promise.resolve({ candidates: [], hasMore: false, cacheState: "skipped" }),
+        ]);
         if (requestId !== this._requestId || textareaElement !== this.target) return;
 
-        let combined = [...localCandidates, ...supplemental, ...this._onlineCandidates];
-        this.candidates = rankCandidates(combined, queryVariations, sources, requestedLimit);
+        const online = onlinePage.candidates;
+        const combined = [...localCandidates, ...supplemental, ...online];
+        this.candidates = rankCandidates(combined, queryVariations, sources, resultLimit);
         if (!isModelQuery) {
-            this.#enrichCandidateTranslations(supplemental, requestId, textareaElement);
-        }
-        if (this.candidates.length > 0) this.#displayCandidates(preserveScrollTop);
-
-        const allowsDanbooru = ["all", "danbooru"].includes(settingValues.tagSource);
-        const remaining = requestedLimit - this.candidates.length;
-        const shouldLoadOnline = remaining > 0 || pagination;
-        if (!isModelQuery && allowsDanbooru && shouldLoadOnline && !this._danbooruExhausted) {
-            const online = await searchDanbooruCandidates(partialTag, {
-                limit: pageSize,
-                page: this._nextDanbooruPage,
-                signal: this._abortController.signal,
-            });
-            if (requestId !== this._requestId || textareaElement !== this.target) return;
-            this._onlineCandidates.push(...online);
-            this._nextDanbooruPage++;
-            this._danbooruExhausted = online.length < pageSize;
-            combined = [...localCandidates, ...supplemental, ...this._onlineCandidates];
-            this.candidates = rankCandidates(
-                combined,
-                queryVariations,
-                sources,
-                requestedLimit,
+            this.#scheduleTranslationPrefetch(
+                this.candidates,
+                requestId,
+                textareaElement,
             );
-            this.#enrichCandidateTranslations(online, requestId, textareaElement);
-            if (this.candidates.length > 0) this.#displayCandidates(preserveScrollTop);
         }
-
-        const supplementalCanGrow = requestedLimit < 100 && supplemental.length >= requestedLimit;
-        const onlineCanGrow = !isModelQuery && allowsDanbooru && !this._danbooruExhausted;
-        this._hasMorePages = localCandidates.length >= requestedLimit
-            || supplementalCanGrow
-            || onlineCanGrow;
+        if (this.candidates.length > 0) this.#displayCandidates(false);
     }
 
-    #loadNextPage() {
-        if (this._loadingNextPage || !this._hasMorePages || !this.target) return;
-        const textareaElement = this.target;
-        const partialTag = getCurrentPartialTag(textareaElement);
-        const preserveScrollTop = this.tagsList.scrollTop;
-        this._loadingNextPage = true;
-
-        setTimeout(async () => {
-            try {
-                if (textareaElement !== this.target || partialTag !== getCurrentPartialTag(textareaElement)) return;
-                this._pageCount++;
-                await this.#updateDisplayPage(textareaElement, true, preserveScrollTop);
-            } finally {
-                this._loadingNextPage = false;
-            }
-        }, 0);
-    }
-
-    #enrichCandidateTranslations(candidates, requestId, textareaElement) {
-        if (candidates.length <= 0) return;
-        void resolveCandidateTranslations(candidates, getCurrentInterfaceLocale()).then(() => {
-            if (requestId !== this._requestId || textareaElement !== this.target) return;
-            if (this.candidates.length > 0) this.#displayCandidates(this.tagsList.scrollTop);
-        }).catch(() => {
-            // Translation enrichment is optional and must not interrupt typing.
+    #scheduleTranslationPrefetch(candidates, requestId, textareaElement) {
+        const pending = candidates.slice(0, TRANSLATION_PREFETCH_LIMIT).filter(candidate => {
+            const key = `${candidate.source}\0${candidate.tag}`;
+            return !this._translationRequested.has(key);
         });
+        if (pending.length <= 0) return;
+        clearTimeout(this._translationTimer);
+        this._translationTimer = setTimeout(() => {
+            this._translationTimer = null;
+            for (const candidate of pending) {
+                this._translationRequested.add(`${candidate.source}\0${candidate.tag}`);
+            }
+            void resolveCandidateTranslations(pending, getCurrentInterfaceLocale()).then(() => {
+                if (requestId !== this._requestId || textareaElement !== this.target) return;
+                if (this.candidates.length > 0) this.#displayCandidates(false);
+            }).catch(() => {
+                // Translation enrichment is optional and must not interrupt typing.
+            });
+        }, TRANSLATION_PREFETCH_DELAY_MS);
     }
 
-    #displayCandidates(preserveScrollTop = null) {
+    #displayCandidates(updatePosition = false) {
         if (!this.target || this.candidates.length <= 0) {
             this.#hideDisplay();
             return;
@@ -579,20 +561,21 @@ class AutocompleteUI {
         this.#updateContent();
 
         // Calculate caret position using the helper function (returns viewport-relative coordinates)
-        if (preserveScrollTop === null) this.#updatePosition();
+        if (updatePosition) this.#updatePosition();
 
         this.root.style.display = 'block'; // Make it visible
+        this.virtualList.render();
 
         // Highlight the selected item
         // This function must be called after the route has been displayed, in order to scroll the highlighted item into view.
-        this.#highlightItem();
-        if (preserveScrollTop !== null) this.tagsList.scrollTop = preserveScrollTop;
+        this.#highlightItem(updatePosition);
     }
 
     #hideDisplay() {
         this.root.style.display = 'none';
         this.selectedIndex = -1;
         this.candidates = [];
+        this.virtualList.clear();
     }
 
     /**
@@ -602,6 +585,8 @@ class AutocompleteUI {
         this._requestId++;
         this._abortController?.abort();
         this._abortController = null;
+        clearTimeout(this._translationTimer);
+        this._translationTimer = null;
         this.#hideDisplay();
         this.target = null;
     }
@@ -609,10 +594,6 @@ class AutocompleteUI {
     /** Moves the selection up or down */
     navigate(direction) {
         if (this.candidates.length === 0) return;
-        if (direction > 0 && this.selectedIndex >= this.candidates.length - 1 && this._hasMorePages) {
-            this.#loadNextPage();
-            return;
-        }
         this.selectedIndex += direction;
 
         if (this.selectedIndex < 0) {
@@ -638,7 +619,6 @@ class AutocompleteUI {
      * Updates the list from the current candidates.
      */
     #updateContent() {
-        this.tagsList.innerHTML = '';
         if (this.candidates.length === 0) {
             this.hide();
             return;
@@ -649,11 +629,26 @@ class AutocompleteUI {
         const existingTags = extractTagsFromTextArea(this.target);
         const currentTag = getCurrentPartialTag(this.target);
 
-        this.candidates.forEach((tagData, index) => {
-            const isExactMatch = tagData.tag === currentTag && (existingTags.filter(item => item === currentTag).length == 1);
-            const isExistingTag = !isExactMatch && existingTags.includes(tagData.tag);
-            this.#createTagElement(tagData, index, isExistingTag);
-        });
+        const existingTagSet = new Set(existingTags);
+        const currentTagOccurrences = existingTags.filter(item => item === currentTag).length;
+        this.virtualList.options.getSignature = tagData => [
+            tagData.source,
+            tagData.tag,
+            tagData.category,
+            tagData.count,
+            tagData.origin,
+            tagData.origins?.join(','),
+            filterAliasesForLocale(tagData.alias).join(', '),
+            settingValues.hideAlias,
+            settingValues.tagSourceIconPosition,
+            existingTagSet.has(tagData.tag),
+        ].join('\0');
+        this.virtualList.options.createElement = (tagData, index) => {
+            const isExactMatch = tagData.tag === currentTag && currentTagOccurrences === 1;
+            const isExistingTag = !isExactMatch && existingTagSet.has(tagData.tag);
+            return this.#createTagElement(tagData, index, isExistingTag);
+        };
+        this.virtualList.setItems(this.candidates);
     }
 
     /**
@@ -674,7 +669,8 @@ class AutocompleteUI {
         // Category icon and tag name
         const tagName = document.createElement('span');
         tagName.className = 'autocomplete-plus-tag-name';
-        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition);
+        tagName.title = tagData.tag;
+        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition, false);
 
         // grayout tag name if it already exists
         if (isExisting) {
@@ -709,6 +705,12 @@ class AutocompleteUI {
         tagCount.className = `autocomplete-plus-tag-count`;
         tagCount.textContent = formatCountHumanReadable(tagData.count);
 
+        // Provenance has its own trailing track so badges never steal space
+        // from long English tag names.
+        const origins = document.createElement('span');
+        origins.className = 'autocomplete-plus-origin-cell';
+        origins.append(...createTagOriginMarkers(tagData));
+
         // Create tooltip with more info
         const localizedCategory = getTagCategoryLabel(categoryText);
         let tooltipText = `${getInterfaceText('count')}: ${tagData.count}\n${getInterfaceText('category')}: ${localizedCategory}`;
@@ -725,7 +727,8 @@ class AutocompleteUI {
         }
 
         tagRow.appendChild(tagCount);
-        this.tagsList.appendChild(tagRow);
+        tagRow.appendChild(origins);
+        return tagRow;
     }
 
     /**
@@ -739,8 +742,9 @@ class AutocompleteUI {
         // Measure the element size without causing reflow
         this.root.style.visibility = 'hidden';
         this.root.style.display = 'block';
+        this.root.style.width = '';
         this.root.style.maxWidth = '';
-        this.tagsList.style.maxHeight = '';
+        this.tagsList.style.maxHeight = 'min(320px, calc(100vh - 24px))';
         const rootRect = this.root.getBoundingClientRect();
         // Hide it again after measurement
         this.root.style.display = 'none';
@@ -819,22 +823,18 @@ class AutocompleteUI {
         // Apply the calculated position and display the element
         this.root.style.left = `${leftPosition}px`;
         this.root.style.top = `${topPosition}px`;
+        this.root.style.width = `${maxWidth}px`;
         this.root.style.maxWidth = `${maxWidth}px`;
         this.tagsList.style.maxHeight = `${maxHeight}px`;
     }
 
     /** Highlights the item (row) at the given index */
-    #highlightItem() {
+    #highlightItem(ensureVisible = true) {
         if (!this.getSelectedTagData()) return; // No valid selection
 
-        const items = this.tagsList.children; // Get rows from tbody
-        for (let i = 0; i < items.length; i++) {
-            if (i === this.selectedIndex) {
-                items[i].classList.add('selected'); // Use CSS class for selection
-                items[i].scrollIntoView({ block: 'nearest' });
-            } else {
-                items[i].classList.remove('selected');
-            }
+        if (ensureVisible) this.virtualList.scrollToIndex(this.selectedIndex);
+        for (const item of this.tagsList.querySelectorAll('.autocomplete-plus-item')) {
+            item.classList.toggle('selected', Number(item.dataset.index) === this.selectedIndex);
         }
     }
 
@@ -1252,7 +1252,6 @@ export const __test__ = isTestEnvironment
         searchWithFlexSearch,
         shouldUseFastSearch,
         getSearchCandidateLimit,
-        isNearScrollEnd,
         matchWord,
         getCurrentPartialTag,
         insertTagToTextArea

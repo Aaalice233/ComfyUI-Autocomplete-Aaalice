@@ -5,8 +5,10 @@ import {
     resolveCandidateTranslations,
     __test__,
 } from '../../web/js/integrations/translation-provider.js';
+import { updateOnlineServiceFeatures } from '../../web/js/online-service-state.js';
 
 function resetData() {
+    updateOnlineServiceFeatures({ danbooru_completion: true, translation: true });
     __test__.flushIndexOperations();
     for (const key of Object.keys(autoCompleteData)) delete autoCompleteData[key];
     __test__.translationCache.clear();
@@ -142,6 +144,26 @@ describe('on-demand translation provider', () => {
         expect(__test__.translationCache.has(__test__.cacheKey('zh', '1gir-'))).toBe(false);
     });
 
+    test('does not restore online-only catalog tags when Danbooru completion is disabled', async () => {
+        updateOnlineServiceFeatures({ danbooru_completion: false, translation: true });
+        const fetchImpl = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                items: [{
+                    tag_name: 'online_only_tag',
+                    text: '在线标签',
+                    category: 0,
+                    post_count: 10,
+                    origin: 'danbooru_api',
+                }],
+            }),
+        });
+
+        await loadTranslationCatalog('zh', { fetchImpl });
+
+        expect(autoCompleteData.danbooru.tagMap.has('online_only_tag')).toBe(false);
+    });
+
     test('never sends model candidates to translation', async () => {
         const fetchImpl = jest.fn();
         const candidate = new TagData('<lora:test>', 0, 0, [], 'lora');
@@ -187,5 +209,65 @@ describe('on-demand translation provider', () => {
 
         expect(danbooru.alias).toContain('共享标签');
         expect(e621.alias).toContain('共享标签');
+    });
+
+    test('does not resolve candidates when automatic translation is disabled', async () => {
+        updateOnlineServiceFeatures({ danbooru_completion: true, translation: false });
+        const fetchImpl = jest.fn();
+        const candidate = new TagData('blue_hair', 0, 100, [], TagSource.Danbooru);
+
+        await resolveCandidateTranslations([candidate], 'zh', { fetchImpl });
+
+        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(candidate.alias).toEqual([]);
+    });
+
+    test('applies one resolved tag translation to candidates from every booru source', async () => {
+        const danbooru = new TagData('shared_tag', 0, 100, [], TagSource.Danbooru);
+        const e621 = new TagData('shared_tag', 0, 80, [], TagSource.E621);
+        autoCompleteData.e621 = {
+            sortedTags: [e621],
+            tagMap: new Map([[e621.tag, e621]]),
+            aliasMap: new Map(),
+            tagIndexMap: new Map([[e621.tag, 0]]),
+            flexSearchDocument: { add: jest.fn(), update: jest.fn() },
+            translationSearchDocuments: new Map(),
+            translationIndexTexts: new Map(),
+        };
+        const fetchImpl = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ translations: { shared_tag: '共享标签' } }),
+        });
+
+        await resolveCandidateTranslations([danbooru, e621], 'zh', { fetchImpl });
+
+        expect(danbooru.alias).toContain('共享标签');
+        expect(e621.alias).toContain('共享标签');
+    });
+
+    test('translates large preloaded lists in bounded concurrent batches', async () => {
+        const candidates = Array.from({ length: 120 }, (_, index) =>
+            new TagData(`tag_${index}`, 0, 120 - index, [], TagSource.Danbooru));
+        let activeRequests = 0;
+        let maxActiveRequests = 0;
+        const fetchImpl = jest.fn().mockImplementation(async (_url, options) => {
+            activeRequests++;
+            maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+            const tags = JSON.parse(options.body).tags;
+            await Promise.resolve();
+            activeRequests--;
+            return {
+                ok: true,
+                json: async () => ({
+                    translations: Object.fromEntries(tags.map(item => [item.name, `translated_${item.name}`])),
+                }),
+            };
+        });
+
+        await resolveCandidateTranslations(candidates, 'zh', { fetchImpl });
+
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+        expect(maxActiveRequests).toBe(3);
+        expect(candidates[119].alias).toContain('translated_tag_119');
     });
 });

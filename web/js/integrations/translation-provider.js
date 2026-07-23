@@ -1,11 +1,31 @@
 import { TagData, TagSource, autoCompleteData } from "../data.js";
 import { filterAliasesForLocale, normalizeInterfaceLocale } from "../localization.js";
 import { createTranslationSearchDocument } from "../searchengine.js";
+import { isDanbooruCompletionEnabled, isTranslationEnabled } from "../online-service-state.js";
 
 const translationCache = new Map();
 const loadedLocales = new Set();
 const pendingIndexOperations = new Map();
+const TRANSLATION_REQUEST_BATCH_SIZE = 50;
+const TRANSLATION_REQUEST_CONCURRENCY = 3;
 let indexFlushTimer = null;
+
+async function mapWithConcurrency(items, concurrency, task) {
+    const results = new Array(items.length);
+    let nextIndex = 0;
+
+    async function worker() {
+        while (nextIndex < items.length) {
+            const index = nextIndex++;
+            results[index] = await task(items[index]);
+        }
+    }
+
+    await Promise.all(
+        Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+    );
+    return results;
+}
 
 function scheduleIndexAdd(document, key, index, candidate) {
     if (index < 0 || !document?.add) return;
@@ -142,7 +162,7 @@ function applyCatalogItem(item, locale) {
             applied = true;
         }
     }
-    if (applied || item.origin !== "danbooru_api") return;
+    if (applied || item.origin !== "danbooru_api" || !isDanbooruCompletionEnabled()) return;
 
     const sourceData = autoCompleteData[TagSource.Danbooru];
     if (!sourceData) return;
@@ -168,6 +188,7 @@ function applyCatalogItem(item, locale) {
 }
 
 export async function loadTranslationCatalog(locale, options = {}) {
+    if (!isTranslationEnabled()) return;
     const normalizedLocale = normalizeInterfaceLocale(locale);
     if (normalizedLocale === "en" || loadedLocales.has(normalizedLocale)) return;
     const { fetchImpl = fetch } = options;
@@ -186,10 +207,19 @@ export async function loadTranslationCatalog(locale, options = {}) {
 }
 
 export async function resolveCandidateTranslations(candidates, locale, options = {}) {
+    if (!isTranslationEnabled()) return {};
     const normalizedLocale = normalizeInterfaceLocale(locale);
     if (normalizedLocale === "en") return {};
     const { fetchImpl = fetch } = options;
-    const eligible = candidates.filter(candidate => Object.values(TagSource).includes(candidate?.source));
+    const eligible = [];
+    const seen = new Set();
+    for (const candidate of candidates) {
+        if (!Object.values(TagSource).includes(candidate?.source)) continue;
+        const key = `${candidate.source}\0${cacheKey(normalizedLocale, candidate.tag)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        eligible.push(candidate);
+    }
     if (!eligible.length) return {};
 
     for (const candidate of eligible) {
@@ -202,13 +232,13 @@ export async function resolveCandidateTranslations(candidates, locale, options =
         translationCache.get(cacheKey(normalizedLocale, candidate.tag)),
     ]));
 
-    try {
+    async function requestBatch(batch) {
         const response = await fetchImpl("/autocomplete-plus/translation/resolve", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 locale: normalizedLocale,
-                tags: missing.map(candidate => ({
+                tags: batch.map(candidate => ({
                     name: candidate.tag,
                     category: candidate.category,
                     post_count: candidate.count,
@@ -220,11 +250,24 @@ export async function resolveCandidateTranslations(candidates, locale, options =
         if (!response.ok) return {};
         const payload = await response.json();
         const translations = payload.translations || {};
-        for (const candidate of missing) {
+        for (const candidate of batch) {
             const translation = translations[candidate.tag];
             if (translation) addTranslationToCandidate(candidate, normalizedLocale, translation);
         }
         return translations;
+    }
+
+    try {
+        const batches = [];
+        for (let index = 0; index < missing.length; index += TRANSLATION_REQUEST_BATCH_SIZE) {
+            batches.push(missing.slice(index, index + TRANSLATION_REQUEST_BATCH_SIZE));
+        }
+        const batchResults = await mapWithConcurrency(
+            batches,
+            TRANSLATION_REQUEST_CONCURRENCY,
+            requestBatch,
+        );
+        return Object.assign({}, ...batchResults);
     } catch (error) {
         return {};
     }
@@ -239,5 +282,8 @@ export const __test__ = {
     indexTranslation,
     loadedLocales,
     pendingIndexOperations,
+    mapWithConcurrency,
+    TRANSLATION_REQUEST_BATCH_SIZE,
+    TRANSLATION_REQUEST_CONCURRENCY,
     translationCache,
 };

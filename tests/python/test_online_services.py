@@ -4,8 +4,8 @@ import os
 import tempfile
 import unittest
 
-from modules.danbooru_service import DanbooruSearchService, normalize_query
-from modules.translation_config import TranslationConfig, mask_config, validate_config
+from modules.danbooru_service import DanbooruProvider, DanbooruRelatedTagProvider, normalize_query
+from modules.translation_config import OnlineServiceConfig, mask_config, validate_config
 from modules.translation_service import (
     DeepSeekClient,
     TranslationManager,
@@ -16,7 +16,7 @@ from modules.translation_service import (
 from modules.translation_store import TranslationStore
 
 
-class TranslationConfigTests(unittest.TestCase):
+class OnlineServiceConfigTests(unittest.TestCase):
     def test_thinking_is_disabled_by_default(self):
         config = validate_config({})
         self.assertEqual(config["deepseek"]["reasoning_effort"], "disabled")
@@ -30,13 +30,20 @@ class TranslationConfigTests(unittest.TestCase):
                 "deepseek": {"api_key": "secret", "model": "custom"},
             }
         )
-        self.assertEqual(set(config), {"version", "deepseek"})
-        self.assertEqual(config["version"], 2)
+        self.assertEqual(set(config), {"version", "features", "deepseek"})
+        self.assertEqual(config["version"], 3)
         self.assertEqual(config["deepseek"]["api_key"], "secret")
+
+    def test_online_features_default_on_and_validate_boolean_values(self):
+        config = validate_config({"features": {"danbooru_completion": False, "translation": False}})
+        self.assertFalse(config["features"]["danbooru_completion"])
+        self.assertFalse(config["features"]["translation"])
+        with self.assertRaises(ValueError):
+            validate_config({"features": {"translation": "false"}})
 
     def test_masked_secret_preserves_saved_key(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = TranslationConfig(os.path.join(directory, "config.json"))
+            store = OnlineServiceConfig(os.path.join(directory, "config.json"))
             store.save({"deepseek": {"api_key": "secret"}})
             store.save({"deepseek": {"api_key": "********", "model": "updated"}})
             config = store.load()
@@ -117,6 +124,28 @@ class TranslationManagerTests(unittest.IsolatedAsyncioTestCase):
             result = await manager.resolve("zh", [{"name": "cached", "category": 0}])
             self.assertEqual(result["cached"]["text"], "缓存")
 
+    async def test_disabled_translation_returns_cache_without_starting_deepseek(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            store.save_many(
+                "zh",
+                [{"name": "cached", "category": 0, "post_count": 1, "origin": "local"}],
+                {"cached": "缓存"},
+                "model",
+                "hash",
+            )
+            manager = TranslationManager(os.path.join(directory, "config.json"), store)
+            manager.save_config(
+                {"features": {"translation": False}, "deepseek": {"api_key": "secret"}}
+            )
+
+            result = await manager.resolve(
+                "zh",
+                [{"name": "cached", "category": 0}, {"name": "missing", "category": 0}],
+            )
+
+            self.assertEqual(set(result), {"cached"})
+
     async def test_model_list_and_health_check_use_the_supplied_key_and_model(self):
         with tempfile.TemporaryDirectory() as directory:
             store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
@@ -188,32 +217,125 @@ class DanbooruSearchTests(unittest.IsolatedAsyncioTestCase):
             {"name": "blue_hair-", "category": 0, "post_count": 0, "is_deprecated": False},
         ]
         session_factory = StubSessionFactory(payload)
-        service = DanbooruSearchService(session_factory=session_factory)
+        service = DanbooruProvider(session_factory=session_factory)
         self.assertEqual(
             await service.search("blue_ha", 10),
-            [{"name": "blue_hair", "category": 0, "post_count": 100}],
+            {
+                "items": [{"name": "blue_hair", "category": 0, "post_count": 100}],
+                "raw_count": 4,
+                "has_more": False,
+            },
         )
-        self.assertEqual(session_factory.params["search[name_matches]"], "blue_ha*")
+        self.assertEqual(session_factory.params["search[name_matches]"], "*blue_ha*")
         self.assertEqual(session_factory.params["search[hide_empty]"], "true")
         self.assertEqual(session_factory.params["page"], "1")
 
     async def test_search_forwards_a_bounded_result_page(self):
         session_factory = StubSessionFactory([])
-        service = DanbooruSearchService(session_factory=session_factory)
+        service = DanbooruProvider(session_factory=session_factory)
 
         await service.search("blue", 10, 2)
 
         self.assertEqual(session_factory.params["page"], "2")
 
+    async def test_short_queries_keep_the_cheaper_prefix_match(self):
+        session_factory = StubSessionFactory([])
+        service = DanbooruProvider(session_factory=session_factory)
+
+        await service.search("ab", 10)
+
+        self.assertEqual(session_factory.params["search[name_matches]"], "ab*")
+
+    async def test_has_more_uses_raw_page_size_before_category_filtering(self):
+        payload = [
+            {"name": "blue_hair", "category": 0, "post_count": 100, "is_deprecated": False},
+            {"name": "unsupported", "category": 2, "post_count": 50, "is_deprecated": False},
+        ]
+        service = DanbooruProvider(session_factory=StubSessionFactory(payload))
+
+        result = await service.search("blue", 2)
+
+        self.assertEqual(len(result["items"]), 1)
+        self.assertTrue(result["has_more"])
+
     async def test_failure_enters_silent_cooldown(self):
-        service = DanbooruSearchService(session_factory=StubSessionFactory([], status=429))
-        self.assertEqual(await service.search("blue", 10), [])
-        self.assertEqual(await service.search("blue", 10), [])
-        self.assertEqual(service.status()["state"], "error")
-        self.assertGreater(service.status()["cooldown"], 0)
+        service = DanbooruProvider(session_factory=StubSessionFactory([], status=429))
+        with self.assertRaises(RuntimeError):
+            await service.search("blue", 10)
+        with self.assertRaisesRegex(RuntimeError, "cooling down"):
+            await service.search("blue", 10)
 
     def test_query_removes_remote_wildcards(self):
         self.assertEqual(normalize_query(" Blue Hair* "), "blue_hair")
+
+
+class DanbooruRelatedTagTests(unittest.IsolatedAsyncioTestCase):
+    async def test_maps_official_nested_related_tag_response(self):
+        payload = {
+            "query": "blue_archive",
+            "related_tags": [
+                {
+                    "tag": {
+                        "name": "sensei_(blue_archive)",
+                        "category": 4,
+                        "post_count": 9000,
+                        "is_deprecated": False,
+                    },
+                    "jaccard_similarity": 0.42,
+                },
+                {
+                    "tag": {
+                        "name": "blue_archive",
+                        "category": 3,
+                        "post_count": 100000,
+                        "is_deprecated": False,
+                    },
+                    "jaccard_similarity": 1,
+                },
+            ],
+        }
+        session_factory = StubSessionFactory(payload)
+        provider = DanbooruRelatedTagProvider(session_factory=session_factory)
+
+        result = await provider.search("blue_archive", 500)
+
+        self.assertEqual(
+            result,
+            {
+                "items": [{
+                    "name": "sensei_(blue_archive)",
+                    "category": 4,
+                    "post_count": 9000,
+                    "similarity": 0.42,
+                }],
+                "raw_count": 2,
+                "has_more": False,
+            },
+        )
+        self.assertEqual(session_factory.params["query"], "blue_archive")
+        self.assertEqual(session_factory.params["order"], "jaccard")
+        self.assertEqual(session_factory.params["limit"], "500")
+
+    async def test_accepts_flat_items_and_filters_invalid_rows(self):
+        payload = {
+            "related_tags": [
+                {"name": "valid", "category": 0, "post_count": 10, "jaccard_similarity": 0.1},
+                {"name": "unused", "category": 2, "post_count": 10, "jaccard_similarity": 0.2},
+                {"name": "empty", "category": 0, "post_count": 0, "jaccard_similarity": 0.2},
+                {"name": "invalid_score", "category": 0, "post_count": 10, "jaccard_similarity": 2},
+            ],
+        }
+        provider = DanbooruRelatedTagProvider(session_factory=StubSessionFactory(payload))
+
+        result = await provider.search("source_tag", 20)
+
+        self.assertEqual([item["name"] for item in result["items"]], ["valid"])
+
+    async def test_rejects_non_object_payload(self):
+        provider = DanbooruRelatedTagProvider(session_factory=StubSessionFactory([]))
+
+        with self.assertRaisesRegex(RuntimeError, "invalid related-tag response"):
+            await provider.search("blue_archive", 20)
 
 
 class StubResponse:

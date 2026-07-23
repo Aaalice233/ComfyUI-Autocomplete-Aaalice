@@ -3,6 +3,9 @@ import {
     searchLoraManagerCandidates,
 } from "./integrations/lora-manager-provider.js";
 import { getCurrentInterfaceLocale } from "./localization.js";
+import { updateOnlineServiceFeatures } from "./online-service-state.js";
+import { loadTranslationCatalog } from "./integrations/translation-provider.js";
+import { clearDanbooruSessionCache } from "./integrations/danbooru-provider.js";
 
 const API_ROOT = "/autocomplete-plus/translation";
 
@@ -24,6 +27,13 @@ const TEXT = {
         checkSources: "Check data sources",
         checkingSources: "Checking data sources…",
         sourcesChecked: "Data source check completed",
+        features: "Online feature switches",
+        enableDanbooru: "Enable Danbooru API supplementation",
+        enableTranslation: "Enable automatic translation",
+        completionCache: "Persistent Danbooru result cache",
+        cachePages: "pages",
+        clearCache: "Clear Danbooru result cache",
+        cacheCleared: "Danbooru result cache cleared",
         translation: "Translation",
         locale: "Interface language",
         apiKey: "DeepSeek API key",
@@ -65,6 +75,13 @@ const TEXT = {
         checkSources: "检测数据源",
         checkingSources: "正在检测数据源…",
         sourcesChecked: "数据源检测完成",
+        features: "在线功能开关",
+        enableDanbooru: "启用 Danbooru API 补充",
+        enableTranslation: "启用自动翻译",
+        completionCache: "Danbooru 结果持久缓存",
+        cachePages: "页",
+        clearCache: "清空 Danbooru 结果缓存",
+        cacheCleared: "Danbooru 结果缓存已清空",
         translation: "翻译设置",
         locale: "界面语言",
         apiKey: "DeepSeek API Key",
@@ -106,6 +123,13 @@ const TEXT = {
         checkSources: "偵測資料來源",
         checkingSources: "正在偵測資料來源…",
         sourcesChecked: "資料來源偵測完成",
+        features: "線上功能開關",
+        enableDanbooru: "啟用 Danbooru API 補充",
+        enableTranslation: "啟用自動翻譯",
+        completionCache: "Danbooru 結果持久快取",
+        cachePages: "頁",
+        clearCache: "清除 Danbooru 結果快取",
+        cacheCleared: "Danbooru 結果快取已清除",
         translation: "翻譯設定",
         locale: "介面語言",
         apiKey: "DeepSeek API Key",
@@ -147,6 +171,13 @@ const TEXT = {
         checkSources: "データソースを確認",
         checkingSources: "データソースを確認中…",
         sourcesChecked: "データソースの確認が完了しました",
+        features: "オンライン機能スイッチ",
+        enableDanbooru: "Danbooru API 補足を有効化",
+        enableTranslation: "自動翻訳を有効化",
+        completionCache: "Danbooru 結果の永続キャッシュ",
+        cachePages: "ページ",
+        clearCache: "Danbooru 結果キャッシュを消去",
+        cacheCleared: "Danbooru 結果キャッシュを消去しました",
         translation: "翻訳設定",
         locale: "表示言語",
         apiKey: "DeepSeek API Key",
@@ -216,6 +247,23 @@ function selectField(parent, label, value, options) {
     return select;
 }
 
+function toggleField(parent, label, checked) {
+    const wrapper = element("label", "autocomplete-plus-online-toggle");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    wrapper.append(input, element("span", "", label));
+    parent.append(wrapper);
+    return input;
+}
+
+function formatBytes(bytes) {
+    const value = Math.max(Number(bytes) || 0, 0);
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function statusText(status, text, idleText) {
     if (status?.state === "success") return text.ready;
     if (status?.state === "error") return text.unavailable;
@@ -270,6 +318,23 @@ export async function openOnlineServicesPanel(_app) {
         dialog.showModal();
         return;
     }
+    updateOnlineServiceFeatures(config.features);
+
+    const featureSection = element("section", "autocomplete-plus-online-section");
+    featureSection.append(element("h3", "", text.features));
+    const featureGrid = element("div", "autocomplete-plus-online-toggle-grid");
+    const danbooruEnabled = toggleField(
+        featureGrid,
+        text.enableDanbooru,
+        config.features?.danbooru_completion !== false,
+    );
+    const translationEnabled = toggleField(
+        featureGrid,
+        text.enableTranslation,
+        config.features?.translation !== false,
+    );
+    featureSection.append(featureGrid);
+    panel.append(featureSection);
 
     const statusSection = element("section", "autocomplete-plus-online-section");
     statusSection.append(element("h3", "", text.sources));
@@ -294,12 +359,16 @@ export async function openOnlineServicesPanel(_app) {
         const values = {
             huggingface: status.huggingface?.available ? text.ready : text.unavailable,
             loraManager: statusText(loraStatus, text, text.waitingLora),
-            danbooru: statusText(status.danbooru, text, text.waitingDanbooru),
-            deepseek: statusText(
-                status.deepseek,
-                text,
-                status.configured ? text.waitingDeepSeek : text.notConfigured,
-            ),
+            danbooru: !danbooruEnabled.checked
+                ? text.disabled
+                : statusText(status.danbooru, text, text.waitingDanbooru),
+            deepseek: !translationEnabled.checked
+                ? text.disabled
+                : statusText(
+                    status.deepseek,
+                    text,
+                    status.configured ? text.waitingDeepSeek : text.notConfigured,
+                ),
         };
         const diagnostics = {
             loraManager: loraStatus.message,
@@ -312,10 +381,21 @@ export async function openOnlineServicesPanel(_app) {
         }
     };
     updateStatusCards(status);
+    danbooruEnabled.onchange = () => updateStatusCards(status);
+    translationEnabled.onchange = () => updateStatusCards(status);
     const statusActions = element("div", "autocomplete-plus-online-status-actions");
     const checkSources = element("button", "p-button p-component", text.checkSources);
     checkSources.type = "button";
-    statusActions.append(checkSources);
+    const clearCache = element("button", "p-button p-component", text.clearCache);
+    clearCache.type = "button";
+    const cacheSummary = element("span", "autocomplete-plus-online-cache-summary");
+    const updateCacheSummary = () => {
+        const cacheStatus = status.danbooru?.cache || {};
+        cacheSummary.textContent = `${text.completionCache}: ${cacheStatus.entries || 0} ${text.cachePages}`
+            + ` · ${formatBytes(cacheStatus.size_bytes)}`;
+    };
+    updateCacheSummary();
+    statusActions.append(cacheSummary, checkSources, clearCache);
     statusSection.append(statusActions);
     panel.append(statusSection);
 
@@ -373,7 +453,10 @@ export async function openOnlineServicesPanel(_app) {
     close.onclick = () => dialog.close();
     const save = element("button", "p-button p-component p-button-primary", text.save);
     save.type = "button";
-    const refreshStatus = async () => updateStatusCards(await requestJson(`${API_ROOT}/status`));
+    const refreshStatus = async () => {
+        updateStatusCards(await requestJson(`${API_ROOT}/status`));
+        updateCacheSummary();
+    };
     const runModelAction = async (path, successText) => {
         message.textContent = "";
         delete message.dataset.tone;
@@ -415,9 +498,12 @@ export async function openOnlineServicesPanel(_app) {
                 tagSource: "danbooru",
                 includeModels: false,
             }),
-            requestJson("/autocomplete-plus/danbooru/search?q=blue&limit=1"),
         ];
-        if (status.configured || apiKey.value.trim()) {
+        if (danbooruEnabled.checked) {
+            checks.push(requestJson("/autocomplete-plus/danbooru/search?q=blue&limit=1&refresh=1"));
+            checks.push(requestJson("/autocomplete-plus/danbooru/related?q=blue_archive&limit=1&refresh=1"));
+        }
+        if (translationEnabled.checked && (status.configured || apiKey.value.trim())) {
             checks.push(requestJson(`${API_ROOT}/test`, {
                 method: "POST",
                 body: JSON.stringify({
@@ -439,11 +525,27 @@ export async function openOnlineServicesPanel(_app) {
             checkSources.disabled = false;
         }
     };
+    clearCache.onclick = async () => {
+        try {
+            await requestJson("/autocomplete-plus/danbooru/cache/clear", { method: "POST" });
+            clearDanbooruSessionCache();
+            await refreshStatus();
+            message.textContent = text.cacheCleared;
+            message.dataset.tone = "success";
+        } catch (error) {
+            message.textContent = error.message;
+            message.dataset.tone = "error";
+        }
+    };
     save.onclick = async () => {
         try {
             config = await requestJson(`${API_ROOT}/config`, {
                 method: "PUT",
                 body: JSON.stringify({
+                    features: {
+                        danbooru_completion: danbooruEnabled.checked,
+                        translation: translationEnabled.checked,
+                    },
                     deepseek: {
                         api_key: apiKey.value,
                         model: model.value,
@@ -456,7 +558,12 @@ export async function openOnlineServicesPanel(_app) {
                     },
                 }),
             });
+            updateOnlineServiceFeatures(config.features);
+            if (config.features.translation) {
+                void loadTranslationCatalog(locale);
+            }
             apiKey.value = config.deepseek.api_key;
+            await refreshStatus();
             message.textContent = text.saved;
             message.dataset.tone = "success";
         } catch (error) {

@@ -76,8 +76,11 @@ export class TagData {
 
         this.source = source;
 
-        /** @type {'local'|'danbooru_api'} */
+        /** @type {'local'|'csv'|'lora_manager'|'danbooru_api'} */
         this.origin = origin;
+
+        /** @type {string[]} */
+        this.origins = origin ? [origin] : [];
     }
 
     /**
@@ -222,7 +225,7 @@ function processTagLinesInChunks(lines, startIndex, csvUrl, siteName) {
                 if (!tag || isNaN(count) || autoCompleteData[siteName].tagMap.has(tag)) continue;
 
                 const aliases = aliasStr ? aliasStr.split(',').map(a => a.trim()).filter(Boolean) : [];
-                const tagData = new TagData(tag, category, count, aliases, siteName);
+                const tagData = new TagData(tag, category, count, aliases, siteName, 'csv');
                 updateMaxTagLength(tag.length);
                 autoCompleteData[siteName].sortedTags.push(tagData);
                 autoCompleteData[siteName].tagMap.set(tagData.tag, tagData);

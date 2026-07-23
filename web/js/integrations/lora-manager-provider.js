@@ -69,23 +69,51 @@ function mapResults(descriptor, payload) {
             const mappedCategory = CATEGORY_MAP[item.category];
             if (!mappedCategory || !item.tag_name) return [];
             const aliases = item.matched_alias ? [item.matched_alias] : [];
-            return [new TagData(item.tag_name, mappedCategory[1], Number(item.post_count) || 0, aliases, mappedCategory[0])];
+            return [new TagData(
+                item.tag_name,
+                mappedCategory[1],
+                Number(item.post_count) || 0,
+                aliases,
+                mappedCategory[0],
+                "lora_manager",
+            )];
         });
     }
 
     if (descriptor.kind === "wildcards") {
         return (Array.isArray(payload.words) ? payload.words : [])
             .filter(Boolean)
-            .map(item => new TagData(`__${String(item).trim()}__`, 0, 0, [], ModelTagSource.Wildcard));
+            .map(item => new TagData(
+                `__${String(item).trim()}__`,
+                0,
+                0,
+                [],
+                ModelTagSource.Wildcard,
+                "lora_manager",
+            ));
     }
 
     const paths = Array.isArray(payload.relative_paths) ? payload.relative_paths : [];
     return paths.filter(Boolean).map(path => {
         const normalized = stripModelExtension(path);
         if (descriptor.kind === "loras") {
-            return new TagData(`<lora:${normalized}>`, 0, 0, [], ModelTagSource.Lora);
+            return new TagData(
+                `<lora:${normalized}>`,
+                0,
+                0,
+                [],
+                ModelTagSource.Lora,
+                "lora_manager",
+            );
         }
-        return new TagData(`embedding:${normalized}`, 0, 0, [], ModelTagSource.Embeddings);
+        return new TagData(
+            `embedding:${normalized}`,
+            0,
+            0,
+            [],
+            ModelTagSource.Embeddings,
+            "lora_manager",
+        );
     });
 }
 

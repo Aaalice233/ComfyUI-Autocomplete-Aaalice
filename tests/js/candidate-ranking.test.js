@@ -4,12 +4,15 @@ import {
     mergeDuplicateCandidates,
     rankCompletionCandidates,
 } from '../../web/js/candidate-ranking.js';
+import { updateOnlineServiceFeatures } from '../../web/js/online-service-state.js';
 
 function candidate(tag, source, count, alias = []) {
     return { tag, source, count, alias };
 }
 
 describe('unified autocomplete candidate ranking', () => {
+    beforeEach(() => updateOnlineServiceFeatures({ danbooru_completion: true, translation: true }));
+
     test('orders matching tags by raw popularity before match type', () => {
         const query = new Set(['blue']);
         const candidates = [
@@ -31,6 +34,15 @@ describe('unified autocomplete candidate ranking', () => {
             'blue_hair',
             'blue',
         ]);
+    });
+
+    test('removes persisted Danbooru API candidates when online completion is disabled', () => {
+        updateOnlineServiceFeatures({ danbooru_completion: false, translation: true });
+        const local = { ...candidate('blue_hair', 'danbooru', 100), origin: 'local' };
+        const online = { ...candidate('blue_archive', 'danbooru', 90), origin: 'danbooru_api' };
+
+        expect(rankCompletionCandidates([local, online], new Set(['blue']), { limit: 10 }))
+            .toEqual([local]);
     });
 
     test('compares raw heat across sources', () => {
@@ -76,9 +88,9 @@ describe('unified autocomplete candidate ranking', () => {
 
     test('merges duplicate aliases and fresher counts without changing the preferred source', () => {
         const merged = mergeDuplicateCandidates([
-            candidate('same_tag', 'danbooru', 100, ['first']),
-            candidate('SAME_TAG', 'danbooru', 150, ['second']),
-            candidate('same_tag', 'e621', 999, ['third']),
+            { ...candidate('same_tag', 'danbooru', 100, ['first']), origin: 'csv', origins: ['csv'] },
+            { ...candidate('SAME_TAG', 'danbooru', 150, ['second']), origin: 'lora_manager', origins: ['lora_manager'] },
+            { ...candidate('same_tag', 'e621', 999, ['third']), origin: 'danbooru_api', origins: ['danbooru_api'] },
         ]);
 
         expect(merged).toHaveLength(1);
@@ -87,7 +99,25 @@ describe('unified autocomplete candidate ranking', () => {
             source: 'danbooru',
             count: 150,
             alias: ['first', 'second', 'third'],
+            origins: ['csv', 'lora_manager', 'danbooru_api'],
         });
+    });
+
+    test('does not merge API count or provenance when Danbooru supplementation is disabled', () => {
+        updateOnlineServiceFeatures({ danbooru_completion: false, translation: true });
+        const csv = {
+            ...candidate('same_tag', 'danbooru', 100),
+            origin: 'csv',
+            origins: ['csv'],
+        };
+        const api = {
+            ...candidate('same_tag', 'danbooru', 999),
+            origin: 'danbooru_api',
+            origins: ['danbooru_api'],
+        };
+
+        expect(rankCompletionCandidates([csv, api], new Set(['same']), { limit: 10 })[0])
+            .toMatchObject({ count: 100, origins: ['csv'] });
     });
 
     test('classifies direct and alias matches consistently', () => {

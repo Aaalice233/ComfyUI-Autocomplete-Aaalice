@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from .translation_config import TranslationConfig, mask_config
+from .translation_config import OnlineServiceConfig, mask_config
 
 
 DEEPSEEK_CHAT_URL = "https://api.deepseek.com/chat/completions"
@@ -145,8 +145,8 @@ class DeepSeekClient:
 
 
 class TranslationManager:
-    def __init__(self, config_path, store, session_factory=None):
-        self.config_store = TranslationConfig(config_path)
+    def __init__(self, config_path, store, session_factory=None, config_store=None):
+        self.config_store = config_store or OnlineServiceConfig(config_path)
         self.store = store
         self.session_factory = session_factory or aiohttp.ClientSession
         self._inflight = {}
@@ -238,7 +238,10 @@ class TranslationManager:
         if locale == "en" or not items:
             return cached
 
-        config = self.config_store.load()["deepseek"]
+        full_config = self.config_store.load()
+        if not full_config["features"]["translation"]:
+            return cached
+        config = full_config["deepseek"]
         missing = [item for item in items if item["name"] not in cached]
         if not config["api_key"] or not missing:
             return cached

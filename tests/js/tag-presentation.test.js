@@ -3,10 +3,12 @@
 import {
     createTagCategoryIcon,
     createTagOriginMarker,
+    createTagOriginMarkers,
     getTagCategoryEmoji,
     getTagCategoryIconKey,
     getTagCategoryLabel,
     normalizeInterfaceLocale,
+    renderTagNameWithCategoryIcon,
 } from '../../web/js/tag-presentation.js';
 
 describe('tag category presentation', () => {
@@ -53,13 +55,38 @@ describe('tag category presentation', () => {
         expect(getTagCategoryLabel('artist', 'en-US')).toBe('artist');
     });
 
-    test('uses a subtle accessible marker only for Danbooru API candidates', () => {
+    test('uses accessible markers for API, LoRA Manager, and CSV origins', () => {
         const marker = createTagOriginMarker({ origin: 'danbooru_api' });
         expect(marker.dataset.tagOrigin).toBe('danbooru_api');
-        expect(marker.className).toBe('autocomplete-plus-online-origin-marker');
+        expect(marker.className).toBe('autocomplete-plus-origin-marker');
         expect(marker.textContent).toBe('API');
         expect(marker.getAttribute('aria-label')).toContain('Danbooru');
+
+        const markers = createTagOriginMarkers({
+            origin: 'csv',
+            origins: ['csv', 'lora_manager', 'danbooru_api'],
+        });
+        expect(markers.map(item => item.textContent)).toEqual(['CSV', 'LM', 'API']);
+        expect(markers.map(item => item.dataset.tagOrigin)).toEqual([
+            'csv',
+            'lora_manager',
+            'danbooru_api',
+        ]);
         expect(createTagOriginMarker({ origin: 'local' })).toBeNull();
+    });
+
+    test('can render a tag name without inline origin badges for dedicated source columns', () => {
+        const element = document.createElement('span');
+        renderTagNameWithCategoryIcon(element, {
+            tag: 'aemeath_(wuthering_waves)',
+            categoryText: 'character',
+            source: 'danbooru',
+            origins: ['csv', 'lora_manager', 'danbooru_api'],
+        }, 'left', false);
+
+        expect(element.querySelector('.autocomplete-plus-tag-text').textContent)
+            .toBe('aemeath_(wuthering_waves)');
+        expect(element.querySelectorAll('.autocomplete-plus-origin-marker')).toHaveLength(0);
     });
 
     test('normalizes supported ComfyUI locale variants', () => {

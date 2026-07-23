@@ -31,7 +31,12 @@ describe('LoRA Manager supplemental provider', () => {
         expect(fetchImpl.mock.calls[0][0]).toContain(endpoint);
         expect(fetchImpl.mock.calls[0][0]).toContain('limit=12');
         expect(results).toHaveLength(1);
-        expect(results[0]).toMatchObject({ tag: expectedTag, source: expectedSource });
+        expect(results[0]).toMatchObject({
+            tag: expectedTag,
+            source: expectedSource,
+            origin: 'lora_manager',
+            origins: ['lora_manager'],
+        });
     });
 
     test('maps enriched custom words and applies the selected booru category filter', async () => {
@@ -54,6 +59,7 @@ describe('LoRA Manager supplemental provider', () => {
             count: 123,
             alias: ['viewer'],
             source: TagSource.Danbooru,
+            origin: 'lora_manager',
         });
     });
 
