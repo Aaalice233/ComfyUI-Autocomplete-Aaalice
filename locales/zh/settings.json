@@ -57,9 +57,9 @@
         "name": "自动添加逗号",
         "tooltip": "通过自动补全插入标签时，自动在标签末尾添加逗号。"
     },
-    "AutocompletePlus_Autocompletion_MaxSuggestions": {
-        "name": "每页补全候选数",
-        "tooltip": "每次滚动到底部时加载的补全候选数量。"
+    "AutocompletePlus_Autocompletion_MaximumResults": {
+        "name": "自动补全结果上限",
+        "tooltip": "限制完整内存结果快照的最大数量；列表只渲染当前可见的条目。"
     },
     "AutocompletePlus_Autocompletion_Enable": {
         "name": "启用自动补全"
@@ -80,9 +80,9 @@
             "vertical": "垂直"
         }
     },
-    "AutocompletePlus_RelatedTags_MaxRelatedTags": {
-        "name": "每页共现标签数",
-        "tooltip": "每次滚动到底部时加载的共现标签数量。"
+    "AutocompletePlus_RelatedTags_MaximumResults": {
+        "name": "共现标签结果上限",
+        "tooltip": "限制完整内存共现结果快照的最大数量；列表只渲染当前可见的条目。"
     },
     "AutocompletePlus_RelatedTags_Enable": {
         "name": "启用共现标签"

@@ -15,6 +15,7 @@ const UI_TEXT = {
         danbooruOnlineFallback: 'Provided by Danbooru online fallback',
         loraManagerOrigin: 'Provided by LoRA Manager',
         csvOrigin: 'Provided by the bundled CSV dataset',
+        translatingTag: 'Translating tag',
         similarity: 'Similarity',
     },
     zh: {
@@ -33,6 +34,7 @@ const UI_TEXT = {
         danbooruOnlineFallback: '由 Danbooru 在线兜底补充',
         loraManagerOrigin: '由 LoRA Manager 提供',
         csvOrigin: '由基础 CSV 数据集提供',
+        translatingTag: '正在翻译标签',
         similarity: '相似度',
     },
     'zh-TW': {
@@ -51,6 +53,7 @@ const UI_TEXT = {
         danbooruOnlineFallback: '由 Danbooru 線上備援補充',
         loraManagerOrigin: '由 LoRA Manager 提供',
         csvOrigin: '由基礎 CSV 資料集提供',
+        translatingTag: '正在翻譯標籤',
         similarity: '相似度',
     },
     ja: {
@@ -69,6 +72,7 @@ const UI_TEXT = {
         danbooruOnlineFallback: 'Danbooru オンライン補完から取得',
         loraManagerOrigin: 'LoRA Manager から取得',
         csvOrigin: '同梱 CSV データセットから取得',
+        translatingTag: 'タグを翻訳中',
         similarity: '類似度',
     },
 };

@@ -57,9 +57,9 @@
         "name": "Auto-Insert Comma",
         "tooltip": "Automatically insert a comma after tags when inserting from autocomplete."
     },
-    "AutocompletePlus_Autocompletion_MaxSuggestions": {
-        "name": "Suggestions per page",
-        "tooltip": "Number of autocomplete rows loaded at a time while scrolling."
+    "AutocompletePlus_Autocompletion_MaximumResults": {
+        "name": "Maximum autocomplete results",
+        "tooltip": "Safety limit for the complete in-memory result snapshot. Only visible rows are rendered."
     },
     "AutocompletePlus_Autocompletion_Enable": {
         "name": "Enable Autocomplete"
@@ -80,9 +80,9 @@
             "vertical": "Vertical"
         }
     },
-    "AutocompletePlus_RelatedTags_MaxRelatedTags": {
-        "name": "Co-occurrence tags per page",
-        "tooltip": "Number of co-occurrence rows loaded at a time while scrolling."
+    "AutocompletePlus_RelatedTags_MaximumResults": {
+        "name": "Maximum co-occurrence results",
+        "tooltip": "Safety limit for the complete in-memory co-occurrence snapshot. Only visible rows are rendered."
     },
     "AutocompletePlus_RelatedTags_Enable": {
         "name": "Enable Related Tags"

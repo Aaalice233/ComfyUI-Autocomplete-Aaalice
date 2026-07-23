@@ -276,10 +276,8 @@ app.registerExtension({
         }
     ],
 
-    // One the Settings Screen, displays reverse order in same category
+    // ComfyUI renders extension settings in reverse registration order.
     settings: [
-        createOnlineServicesSetting(app, name, id),
-
         // --- Tag source Settings ---
         {
             id: id + ".TagSource.IconPosition",
@@ -533,5 +531,8 @@ app.registerExtension({
                 settingValues.enableAutoFormat = newVal;
             },
         },
+
+        // Register last so this entry is shown first on the Settings screen.
+        createOnlineServicesSetting(app, name, id),
     ]
 });

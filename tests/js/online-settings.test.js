@@ -1,7 +1,10 @@
 /** @jest-environment jsdom */
 
 import { jest } from '@jest/globals';
-import { openOnlineServicesPanel } from '../../web/js/online-settings.js';
+import {
+    createOnlineServicesSetting,
+    openOnlineServicesPanel,
+} from '../../web/js/online-settings.js';
 import { getOnlineServiceFeatures, updateOnlineServiceFeatures } from '../../web/js/online-service-state.js';
 
 const config = {
@@ -69,6 +72,9 @@ describe('online services settings panel', () => {
             if (String(url).endsWith('/danbooru/cache/clear')) {
                 return { ok: true, json: async () => ({ deleted: 3 }) };
             }
+            if (String(url).endsWith('/config/reveal')) {
+                return { ok: true, json: async () => ({ api_key: 'saved-secret' }) };
+            }
             if (String(url).endsWith('/models')) {
                 return { ok: true, json: async () => ({ models: ['deepseek-v4-flash', 'deepseek-v4-pro'] }) };
             }
@@ -77,6 +83,19 @@ describe('online services settings panel', () => {
             }
             throw new Error(`Unexpected request: ${url}`);
         });
+    });
+
+    test('sorts the online services category before the other extension categories', () => {
+        const setting = createOnlineServicesSetting({}, 'Autocomplete Plus', 'AutocompletePlus');
+        expect(setting.category).toEqual([
+            'Autocomplete Plus',
+            ' Online Services',
+            'Online completion and translation',
+        ]);
+
+        document.documentElement.lang = 'zh-CN';
+        expect(createOnlineServicesSetting({}, 'Autocomplete Plus', 'AutocompletePlus').category[1])
+            .toBe(' 在线服务');
     });
 
     test('is a single page with collapsed advanced settings and thinking off', async () => {
@@ -94,7 +113,30 @@ describe('online services settings panel', () => {
         expect(dialog.textContent).toContain('Waiting for fallback');
         expect(dialog.textContent).toContain('Waiting for model test');
         expect(dialog.textContent).toContain('Persistent Danbooru result cache: 3 pages');
-        expect(dialog.textContent).not.toMatch(/scan|resume|cancel/i);
+        expect(dialog.textContent).not.toMatch(/scan|resume/i);
+        expect(dialog.querySelectorAll('[role="switch"]')).toHaveLength(2);
+        expect(dialog.querySelector('.autocomplete-plus-online-content')).not.toBeNull();
+        expect(dialog.querySelector('.autocomplete-plus-online-status-grid')).not.toBeNull();
+        expect(dialog.querySelector('.autocomplete-plus-online-title p').textContent)
+            .toContain('local suggestions instant');
+    });
+
+    test('offers an accessible API key visibility control', async () => {
+        await openOnlineServicesPanel({});
+        const dialog = document.querySelector('dialog');
+        const apiKey = dialog.querySelector('input[aria-label="DeepSeek API key"]');
+        const reveal = dialog.querySelector('button[aria-label="Show API key"]');
+
+        expect(apiKey.type).toBe('password');
+        reveal.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(apiKey.type).toBe('text');
+        expect(apiKey.value).toBe('saved-secret');
+        expect(reveal.ariaLabel).toBe('Hide API key');
+        expect(global.fetch).toHaveBeenCalledWith(
+            '/autocomplete-plus/translation/config/reveal',
+            expect.objectContaining({ method: 'POST' }),
+        );
     });
 
     test('loads models and tests the selected model without saving first', async () => {
@@ -104,8 +146,12 @@ describe('online services settings panel', () => {
         buttons.find(button => button.textContent === 'Load models').click();
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        const options = [...dialog.querySelectorAll('datalist option')].map(option => option.value);
+        const modelSelect = [...dialog.querySelectorAll('label')]
+            .find(label => label.textContent.includes('Model'))
+            .querySelector('select');
+        const options = [...modelSelect.options].map(option => option.value);
         expect(options).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro']);
+        expect(dialog.textContent).toContain('Model list loaded（2）');
 
         buttons.find(button => button.textContent === 'Test model').click();
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -144,7 +190,8 @@ describe('online services settings panel', () => {
         const toggles = [...dialog.querySelectorAll('input[type="checkbox"]')];
         toggles[0].checked = false;
         toggles[1].checked = false;
-        const saveButton = [...dialog.querySelectorAll('button')].find(button => button.textContent === 'Save');
+        const saveButton = [...dialog.querySelectorAll('button')]
+            .find(button => button.textContent === 'Save settings');
         global.fetch.mockImplementationOnce(async () => ({
             ok: true,
             json: async () => ({ ...config, features: { danbooru_completion: false, translation: false } }),

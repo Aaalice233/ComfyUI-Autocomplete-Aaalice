@@ -57,9 +57,9 @@
         "name": "カンマを自動で追加する",
         "tooltip": "オートコンプリート確定時、タグの末尾に自動でカンマを追加する"
     },
-    "AutocompletePlus_Autocompletion_MaxSuggestions": {
-        "name": "1ページの補完候補数",
-        "tooltip": "一覧の末尾までスクロールするたびに読み込む補完候補数です。"
+    "AutocompletePlus_Autocompletion_MaximumResults": {
+        "name": "オートコンプリート結果の上限",
+        "tooltip": "メモリ内に保持する完全な結果スナップショットの上限です。一覧には表示中の行だけを描画します。"
     },
     "AutocompletePlus_Autocompletion_Enable": {
         "name": "オートコンプリート機能の有効化"
@@ -80,9 +80,9 @@
             "vertical": "垂直"
         }
     },
-    "AutocompletePlus_RelatedTags_MaxRelatedTags": {
-        "name": "1ページの共起タグ数",
-        "tooltip": "一覧の末尾までスクロールするたびに読み込む共起タグ数です。"
+    "AutocompletePlus_RelatedTags_MaximumResults": {
+        "name": "共起タグ結果の上限",
+        "tooltip": "メモリ内に保持する完全な共起結果スナップショットの上限です。一覧には表示中の行だけを描画します。"
     },
     "AutocompletePlus_RelatedTags_Enable": {
         "name": "関連タグ機能の有効化"

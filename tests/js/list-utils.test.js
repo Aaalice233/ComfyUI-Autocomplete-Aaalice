@@ -64,6 +64,33 @@ describe('virtual list utilities', () => {
         expect(container.querySelector('[data-list-key="row-10"]')).not.toBeNull();
     });
 
+    test('replaces every changed visible row in one render without requiring navigation', () => {
+        const container = document.createElement('div');
+        Object.defineProperty(container, 'clientHeight', { value: 96 });
+        const list = new VirtualKeyedList(container, {
+            overscan: 0,
+            getKey: item => item.id,
+            getSignature: item => item.label,
+            createElement: item => {
+                const row = document.createElement('div');
+                row.textContent = item.label;
+                return row;
+            },
+        });
+        const items = Array.from({ length: 3 }, (_, index) => ({
+            id: `row-${index}`,
+            label: `Loading ${index}`,
+        }));
+        list.setItems(items);
+
+        for (const [index, item] of items.entries()) item.label = `Translated ${index}`;
+
+        expect(() => list.render()).not.toThrow();
+        expect(
+            [...container.querySelectorAll('[data-list-key]')].map(row => row.textContent),
+        ).toEqual(['Translated 0', 'Translated 1', 'Translated 2']);
+    });
+
     test('scrolls directly to an off-screen logical row', () => {
         const container = document.createElement('div');
         Object.defineProperty(container, 'clientHeight', { value: 96 });

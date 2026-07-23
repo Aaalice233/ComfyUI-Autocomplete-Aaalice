@@ -4,6 +4,7 @@ import {
     createTagCategoryIcon,
     createTagOriginMarker,
     createTagOriginMarkers,
+    createTranslationLoadingIndicator,
     getTagCategoryEmoji,
     getTagCategoryIconKey,
     getTagCategoryLabel,
@@ -87,6 +88,14 @@ describe('tag category presentation', () => {
         expect(element.querySelector('.autocomplete-plus-tag-text').textContent)
             .toBe('aemeath_(wuthering_waves)');
         expect(element.querySelectorAll('.autocomplete-plus-origin-marker')).toHaveLength(0);
+    });
+
+    test('creates an accessible animated three-dot translation indicator', () => {
+        const indicator = createTranslationLoadingIndicator();
+        expect(indicator.className).toBe('autocomplete-plus-translation-loading');
+        expect(indicator.getAttribute('role')).toBe('status');
+        expect(indicator.getAttribute('aria-label')).toBeTruthy();
+        expect(indicator.querySelectorAll('.autocomplete-plus-translation-loading-dot')).toHaveLength(3);
     });
 
     test('normalizes supported ComfyUI locale variants', () => {

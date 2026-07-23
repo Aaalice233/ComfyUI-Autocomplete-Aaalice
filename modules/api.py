@@ -152,6 +152,17 @@ async def save_translation_config(request):
         return web.json_response({"error": str(error)}, status=500)
 
 
+@server.PromptServer.instance.routes.post("/autocomplete-plus/translation/config/reveal")
+async def reveal_translation_api_key(_request):
+    try:
+        return web.json_response(
+            {"api_key": translation_manager.get_api_key()},
+            headers={"Cache-Control": "no-store"},
+        )
+    except Exception as error:
+        return web.json_response({"error": str(error)}, status=500)
+
+
 @server.PromptServer.instance.routes.get("/autocomplete-plus/translation/status")
 async def get_translation_status(_request):
     try:
@@ -226,6 +237,44 @@ async def resolve_translations(request):
     except Exception as error:
         # Typing must remain usable even if translation fails unexpectedly.
         return web.json_response({"translations": {}, "error": str(error)}, status=200)
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/translation/resolve-stream")
+async def stream_translations(request):
+    try:
+        payload = await request.json()
+    except (ValueError, json.JSONDecodeError) as error:
+        return web.json_response({"error": str(error)}, status=400)
+
+    response = web.StreamResponse(
+        headers={
+            "Content-Type": "application/x-ndjson; charset=utf-8",
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        }
+    )
+    await response.prepare(request)
+    try:
+        async for chunk in translation_manager.resolve_stream(
+            payload.get("locale"),
+            payload.get("tags"),
+        ):
+            await response.write(
+                (json.dumps(chunk, ensure_ascii=False) + "\n").encode("utf-8")
+            )
+        await response.write(b'{"done":true}\n')
+    except (ConnectionResetError, asyncio.CancelledError):
+        # Workers continue after the view closes so completed translations still
+        # populate the persistent cache for the next query.
+        pass
+    except Exception as error:
+        try:
+            await response.write(
+                (json.dumps({"error": str(error)}, ensure_ascii=False) + "\n").encode("utf-8")
+            )
+        except ConnectionResetError:
+            pass
+    return response
 
 
 @server.PromptServer.instance.routes.get("/autocomplete-plus/danbooru/search")

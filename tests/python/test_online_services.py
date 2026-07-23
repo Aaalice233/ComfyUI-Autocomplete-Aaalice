@@ -8,6 +8,7 @@ from modules.danbooru_service import DanbooruProvider, DanbooruRelatedTagProvide
 from modules.translation_config import OnlineServiceConfig, mask_config, validate_config
 from modules.translation_service import (
     DeepSeekClient,
+    DynamicConcurrencyLimiter,
     TranslationManager,
     normalize_items,
     normalize_locale,
@@ -20,6 +21,10 @@ class OnlineServiceConfigTests(unittest.TestCase):
     def test_thinking_is_disabled_by_default(self):
         config = validate_config({})
         self.assertEqual(config["deepseek"]["reasoning_effort"], "disabled")
+
+    def test_default_translation_batch_size_is_twenty(self):
+        config = validate_config({})
+        self.assertEqual(config["deepseek"]["batch_size"], 20)
 
     def test_legacy_scan_fields_are_discarded(self):
         config = validate_config(
@@ -49,6 +54,15 @@ class OnlineServiceConfigTests(unittest.TestCase):
             config = store.load()
             self.assertEqual(config["deepseek"]["api_key"], "secret")
             self.assertTrue(mask_config(config)["deepseek"]["api_key_configured"])
+
+    def test_translation_manager_can_reveal_saved_api_key_on_demand(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            manager = TranslationManager(os.path.join(directory, "config.json"), store)
+            manager.save_config({"deepseek": {"api_key": "secret"}})
+
+            self.assertEqual(manager.get_api_key(), "secret")
+            self.assertEqual(manager.get_config()["deepseek"]["api_key"], "********")
 
 
 class TranslationStoreTests(unittest.TestCase):
@@ -88,6 +102,19 @@ class TranslationStoreTests(unittest.TestCase):
 
             self.assertEqual([item["tag_name"] for item in store.catalog("zh")], ["local_tag"])
 
+    def test_large_job_cache_lookup_is_chunked_for_sqlite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            items = [
+                {"name": f"tag_{index}", "category": 0, "post_count": 1, "origin": "local"}
+                for index in range(1_200)
+            ]
+            translations = {item["name"]: f"译文_{index}" for index, item in enumerate(items)}
+            store.save_many("zh", items, translations, "model", "hash")
+
+            cached = store.get_many("zh", [item["name"] for item in items])
+            self.assertEqual(len(cached), 1_200)
+
 
 class TranslationValidationTests(unittest.TestCase):
     def test_locale_and_items_are_normalized(self):
@@ -103,10 +130,33 @@ class TranslationValidationTests(unittest.TestCase):
             [{"name": "tag", "category": 4, "post_count": 8, "origin": "danbooru_api"}],
         )
 
+    def test_large_frontend_jobs_are_not_truncated_to_one_legacy_batch(self):
+        items = normalize_items(
+            [{"name": f"tag_{index}", "category": 0, "post_count": 1} for index in range(320)]
+        )
+        self.assertEqual(len(items), 320)
+
     def test_invalid_or_unknown_translation_is_rejected(self):
         items = [{"name": "one", "category": 0}]
         content = json.dumps({"translations": [{"tag": "unknown", "translation": "未知"}]})
         self.assertEqual(validate_translation_response(content, items), ({}, ["one"]))
+
+
+class DynamicConcurrencyLimiterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_enforces_one_global_limit_across_many_batches(self):
+        limiter = DynamicConcurrencyLimiter()
+        active = 0
+        maximum = 0
+
+        async def operation():
+            nonlocal active, maximum
+            active += 1
+            maximum = max(maximum, active)
+            await asyncio.sleep(0)
+            active -= 1
+
+        await asyncio.gather(*(limiter.run(3, operation) for _ in range(12)))
+        self.assertEqual(maximum, 3)
 
 
 class TranslationManagerTests(unittest.IsolatedAsyncioTestCase):
@@ -145,6 +195,42 @@ class TranslationManagerTests(unittest.IsolatedAsyncioTestCase):
             )
 
             self.assertEqual(set(result), {"cached"})
+
+    async def test_stream_publishes_completed_tags_before_the_whole_job_finishes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            manager = TranslationManager(os.path.join(directory, "config.json"), store)
+            manager.save_config({"deepseek": {"api_key": "secret"}})
+            release_second = asyncio.Event()
+
+            async def translate_owned(locale, items, _config):
+                await manager._finish_inflight_batch(locale, [items[0]], {items[0]["name"]: "第一项"})
+                await release_second.wait()
+                await manager._finish_inflight_batch(locale, [items[1]], {items[1]["name"]: "第二项"})
+
+            manager._translate_owned = translate_owned
+            stream = manager.resolve_stream(
+                "zh",
+                [
+                    {"name": "first_tag", "category": 0},
+                    {"name": "second_tag", "category": 0},
+                ],
+            )
+
+            self.assertEqual(
+                await stream.__anext__(),
+                {"translations": {"first_tag": "第一项"}, "completed": ["first_tag"]},
+            )
+            second_chunk = asyncio.create_task(stream.__anext__())
+            await asyncio.sleep(0)
+            self.assertFalse(second_chunk.done())
+
+            release_second.set()
+            self.assertEqual(
+                await second_chunk,
+                {"translations": {"second_tag": "第二项"}, "completed": ["second_tag"]},
+            )
+            await stream.aclose()
 
     async def test_model_list_and_health_check_use_the_supplied_key_and_model(self):
         with tempfile.TemporaryDirectory() as directory:

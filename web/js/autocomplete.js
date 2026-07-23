@@ -26,9 +26,13 @@ import {
     searchLoraManagerCandidates,
 } from './integrations/lora-manager-provider.js';
 import { searchDanbooruCandidates } from './integrations/danbooru-provider.js';
-import { resolveCandidateTranslations } from './integrations/translation-provider.js';
+import {
+    getCandidateTranslationState,
+    resolveCandidateTranslationsProgressively,
+} from './integrations/translation-provider.js';
 import {
     createTagOriginMarkers,
+    createTranslationLoadingIndicator,
     getTagCategoryLabel,
     renderTagNameWithCategoryIcon,
 } from './tag-presentation.js';
@@ -412,7 +416,6 @@ class AutocompleteUI {
         this._requestId = 0;
         this._abortController = null;
         this._translationTimer = null;
-        this._translationRequested = new Set();
         this._scrollFrame = null;
 
         this.tagsList.addEventListener('scroll', () => {
@@ -461,7 +464,6 @@ class AutocompleteUI {
     async updateDisplay(textareaElement) {
         this.tagsList.scrollTop = 0;
         this.selectedIndex = -1;
-        this._translationRequested.clear();
         clearTimeout(this._translationTimer);
         this._translationTimer = null;
         return this.#updateDisplaySnapshot(textareaElement);
@@ -528,21 +530,26 @@ class AutocompleteUI {
     }
 
     #scheduleTranslationPrefetch(candidates, requestId, textareaElement) {
-        const pending = candidates.slice(0, TRANSLATION_PREFETCH_LIMIT).filter(candidate => {
-            const key = `${candidate.source}\0${candidate.tag}`;
-            return !this._translationRequested.has(key);
-        });
-        if (pending.length <= 0) return;
+        if (candidates.length <= 0) return;
         clearTimeout(this._translationTimer);
         this._translationTimer = setTimeout(() => {
             this._translationTimer = null;
-            for (const candidate of pending) {
-                this._translationRequested.add(`${candidate.source}\0${candidate.tag}`);
-            }
-            void resolveCandidateTranslations(pending, getCurrentInterfaceLocale()).then(() => {
-                if (requestId !== this._requestId || textareaElement !== this.target) return;
-                if (this.candidates.length > 0) this.#displayCandidates(false);
-            }).catch(() => {
+            const isCurrentRequest = () => (
+                requestId === this._requestId && textareaElement === this.target
+            );
+            void resolveCandidateTranslationsProgressively(
+                candidates,
+                getCurrentInterfaceLocale(),
+                {
+                    priorityLimit: TRANSLATION_PREFETCH_LIMIT,
+                    shouldContinue: isCurrentRequest,
+                    onStateChange: () => {
+                        if (isCurrentRequest() && this.candidates.length > 0) {
+                            this.#displayCandidates(false);
+                        }
+                    },
+                },
+            ).catch(() => {
                 // Translation enrichment is optional and must not interrupt typing.
             });
         }, TRANSLATION_PREFETCH_DELAY_MS);
@@ -639,6 +646,7 @@ class AutocompleteUI {
             tagData.origin,
             tagData.origins?.join(','),
             filterAliasesForLocale(tagData.alias).join(', '),
+            getCandidateTranslationState(tagData, getCurrentInterfaceLocale()),
             settingValues.hideAlias,
             settingValues.tagSourceIconPosition,
             existingTagSet.has(tagData.tag),
@@ -695,8 +703,14 @@ class AutocompleteUI {
         alias.className = 'autocomplete-plus-alias';
 
         // Display alias if available
+        if (getCandidateTranslationState(tagData, getCurrentInterfaceLocale()) === 'pending') {
+            alias.appendChild(createTranslationLoadingIndicator());
+        }
         if (aliasText.length > 0) {
-            alias.textContent = `${aliasText}`;
+            const aliasValue = document.createElement('span');
+            aliasValue.className = 'autocomplete-plus-alias-value';
+            aliasValue.textContent = aliasText;
+            alias.appendChild(aliasValue);
             alias.title = aliasText; // Full alias on hover
         }
 

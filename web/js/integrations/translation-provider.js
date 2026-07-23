@@ -4,28 +4,10 @@ import { createTranslationSearchDocument } from "../searchengine.js";
 import { isDanbooruCompletionEnabled, isTranslationEnabled } from "../online-service-state.js";
 
 const translationCache = new Map();
+const translationStates = new Map();
 const loadedLocales = new Set();
 const pendingIndexOperations = new Map();
-const TRANSLATION_REQUEST_BATCH_SIZE = 50;
-const TRANSLATION_REQUEST_CONCURRENCY = 3;
 let indexFlushTimer = null;
-
-async function mapWithConcurrency(items, concurrency, task) {
-    const results = new Array(items.length);
-    let nextIndex = 0;
-
-    async function worker() {
-        while (nextIndex < items.length) {
-            const index = nextIndex++;
-            results[index] = await task(items[index]);
-        }
-    }
-
-    await Promise.all(
-        Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-    );
-    return results;
-}
 
 function scheduleIndexAdd(document, key, index, candidate) {
     if (index < 0 || !document?.add) return;
@@ -110,12 +92,23 @@ function cacheKey(locale, tag) {
     return `${normalizeInterfaceLocale(locale)}\0${String(tag).toLowerCase()}`;
 }
 
+export function getCandidateTranslationState(candidate, locale) {
+    if (!candidate?.tag) return "idle";
+    return translationStates.get(cacheKey(locale, candidate.tag)) || "idle";
+}
+
+function setCandidateTranslationState(candidate, locale, state) {
+    if (!candidate?.tag) return;
+    translationStates.set(cacheKey(locale, candidate.tag), state);
+}
+
 function addTranslationToCandidate(candidate, locale, translation) {
     if (!candidate || !translation) return;
     const localizedAliases = new Set(filterAliasesForLocale(candidate.alias, locale));
     candidate.alias = candidate.alias.filter(alias => !localizedAliases.has(alias));
     candidate.alias.unshift(translation);
     translationCache.set(cacheKey(locale, candidate.tag), translation);
+    setCandidateTranslationState(candidate, locale, "translated");
 
     const sourceData = autoCompleteData[candidate.source];
     if (!sourceData) return;
@@ -210,7 +203,7 @@ export async function resolveCandidateTranslations(candidates, locale, options =
     if (!isTranslationEnabled()) return {};
     const normalizedLocale = normalizeInterfaceLocale(locale);
     if (normalizedLocale === "en") return {};
-    const { fetchImpl = fetch } = options;
+    const { fetchImpl = fetch, onStateChange = () => {} } = options;
     const eligible = [];
     const seen = new Set();
     for (const candidate of candidates) {
@@ -231,14 +224,17 @@ export async function resolveCandidateTranslations(candidates, locale, options =
         candidate.tag,
         translationCache.get(cacheKey(normalizedLocale, candidate.tag)),
     ]));
+    for (const candidate of missing) {
+        setCandidateTranslationState(candidate, normalizedLocale, "pending");
+    }
 
-    async function requestBatch(batch) {
-        const response = await fetchImpl("/autocomplete-plus/translation/resolve", {
+    try {
+        const response = await fetchImpl("/autocomplete-plus/translation/resolve-stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 locale: normalizedLocale,
-                tags: batch.map(candidate => ({
+                tags: missing.map(candidate => ({
                     name: candidate.tag,
                     category: candidate.category,
                     post_count: candidate.count,
@@ -247,30 +243,123 @@ export async function resolveCandidateTranslations(candidates, locale, options =
                 })),
             }),
         });
-        if (!response.ok) return {};
-        const payload = await response.json();
-        const translations = payload.translations || {};
-        for (const candidate of batch) {
-            const translation = translations[candidate.tag];
-            if (translation) addTranslationToCandidate(candidate, normalizedLocale, translation);
+        if (!response.ok) {
+            for (const candidate of missing) {
+                setCandidateTranslationState(candidate, normalizedLocale, "failed");
+            }
+            onStateChange();
+            return {};
         }
+        const translations = {};
+        await readTranslationPayloads(response, payload => {
+            if (payload.error) throw new Error(payload.error);
+            Object.assign(translations, payload.translations || {});
+            const completed = new Set(payload.completed || []);
+            for (const candidate of missing) {
+                const translation = payload.translations?.[candidate.tag];
+                if (translation) addTranslationToCandidate(candidate, normalizedLocale, translation);
+                if (completed.has(candidate.tag)) {
+                    setCandidateTranslationState(
+                        candidate,
+                        normalizedLocale,
+                        translationCache.has(cacheKey(normalizedLocale, candidate.tag))
+                            ? "translated"
+                            : "failed",
+                    );
+                }
+            }
+            onStateChange();
+        });
+        for (const candidate of missing) {
+            setCandidateTranslationState(
+                candidate,
+                normalizedLocale,
+                translationCache.has(cacheKey(normalizedLocale, candidate.tag)) ? "translated" : "failed",
+            );
+        }
+        onStateChange();
         return translations;
-    }
-
-    try {
-        const batches = [];
-        for (let index = 0; index < missing.length; index += TRANSLATION_REQUEST_BATCH_SIZE) {
-            batches.push(missing.slice(index, index + TRANSLATION_REQUEST_BATCH_SIZE));
-        }
-        const batchResults = await mapWithConcurrency(
-            batches,
-            TRANSLATION_REQUEST_CONCURRENCY,
-            requestBatch,
-        );
-        return Object.assign({}, ...batchResults);
     } catch (error) {
+        for (const candidate of missing) {
+            setCandidateTranslationState(
+                candidate,
+                normalizedLocale,
+                translationCache.has(cacheKey(normalizedLocale, candidate.tag)) ? "translated" : "failed",
+            );
+        }
+        onStateChange();
         return {};
     }
+}
+
+async function readTranslationPayloads(response, onPayload) {
+    if (!response.body?.getReader) {
+        onPayload(await response.json());
+        return;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const consumeLines = flush => {
+        const lines = buffer.split("\n");
+        if (!flush) buffer = lines.pop();
+        for (const line of lines) {
+            if (line.trim()) onPayload(JSON.parse(line));
+        }
+        if (flush) buffer = "";
+    };
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+            consumeLines(done);
+            if (done) break;
+        }
+    } finally {
+        reader.releaseLock?.();
+    }
+}
+
+export async function resolveCandidateTranslationsProgressively(candidates, locale, options = {}) {
+    const {
+        priorityLimit = 200,
+        onStateChange = () => {},
+        shouldContinue = () => true,
+        fetchImpl = fetch,
+    } = options;
+    const normalizedLocale = normalizeInterfaceLocale(locale);
+    if (!isTranslationEnabled() || normalizedLocale === "en") return;
+
+    const unique = [];
+    const seen = new Set();
+    for (const candidate of candidates) {
+        if (!Object.values(TagSource).includes(candidate?.source)) continue;
+        const key = `${candidate.source}\0${cacheKey(normalizedLocale, candidate.tag)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(candidate);
+    }
+
+    const priority = unique.slice(0, priorityLimit);
+    const backfill = unique.slice(priorityLimit).filter(
+        candidate => filterAliasesForLocale(candidate.alias, normalizedLocale).length === 0,
+    );
+    const queue = [...priority, ...backfill].filter(candidate => {
+        const state = getCandidateTranslationState(candidate, normalizedLocale);
+        return state !== "translated"
+            || filterAliasesForLocale(candidate.alias, normalizedLocale).length === 0;
+    });
+
+    if (!queue.length || !shouldContinue()) return;
+    const pending = resolveCandidateTranslations(queue, normalizedLocale, {
+        fetchImpl,
+        onStateChange: () => {
+            if (shouldContinue()) onStateChange();
+        },
+    });
+    onStateChange();
+    await pending;
+    if (shouldContinue()) onStateChange();
 }
 
 export const __test__ = {
@@ -280,10 +369,9 @@ export const __test__ = {
     flushIndexOperations,
     getTranslationIndex,
     indexTranslation,
+    readTranslationPayloads,
     loadedLocales,
     pendingIndexOperations,
-    mapWithConcurrency,
-    TRANSLATION_REQUEST_BATCH_SIZE,
-    TRANSLATION_REQUEST_CONCURRENCY,
     translationCache,
+    translationStates,
 };

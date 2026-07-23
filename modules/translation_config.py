@@ -21,7 +21,7 @@ DEFAULT_CONFIG = {
         "reasoning_effort": "disabled",
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
         "concurrency": 300,
-        "batch_size": 100,
+        "batch_size": 20,
         "max_retries": 3,
         "timeout_seconds": 180,
     },

@@ -1,5 +1,7 @@
 /** @jest-environment jsdom */
 
+import { readFileSync } from 'node:fs';
+
 import {
     filterAliasesForLocale,
     getInterfaceText,
@@ -65,9 +67,31 @@ describe('runtime UI localization', () => {
             'danbooruOnlineFallback',
             'loraManagerOrigin',
             'csvOrigin',
+            'translatingTag',
             'similarity',
         ]) {
             expect(getInterfaceText(key, { progress: 0 }, locale)).not.toBe(key);
         }
+    });
+
+    test.each(['en', 'zh', 'zh-TW', 'ja'])('contains every registered setting for %s', locale => {
+        const mainSource = readFileSync(new URL('../../web/js/main.js', import.meta.url), 'utf8');
+        const settingsSource = mainSource.slice(mainSource.indexOf('settings: ['));
+        const registeredKeys = [...settingsSource.matchAll(/id:\s*id\s*\+\s*["']([^"']+)["']/g)]
+            .map(([, suffix]) => `AutocompletePlus${suffix.replaceAll('.', '_')}`);
+        registeredKeys.push('AutocompletePlus_OnlineServices_Manager');
+
+        const settings = JSON.parse(
+            readFileSync(new URL(`../../locales/${locale}/settings.json`, import.meta.url), 'utf8'),
+        );
+        for (const key of registeredKeys) {
+            expect(settings).toHaveProperty(key);
+            expect(settings[key].name).toBeTruthy();
+        }
+
+        const main = JSON.parse(
+            readFileSync(new URL(`../../locales/${locale}/main.json`, import.meta.url), 'utf8'),
+        );
+        expect(main.settingsCategories['Online Services']).toBeTruthy();
     });
 });

@@ -20,6 +20,7 @@ SUPPORTED_LOCALES = {
     "ja": "Japanese",
     "en": "English",
 }
+MAX_TRANSLATION_ITEMS_PER_REQUEST = 25_000
 
 
 class TranslationError(RuntimeError):
@@ -38,6 +39,28 @@ class RetryableTranslationError(TranslationError):
 class TranslationResult:
     translations: dict
     failures: list
+
+
+class DynamicConcurrencyLimiter:
+    """Shares one adjustable DeepSeek concurrency budget across all requests."""
+
+    def __init__(self):
+        self._active = 0
+        self._limit = 1
+        self._condition = asyncio.Condition()
+
+    async def run(self, limit, operation):
+        async with self._condition:
+            self._limit = max(int(limit), 1)
+            while self._active >= self._limit:
+                await self._condition.wait()
+            self._active += 1
+        try:
+            return await operation()
+        finally:
+            async with self._condition:
+                self._active -= 1
+                self._condition.notify_all()
 
 
 class DeepSeekClient:
@@ -151,10 +174,15 @@ class TranslationManager:
         self.session_factory = session_factory or aiohttp.ClientSession
         self._inflight = {}
         self._inflight_lock = asyncio.Lock()
+        self._workers = set()
+        self._translation_limiter = DynamicConcurrencyLimiter()
         self._last_status = {"state": "idle", "message": "", "updated_at": None}
 
     def get_config(self):
         return mask_config(self.config_store.load())
+
+    def get_api_key(self):
+        return self.config_store.load()["deepseek"]["api_key"]
 
     def save_config(self, raw_config):
         return mask_config(self.config_store.save(raw_config))
@@ -231,23 +259,39 @@ class TranslationManager:
             raise
 
     async def resolve(self, locale, raw_items):
+        async for _translations in self.resolve_stream(locale, raw_items):
+            pass
+        locale = normalize_locale(locale)
+        tag_names = [item["name"] for item in normalize_items(raw_items)]
+        return await asyncio.to_thread(self.store.get_many, locale, tag_names)
+
+    async def resolve_stream(self, locale, raw_items):
         locale = normalize_locale(locale)
         items = normalize_items(raw_items)
         tag_names = [item["name"] for item in items]
         cached = await asyncio.to_thread(self.store.get_many, locale, tag_names)
+        cached_translations = {
+            tag_name: row["text"] for tag_name, row in cached.items() if row.get("text")
+        }
+        if cached_translations:
+            yield {
+                "translations": cached_translations,
+                "completed": list(cached_translations),
+            }
         if locale == "en" or not items:
-            return cached
+            return
 
         full_config = self.config_store.load()
         if not full_config["features"]["translation"]:
-            return cached
+            return
         config = full_config["deepseek"]
         missing = [item for item in items if item["name"] not in cached]
         if not config["api_key"] or not missing:
-            return cached
+            return
 
         owned = []
         futures = {}
+        refreshed_translations = {}
         loop = asyncio.get_running_loop()
         async with self._inflight_lock:
             # Another request can finish between the first SQLite lookup and
@@ -259,6 +303,11 @@ class TranslationManager:
                 [item["name"] for item in missing],
             )
             cached.update(refreshed)
+            refreshed_translations = {
+                tag_name: row["text"]
+                for tag_name, row in refreshed.items()
+                if tag_name not in cached_translations and row.get("text")
+            }
             for item in missing:
                 if item["name"] in cached:
                     continue
@@ -270,17 +319,50 @@ class TranslationManager:
                     owned.append(item)
                 futures[item["name"]] = future
 
+        if refreshed_translations:
+            yield {
+                "translations": refreshed_translations,
+                "completed": list(refreshed_translations),
+            }
+
         if owned:
             worker = asyncio.create_task(self._translate_owned(locale, owned, config))
-            await asyncio.shield(worker)
+            self._workers.add(worker)
+            worker.add_done_callback(self._workers.discard)
 
-        if futures:
-            await asyncio.gather(*futures.values())
-        return await asyncio.to_thread(self.store.get_many, locale, tag_names)
+        async def wait_for_tag(tag_name, future):
+            return tag_name, await asyncio.shield(future)
+
+        waiters = [
+            asyncio.create_task(wait_for_tag(tag_name, future))
+            for tag_name, future in futures.items()
+        ]
+        pending_waiters = set(waiters)
+        try:
+            while pending_waiters:
+                completed, pending_waiters = await asyncio.wait(
+                    pending_waiters,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                chunk = {}
+                completed_tags = []
+                for waiter in completed:
+                    tag_name, translation = waiter.result()
+                    completed_tags.append(tag_name)
+                    if translation:
+                        chunk[tag_name] = translation
+                yield {
+                    "translations": chunk,
+                    "completed": completed_tags,
+                }
+        finally:
+            for waiter in pending_waiters:
+                if not waiter.done():
+                    waiter.cancel()
 
     async def _translate_owned(self, locale, items, config):
         translations = {}
-        error = None
+        errors = []
         try:
             timeout = aiohttp.ClientTimeout(total=config["timeout_seconds"])
             connector = aiohttp.TCPConnector(limit=config["concurrency"])
@@ -290,13 +372,23 @@ class TranslationManager:
                     items[index : index + config["batch_size"]]
                     for index in range(0, len(items), config["batch_size"])
                 ]
-                semaphore = asyncio.Semaphore(config["concurrency"])
-
                 async def translate_batch(batch):
-                    async with semaphore:
-                        return batch, await client.translate(batch, locale)
+                    async def operation():
+                        return await client.translate(batch, locale)
 
-                for batch, result in await asyncio.gather(*(translate_batch(batch) for batch in batches)):
+                    try:
+                        result = await self._translation_limiter.run(config["concurrency"], operation)
+                        return batch, result, None
+                    except Exception as error:
+                        return batch, None, error
+
+                tasks = [asyncio.create_task(translate_batch(batch)) for batch in batches]
+                for completed in asyncio.as_completed(tasks):
+                    batch, result, error = await completed
+                    if error is not None:
+                        errors.append(error)
+                        await self._finish_inflight_batch(locale, batch, {})
+                        continue
                     translations.update(result.translations)
                     if result.translations:
                         prompt_hash = hashlib.sha256(config["system_prompt"].encode("utf-8")).hexdigest()
@@ -308,19 +400,23 @@ class TranslationManager:
                             config["model"],
                             prompt_hash,
                         )
-            self._set_status("success", f"Translated {len(translations)} tag(s)")
+                    await self._finish_inflight_batch(locale, batch, result.translations)
+            if errors:
+                self._set_status("error", str(errors[0])[:500])
+            else:
+                self._set_status("success", f"Translated {len(translations)} tag(s)")
         except Exception as caught:
-            error = caught
             self._set_status("error", str(caught)[:500])
         finally:
-            async with self._inflight_lock:
-                for item in items:
-                    key = (locale, item["name"])
-                    future = self._inflight.pop(key, None)
-                    if future is not None and not future.done():
-                        future.set_result(translations.get(item["name"]))
-        if error:
-            return
+            await self._finish_inflight_batch(locale, items, translations)
+
+    async def _finish_inflight_batch(self, locale, items, translations):
+        async with self._inflight_lock:
+            for item in items:
+                key = (locale, item["name"])
+                future = self._inflight.pop(key, None)
+                if future is not None and not future.done():
+                    future.set_result(translations.get(item["name"]))
 
     def _set_status(self, state, message):
         self._last_status = {
@@ -352,7 +448,7 @@ def normalize_items(raw_items):
         raise ValueError("tags must be an array")
     normalized = []
     seen = set()
-    for raw_item in raw_items[:50]:
+    for raw_item in raw_items[:MAX_TRANSLATION_ITEMS_PER_REQUEST]:
         if not isinstance(raw_item, dict):
             continue
         name = str(raw_item.get("name") or "").strip()

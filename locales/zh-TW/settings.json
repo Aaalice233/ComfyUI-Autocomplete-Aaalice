@@ -57,9 +57,9 @@
         "name": "自動插入逗號",
         "tooltip": "從自動完成插入標籤時自動在標籤後添加逗號"
     },
-    "AutocompletePlus_Autocompletion_MaxSuggestions": {
-        "name": "每頁自動完成數",
-        "tooltip": "每次捲動到底部時載入的自動完成候選數量。"
+    "AutocompletePlus_Autocompletion_MaximumResults": {
+        "name": "自動完成結果上限",
+        "tooltip": "限制完整記憶體結果快照的最大數量；列表只繪製目前可見的項目。"
     },
     "AutocompletePlus_Autocompletion_Enable": {
         "name": "啟用自動完成"
@@ -80,9 +80,9 @@
             "vertical": "垂直"
         }
     },
-    "AutocompletePlus_RelatedTags_MaxRelatedTags": {
-        "name": "每頁共現標籤數",
-        "tooltip": "每次捲動到底部時載入的共現標籤數量。"
+    "AutocompletePlus_RelatedTags_MaximumResults": {
+        "name": "共現標籤結果上限",
+        "tooltip": "限制完整記憶體共現結果快照的最大數量；列表只繪製目前可見的項目。"
     },
     "AutocompletePlus_RelatedTags_Enable": {
         "name": "啟用共現標籤"

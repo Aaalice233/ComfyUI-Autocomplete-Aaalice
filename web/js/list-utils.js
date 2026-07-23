@@ -63,7 +63,11 @@ export class VirtualKeyedList {
             let row = existing.get(key);
             if (!row || row.dataset.renderSignature !== signature) {
                 const replacement = this.options.createElement(item, index);
-                if (row) row.replaceWith(replacement);
+                if (row) {
+                    const replacesInsertionPoint = row === insertionPoint;
+                    row.replaceWith(replacement);
+                    if (replacesInsertionPoint) insertionPoint = replacement;
+                }
                 row = replacement;
             }
             row.dataset.listKey = key;

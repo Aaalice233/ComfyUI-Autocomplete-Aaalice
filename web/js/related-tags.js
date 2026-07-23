@@ -2,13 +2,17 @@ import { TagCategory, TagData, TagSource, autoCompleteData, getEnabledTagSourceI
 import { settingValues } from './settings.js';
 import {
     createTagOriginMarkers,
+    createTranslationLoadingIndicator,
     getTagCategoryLabel,
     renderTagNameWithCategoryIcon,
 } from './tag-presentation.js';
 import { applyTextInsertionEdit, buildRelatedTagInsertionEdit } from './tag-insertion.js';
 import { filterAliasesForLocale, getCurrentInterfaceLocale, getInterfaceText } from './localization.js';
 import { searchDanbooruRelatedTags } from './integrations/danbooru-provider.js';
-import { resolveCandidateTranslations } from './integrations/translation-provider.js';
+import {
+    getCandidateTranslationState,
+    resolveCandidateTranslationsProgressively,
+} from './integrations/translation-provider.js';
 import { VirtualKeyedList } from './list-utils.js';
 import { mergeDuplicateCandidate } from './candidate-ranking.js';
 import {
@@ -409,14 +413,25 @@ class RelatedTagsUI {
         const translationRequestId = ++this.translationRequestId;
         const translationCandidates = [
             this.getCurrentTagData(),
-            ...this.relatedTags.slice(0, TRANSLATION_PREFETCH_LIMIT),
+            ...this.relatedTags,
         ].filter(Boolean);
-        resolveCandidateTranslations(translationCandidates, getCurrentInterfaceLocale()).then(() => {
-            if (translationRequestId !== this.translationRequestId || textareaElement !== this.target) return;
-            this.#updateHeader();
-            this.#updateContent();
-            this.#highlightItem(false);
-        });
+        const isCurrentTranslation = () => (
+            translationRequestId === this.translationRequestId && textareaElement === this.target
+        );
+        void resolveCandidateTranslationsProgressively(
+            translationCandidates,
+            getCurrentInterfaceLocale(),
+            {
+                priorityLimit: TRANSLATION_PREFETCH_LIMIT,
+                shouldContinue: isCurrentTranslation,
+                onStateChange: () => {
+                    if (!isCurrentTranslation()) return;
+                    this.#updateHeader();
+                    this.#updateContent();
+                    this.#highlightItem(false);
+                },
+            },
+        );
         void this.#appendDanbooruRelatedTags(
             this.currentTag,
             resultLimit,
@@ -537,9 +552,30 @@ class RelatedTagsUI {
         this.#highlightItem(false);
 
         const translationRequestId = this.translationRequestId;
-        await resolveCandidateTranslations(
-            appended.slice(0, TRANSLATION_PREFETCH_LIMIT),
+        await resolveCandidateTranslationsProgressively(
+            appended,
             getCurrentInterfaceLocale(),
+            {
+                priorityLimit: TRANSLATION_PREFETCH_LIMIT,
+                shouldContinue: () => (
+                    !signal.aborted
+                    && requestId === this.relatedRequestId
+                    && translationRequestId === this.translationRequestId
+                    && textareaElement === this.target
+                ),
+                onStateChange: () => {
+                    if (
+                        signal.aborted
+                        || requestId !== this.relatedRequestId
+                        || translationRequestId !== this.translationRequestId
+                        || textareaElement !== this.target
+                    ) {
+                        return;
+                    }
+                    this.#updateContent();
+                    this.#highlightItem(false);
+                },
+            },
         );
         if (
             signal.aborted
@@ -660,6 +696,7 @@ class RelatedTagsUI {
             tagData.similarity,
             tagData.origins?.join(','),
             filterAliasesForLocale(tagData.alias).join(', '),
+            getCandidateTranslationState(tagData, getCurrentInterfaceLocale()),
             settingValues.hideAlias,
             settingValues.tagSourceIconPosition,
             existingTags.has(tagData.tag),
@@ -714,8 +751,14 @@ class RelatedTagsUI {
         alias.className = 'related-tag-alias';
 
         // Display alias if available
+        if (getCandidateTranslationState(tagData, getCurrentInterfaceLocale()) === 'pending') {
+            alias.appendChild(createTranslationLoadingIndicator());
+        }
         if (aliasText.length > 0) {
-            alias.textContent = `${aliasText}`;
+            const aliasValue = document.createElement('span');
+            aliasValue.className = 'autocomplete-plus-alias-value';
+            aliasValue.textContent = aliasText;
+            alias.appendChild(aliasValue);
             alias.title = aliasText; // Full alias on hover
         }
 

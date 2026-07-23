@@ -3,6 +3,9 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 
+SQLITE_LOOKUP_CHUNK_SIZE = 500
+
+
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -51,12 +54,17 @@ class TranslationStore:
         names = list(dict.fromkeys(tag_names))
         if not names:
             return {}
-        placeholders = ",".join("?" for _ in names)
+        rows = []
         with self._connect() as connection:
-            rows = connection.execute(
-                f"SELECT * FROM translations WHERE locale = ? AND tag_name IN ({placeholders})",
-                (locale, *names),
-            ).fetchall()
+            for index in range(0, len(names), SQLITE_LOOKUP_CHUNK_SIZE):
+                chunk = names[index : index + SQLITE_LOOKUP_CHUNK_SIZE]
+                placeholders = ",".join("?" for _ in chunk)
+                rows.extend(
+                    connection.execute(
+                        f"SELECT * FROM translations WHERE locale = ? AND tag_name IN ({placeholders})",
+                        (locale, *chunk),
+                    ).fetchall()
+                )
         return {row["tag_name"]: dict(row) for row in rows}
 
     def catalog(self, locale):

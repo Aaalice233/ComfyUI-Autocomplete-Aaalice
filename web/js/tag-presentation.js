@@ -137,6 +137,21 @@ export function createTagOriginMarker(tagData) {
     return createTagOriginMarkers(tagData)[0] || null;
 }
 
+export function createTranslationLoadingIndicator() {
+    const indicator = document.createElement('span');
+    indicator.className = 'autocomplete-plus-translation-loading';
+    indicator.title = getInterfaceText('translatingTag');
+    indicator.setAttribute('role', 'status');
+    indicator.setAttribute('aria-label', indicator.title);
+    for (let index = 0; index < 3; index++) {
+        const dot = document.createElement('span');
+        dot.className = 'autocomplete-plus-translation-loading-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        indicator.appendChild(dot);
+    }
+    return indicator;
+}
+
 export function renderTagNameWithCategoryIcon(element, tagData, position = 'left', includeOrigins = true) {
     element.textContent = '';
     const tagName = String(tagData?.tag || '');
