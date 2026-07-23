@@ -208,6 +208,7 @@ export async function resolveCandidateTranslations(candidates, locale, options =
     const seen = new Set();
     for (const candidate of candidates) {
         if (!Object.values(TagSource).includes(candidate?.source)) continue;
+        if (String(candidate.categoryText).toLowerCase() === "artist") continue;
         const key = `${candidate.source}\0${cacheKey(normalizedLocale, candidate.tag)}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -334,6 +335,7 @@ export async function resolveCandidateTranslationsProgressively(candidates, loca
     const seen = new Set();
     for (const candidate of candidates) {
         if (!Object.values(TagSource).includes(candidate?.source)) continue;
+        if (String(candidate.categoryText).toLowerCase() === "artist") continue;
         const key = `${candidate.source}\0${cacheKey(normalizedLocale, candidate.tag)}`;
         if (seen.has(key)) continue;
         seen.add(key);

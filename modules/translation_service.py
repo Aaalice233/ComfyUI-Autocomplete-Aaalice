@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import aiohttp
 
 from .translation_config import OnlineServiceConfig, mask_config
+from .translation_store import is_translation_acceptable
 
 
 DEEPSEEK_CHAT_URL = "https://api.deepseek.com/chat/completions"
@@ -91,7 +92,7 @@ class DeepSeekClient:
             )
             return {**left[0], **right[0]}, left[1] + right[1]
 
-        valid, missing = validate_translation_response(response_payload.get("content"), items)
+        valid, missing = validate_translation_response(response_payload.get("content"), items, locale)
         if not missing or retries_left <= 0:
             return valid, missing
         missing_set = set(missing)
@@ -105,7 +106,8 @@ class DeepSeekClient:
         schema_instruction = (
             "Return valid JSON only, using exactly this schema: "
             '{"translations":[{"tag":"original_tag","translation":"translated text"}]}. '
-            "Return every input tag exactly once and do not add unknown tags."
+            "Return every input tag exactly once and do not add unknown tags. "
+            "Every translation must use the target language writing system and must not repeat the original tag."
         )
         reasoning_effort = self.config.get("reasoning_effort", "disabled")
         payload = {
@@ -267,7 +269,10 @@ class TranslationManager:
 
     async def resolve_stream(self, locale, raw_items):
         locale = normalize_locale(locale)
-        items = normalize_items(raw_items)
+        items = [
+            item for item in normalize_items(raw_items)
+            if item["category"] != 1
+        ]
         tag_names = [item["name"] for item in items]
         cached = await asyncio.to_thread(self.store.get_many, locale, tag_names)
         cached_translations = {
@@ -467,8 +472,9 @@ def normalize_items(raw_items):
     return normalized
 
 
-def validate_translation_response(content, items):
+def validate_translation_response(content, items, locale):
     expected = {item["name"] for item in items}
+    categories = {item["name"]: item["category"] for item in items}
     if not isinstance(content, str) or not content.strip():
         return {}, sorted(expected)
     try:
@@ -492,6 +498,12 @@ def validate_translation_response(content, items):
             not isinstance(translation, str)
             or not translation.strip()
             or any(character in translation for character in ("\r", "\n", "\x00"))
+            or not is_translation_acceptable(
+                tag,
+                translation,
+                locale,
+                categories[tag],
+            )
         )
         if tag in valid or invalid_translation:
             if tag in expected:

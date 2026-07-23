@@ -15,11 +15,11 @@ import {
     extractTagsFromTextArea,
     getCurrentTagRange,
     getViewportMargin,
-    getScrollbarWidth,
     IconSvgHtmlString,
     addWeightToLora,
     openTagWikiUrl
 } from './utils.js';
+import { calculateAutocompletePlacement } from './popup-layout.js';
 import { settingValues } from './settings.js';
 import {
     isExplicitLoraManagerQuery,
@@ -33,18 +33,14 @@ import {
 import {
     createTagOriginMarkers,
     createTranslationLoadingIndicator,
+    getCandidateAliasText,
     getTagCategoryLabel,
     renderTagNameWithCategoryIcon,
 } from './tag-presentation.js';
 import { rankCompletionCandidates } from './candidate-ranking.js';
 import { applyTextInsertionEdit, buildAutocompleteInsertionEdit } from './tag-insertion.js';
 import { VirtualKeyedList } from './list-utils.js';
-import {
-    filterAliasesForLocale,
-    getCurrentInterfaceLocale,
-    getInterfaceText,
-    normalizeInterfaceLocale,
-} from './localization.js';
+import { getCurrentInterfaceLocale, getInterfaceText, normalizeInterfaceLocale } from './localization.js';
 
 export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
 const TRANSLATION_PREFETCH_LIMIT = 200;
@@ -417,6 +413,7 @@ class AutocompleteUI {
         this._abortController = null;
         this._translationTimer = null;
         this._scrollFrame = null;
+        this._resizeFrame = null;
 
         this.tagsList.addEventListener('scroll', () => {
             if (this._scrollFrame !== null) return;
@@ -424,6 +421,15 @@ class AutocompleteUI {
                 this._scrollFrame = null;
                 this.virtualList.render();
                 this.#highlightItem(false);
+            });
+        }, { passive: true });
+
+        window.addEventListener('resize', () => {
+            if (!this.target || this.root.style.display === 'none' || this._resizeFrame !== null) return;
+            this._resizeFrame = requestAnimationFrame(() => {
+                this._resizeFrame = null;
+                this.#updatePosition();
+                this.root.style.display = 'block';
             });
         }, { passive: true });
 
@@ -645,7 +651,7 @@ class AutocompleteUI {
             tagData.count,
             tagData.origin,
             tagData.origins?.join(','),
-            filterAliasesForLocale(tagData.alias).join(', '),
+            getCandidateAliasText(tagData),
             getCandidateTranslationState(tagData, getCurrentInterfaceLocale()),
             settingValues.hideAlias,
             settingValues.tagSourceIconPosition,
@@ -667,7 +673,7 @@ class AutocompleteUI {
      */
     #createTagElement(tagData, tagDataIndex, isExisting) {
         const categoryText = tagData.categoryText;
-        const aliasText = filterAliasesForLocale(tagData.alias).join(', ');
+        const aliasText = getCandidateAliasText(tagData);
 
         const tagRow = document.createElement('div');
         tagRow.classList.add('autocomplete-plus-item', tagData.source);
@@ -719,7 +725,7 @@ class AutocompleteUI {
         tagCount.className = `autocomplete-plus-tag-count`;
         tagCount.textContent = formatCountHumanReadable(tagData.count);
 
-        // Provenance has its own trailing track so badges never steal space
+        // The final data source has its own trailing track so the badge never steals space
         // from long English tag names.
         const origins = document.createElement('span');
         origins.className = 'autocomplete-plus-origin-cell';
@@ -775,71 +781,25 @@ class AutocompleteUI {
 
         const { top: caretTop, left: caretLeft, lineHeight: caretLineHeight } = this.#getCaretCoordinates(this.target);
 
-        // Initial desired position: below the current text line where the caret is.
-        let topPosition = targetElmOffset.top + ((caretTop - targetElmOffset.top) + caretLineHeight) * scale;
-        let leftPosition = targetElmOffset.left + (caretLeft - targetElmOffset.left) * scale;;
-
-        const naturalHeight = rootRect.height;
-
-        // Vertical Collision Detection and Adjustment
-        const availableSpaceBelow = viewportHeight - topPosition - margin.bottom;
-        const availableSpaceAbove = caretTop - margin.top;
-
-        let needsVerticalScroll = false;
-        let maxHeight = rootRect.height;
-
-        if (naturalHeight <= availableSpaceBelow) {
-            // Fits perfectly below the caret
-            // topPosition remains as calculated initially
-        } else {
-            // Doesn't fit below, check if it fits perfectly above
-            if (naturalHeight <= availableSpaceAbove) {
-                // Fits perfectly above
-                topPosition = caretTop - naturalHeight - margin.top;
-            } else {
-                // Doesn't fit perfectly either below or above, needs scrolling.
-                needsVerticalScroll = true;
-                // Choose the position (above or below) that offers more space.
-                if (availableSpaceBelow >= availableSpaceAbove) {
-                    // Scroll below: topPosition remains as initially calculated
-                    maxHeight = availableSpaceBelow;
-                } else {
-                    // Scroll above: Position near the top edge and set max-height
-                    topPosition = margin.top;
-                    maxHeight = availableSpaceAbove;
-                }
-            }
-        }
-
-        // Final check to prevent going off the top edge
-        if (topPosition < margin.top) {
-            topPosition = margin.top;
-            // If pushed down, recalculate max-height if it was set based on top alignment
-            if (availableSpaceBelow < availableSpaceAbove) {
-                // Recalculate max-height based on space from the top margin
-                maxHeight = viewportHeight - margin.top - margin.bottom;
-                needsVerticalScroll = true;
-            }
-        }
-
-        // Calculate maxWidth considering scrollbar width if vertical scrolling is needed
-        const scrollbarWidth = needsVerticalScroll ? getScrollbarWidth() : 0;
-        const maxWidth = Math.min(rootRect.width + scrollbarWidth, viewportWidth / 2);
-
-        // Horizontal Collision Detection and Adjustment
-        if (leftPosition + maxWidth > viewportWidth - margin.right) {
-            leftPosition = viewportWidth - maxWidth - margin.right;
-        }
-        if (leftPosition < margin.left) {
-            leftPosition = margin.left;
-        }
+        const scaledCaretLeft = targetElmOffset.left + (caretLeft - targetElmOffset.left) * scale;
+        const scaledCaretTop = targetElmOffset.top + (caretTop - targetElmOffset.top) * scale;
+        const placement = calculateAutocompletePlacement({
+            caretLeft: scaledCaretLeft,
+            caretTop: scaledCaretTop,
+            caretBottom: scaledCaretTop + caretLineHeight * scale,
+            preferredWidth: rootRect.width,
+            preferredHeight: rootRect.height,
+            viewportWidth,
+            viewportHeight,
+            margin,
+        });
 
         // Apply the calculated position and display the element
-        this.root.style.left = `${leftPosition}px`;
-        this.root.style.top = `${topPosition}px`;
-        this.root.style.width = `${maxWidth}px`;
-        this.root.style.maxWidth = `${maxWidth}px`;
-        this.tagsList.style.maxHeight = `${maxHeight}px`;
+        this.root.style.left = `${placement.x}px`;
+        this.root.style.top = `${placement.y}px`;
+        this.root.style.width = `${placement.width}px`;
+        this.root.style.maxWidth = `${placement.width}px`;
+        this.tagsList.style.maxHeight = `${placement.height}px`;
     }
 
     /** Highlights the item (row) at the given index */

@@ -50,9 +50,15 @@ body.dark-theme {
   top: 0;
   left: 0;
   display: none;
+  overflow: hidden;
   width: min(var(--autocomplete-plus-popup-width), calc(100vw - 24px));
+  border-radius: 8px;
   background-color: var(--comfy-input-bg);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 5%),
+    0 8px 28px rgb(0 0 0 / 42%);
   color: var(--input-text);
+  container-type: inline-size;
 }
 
 #autocomplete-plus-root .danbooru[data-tag-category="general"] {
@@ -114,16 +120,15 @@ body.dark-theme {
 #autocomplete-plus-list {
   display: grid;
   overflow: hidden auto;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
   contain: layout paint;
   grid-auto-rows: auto;
-  grid-template-columns: minmax(10rem, 1fr) 2.25rem var(--autocomplete-plus-alias-column-width) 4.5rem 5.25rem;
+  grid-template-columns: minmax(10rem, 1fr) 2.25rem var(--autocomplete-plus-alias-column-width) 4.5rem 3.25rem;
   overflow-anchor: none;
   scrollbar-gutter: stable;
 }
 
 #autocomplete-plus-list.no-alias {
-  grid-template-columns: minmax(10rem, 1fr) 2.25rem 4.5rem 5.25rem;
+  grid-template-columns: minmax(10rem, 1fr) 2.25rem 4.5rem 3.25rem;
 }
 
 .autocomplete-plus-item {
@@ -346,9 +351,15 @@ body.dark-theme {
   top: 0;
   left: 0;
   display: none;
+  overflow: hidden;
   width: min(var(--autocomplete-plus-popup-width), calc(100vw - 24px));
+  border-radius: 8px;
   background-color: var(--comfy-input-bg);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 5%),
+    0 8px 28px rgb(0 0 0 / 42%);
   color: var(--input-text);
+  container-type: inline-size;
 }
 
 #related-tags-root .danbooru[data-tag-category="general"] {
@@ -483,16 +494,15 @@ body.dark-theme {
 #related-tags-list {
   display: grid;
   overflow: hidden auto;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
   contain: layout paint;
   grid-auto-rows: auto;
-  grid-template-columns: minmax(10rem, 1fr) 2.25rem var(--autocomplete-plus-alias-column-width) 4.5rem 5.25rem;
+  grid-template-columns: minmax(10rem, 1fr) 2.25rem var(--autocomplete-plus-alias-column-width) 4.5rem 3.25rem;
   overflow-anchor: none;
   scrollbar-gutter: stable;
 }
 
 #related-tags-list.no-alias {
-  grid-template-columns: minmax(10rem, 1fr) 2.25rem 4.5rem 5.25rem;
+  grid-template-columns: minmax(10rem, 1fr) 2.25rem 4.5rem 3.25rem;
 }
 
 .related-tag-item {
@@ -601,6 +611,71 @@ body.dark-theme {
   color: var(--error-text);
   font-style: italic;
   text-align: center;
+}
+
+@container (max-width: 34rem) {
+  #autocomplete-plus-list,
+  #related-tags-list {
+    grid-template-columns: minmax(0, 1fr) 1.875rem 8rem 3.5rem 2.75rem;
+  }
+
+  #autocomplete-plus-list.no-alias,
+  #related-tags-list.no-alias {
+    grid-template-columns: minmax(0, 1fr) 1.875rem 3.5rem 2.75rem;
+  }
+
+  .autocomplete-plus-item span,
+  .related-tag-item span {
+    padding-inline: 6px;
+  }
+
+  .autocomplete-plus-item .autocomplete-plus-tag-name,
+  .autocomplete-plus-item .autocomplete-plus-alias,
+  .related-tag-item .related-tag-name,
+  .related-tag-item .related-tag-alias {
+    gap: 4px;
+  }
+
+  .autocomplete-plus-item .autocomplete-plus-wiki-icon,
+  .related-tag-item .related-tag-wiki-icon {
+    padding-inline: 5px;
+  }
+
+  #related-tags-header {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .related-tags-header-text-container {
+    gap: 6px;
+  }
+}
+
+@container (max-width: 23rem) {
+  #autocomplete-plus-list,
+  #related-tags-list {
+    grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 0.8fr) 3.25rem 2.75rem;
+  }
+
+  #autocomplete-plus-list.no-alias,
+  #related-tags-list.no-alias {
+    grid-template-columns: minmax(0, 1fr) 3.25rem 2.75rem;
+  }
+
+  .autocomplete-plus-item .autocomplete-plus-wiki-icon,
+  .related-tag-item .related-tag-wiki-icon {
+    display: none;
+  }
+
+  .autocomplete-plus-item span,
+  .related-tag-item span {
+    padding-inline: 5px;
+  }
+
+  .related-tags-header-tag-alias {
+    overflow: hidden;
+    max-height: 2.5em;
+  }
 }
 
 .autocomplete-plus-online-dialog {

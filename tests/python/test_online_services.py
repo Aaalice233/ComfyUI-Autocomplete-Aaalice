@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 
@@ -115,6 +116,42 @@ class TranslationStoreTests(unittest.TestCase):
             cached = store.get_many("zh", [item["name"] for item in items])
             self.assertEqual(len(cached), 1_200)
 
+    def test_invalid_legacy_identity_translation_is_removed_on_open(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = os.path.join(directory, "translations.sqlite3")
+            TranslationStore(database_path)
+            connection = sqlite3.connect(database_path)
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO translations(
+                        tag_name, locale, text, category, post_count, origin, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("1girl", "zh", "1girl", 0, 100, "local", "2026-01-01T00:00:00+00:00"),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            reopened = TranslationStore(database_path)
+
+            self.assertEqual(reopened.get_many("zh", ["1girl"]), {})
+            self.assertEqual(reopened.count(), 0)
+
+    def test_artist_identity_text_is_allowed_but_not_required_from_deepseek(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            store.save_many(
+                "zh",
+                [{"name": "an_artist", "category": 1, "post_count": 10, "origin": "local"}],
+                {"an_artist": "an_artist"},
+                "model",
+                "hash",
+            )
+
+            self.assertEqual(store.get_many("zh", ["an_artist"])["an_artist"]["text"], "an_artist")
+
 
 class TranslationValidationTests(unittest.TestCase):
     def test_locale_and_items_are_normalized(self):
@@ -139,7 +176,28 @@ class TranslationValidationTests(unittest.TestCase):
     def test_invalid_or_unknown_translation_is_rejected(self):
         items = [{"name": "one", "category": 0}]
         content = json.dumps({"translations": [{"tag": "unknown", "translation": "未知"}]})
-        self.assertEqual(validate_translation_response(content, items), ({}, ["one"]))
+        self.assertEqual(validate_translation_response(content, items, "zh"), ({}, ["one"]))
+
+    def test_identity_and_wrong_script_translations_are_rejected(self):
+        items = [
+            {"name": "1girl", "category": 0},
+            {"name": "blue_hair", "category": 0},
+            {"name": "an_artist", "category": 1},
+        ]
+        content = json.dumps(
+            {
+                "translations": [
+                    {"tag": "1girl", "translation": "1girl"},
+                    {"tag": "blue_hair", "translation": "blue hair"},
+                    {"tag": "an_artist", "translation": "an_artist"},
+                ]
+            }
+        )
+
+        self.assertEqual(
+            validate_translation_response(content, items, "zh"),
+            ({"an_artist": "an_artist"}, ["1girl", "blue_hair"]),
+        )
 
 
 class DynamicConcurrencyLimiterTests(unittest.IsolatedAsyncioTestCase):
@@ -195,6 +253,26 @@ class TranslationManagerTests(unittest.IsolatedAsyncioTestCase):
             )
 
             self.assertEqual(set(result), {"cached"})
+
+    async def test_artist_tags_never_start_a_deepseek_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            manager = TranslationManager(os.path.join(directory, "config.json"), store)
+            manager.save_config({"deepseek": {"api_key": "secret"}})
+
+            async def unexpected_worker(*_args):
+                self.fail("artist tags must not start a DeepSeek worker")
+
+            manager._translate_owned = unexpected_worker
+            chunks = [
+                chunk
+                async for chunk in manager.resolve_stream(
+                    "zh",
+                    [{"name": "an_artist", "category": 1}],
+                )
+            ]
+
+            self.assertEqual(chunks, [])
 
     async def test_stream_publishes_completed_tags_before_the_whole_job_finishes(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,4 +1,5 @@
 import {
+    filterAliasesForLocale,
     getCurrentInterfaceLocale,
     getInterfaceText,
     normalizeInterfaceLocale,
@@ -112,6 +113,7 @@ const ORIGIN_MARKERS = {
     lora_manager: { label: 'LM', tooltipKey: 'loraManagerOrigin' },
     danbooru_api: { label: 'API', tooltipKey: 'danbooruOnlineFallback' },
 };
+const ORIGIN_PRIORITY = ['csv', 'lora_manager', 'danbooru_api'];
 
 function createOriginMarker(origin) {
     const markerConfig = ORIGIN_MARKERS[origin];
@@ -128,9 +130,12 @@ function createOriginMarker(origin) {
 }
 
 export function createTagOriginMarkers(tagData) {
-    return getCandidateOrigins(tagData)
-        .map(createOriginMarker)
-        .filter(Boolean);
+    const origins = getCandidateOrigins(tagData);
+    const finalOrigin = ORIGIN_MARKERS[tagData?.origin]
+        ? tagData.origin
+        : ORIGIN_PRIORITY.find(origin => origins.includes(origin));
+    const marker = createOriginMarker(finalOrigin);
+    return marker ? [marker] : [];
 }
 
 export function createTagOriginMarker(tagData) {
@@ -150,6 +155,16 @@ export function createTranslationLoadingIndicator() {
         indicator.appendChild(dot);
     }
     return indicator;
+}
+
+export function getCandidateAliasText(tagData, locale = getCurrentInterfaceLocale()) {
+    if (
+        String(tagData?.categoryText || "").toLowerCase() === "artist"
+        && normalizeInterfaceLocale(locale) !== "en"
+    ) {
+        return String(tagData?.tag || "");
+    }
+    return filterAliasesForLocale(tagData?.alias, locale).join(", ");
 }
 
 export function renderTagNameWithCategoryIcon(element, tagData, position = 'left', includeOrigins = true) {

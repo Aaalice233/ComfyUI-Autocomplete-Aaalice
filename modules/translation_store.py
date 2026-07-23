@@ -6,6 +6,25 @@ from datetime import datetime, timezone
 SQLITE_LOOKUP_CHUNK_SIZE = 500
 
 
+def is_translation_acceptable(tag_name, text, locale, category=0):
+    value = str(text or "").strip()
+    if not value:
+        return False
+    if int(category or 0) == 1:
+        return True
+    if value.casefold() == str(tag_name or "").strip().casefold():
+        return False
+    normalized_locale = str(locale or "").replace("_", "-").lower()
+    if normalized_locale.startswith("zh"):
+        return any("\u3400" <= character <= "\u9fff" for character in value)
+    if normalized_locale.startswith("ja"):
+        return any(
+            "\u3040" <= character <= "\u30ff" or "\u3400" <= character <= "\u9fff"
+            for character in value
+        )
+    return True
+
+
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -49,6 +68,23 @@ class TranslationStore:
                 )
                 """
             )
+            invalid_rows = [
+                (row["tag_name"], row["locale"])
+                for row in connection.execute(
+                    "SELECT tag_name, locale, text, category FROM translations"
+                ).fetchall()
+                if not is_translation_acceptable(
+                    row["tag_name"],
+                    row["text"],
+                    row["locale"],
+                    row["category"],
+                )
+            ]
+            if invalid_rows:
+                connection.executemany(
+                    "DELETE FROM translations WHERE tag_name = ? AND locale = ?",
+                    invalid_rows,
+                )
 
     def get_many(self, locale, tag_names):
         names = list(dict.fromkeys(tag_names))
@@ -89,6 +125,8 @@ class TranslationStore:
         now = utc_now()
         for tag_name, text in translations.items():
             item = metadata[tag_name]
+            if not is_translation_acceptable(tag_name, text, locale, item["category"]):
+                continue
             rows.append(
                 (
                     tag_name,
@@ -102,6 +140,8 @@ class TranslationStore:
                     now,
                 )
             )
+        if not rows:
+            return
         with self._connect() as connection:
             connection.executemany(
                 """

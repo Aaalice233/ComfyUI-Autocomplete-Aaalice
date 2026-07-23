@@ -3,11 +3,12 @@ import { settingValues } from './settings.js';
 import {
     createTagOriginMarkers,
     createTranslationLoadingIndicator,
+    getCandidateAliasText,
     getTagCategoryLabel,
     renderTagNameWithCategoryIcon,
 } from './tag-presentation.js';
 import { applyTextInsertionEdit, buildRelatedTagInsertionEdit } from './tag-insertion.js';
-import { filterAliasesForLocale, getCurrentInterfaceLocale, getInterfaceText } from './localization.js';
+import { getCurrentInterfaceLocale, getInterfaceText } from './localization.js';
 import { searchDanbooruRelatedTags } from './integrations/danbooru-provider.js';
 import {
     getCandidateTranslationState,
@@ -19,7 +20,6 @@ import {
     extractTagsFromTextArea,
     findAllTagPositions,
     getTagRangeForRelatedTags,
-    getScrollbarWidth,
     getViewportMargin,
     isLongText,
     isValidTag,
@@ -27,6 +27,7 @@ import {
     normalizeTagToSearch,
     openTagWikiUrl
 } from './utils.js';
+import { calculateRelatedTagsPlacement } from './popup-layout.js';
 
 // --- RelatedTags Logic ---
 
@@ -305,6 +306,7 @@ class RelatedTagsUI {
         this.relatedRequestId = 0;
         this.relatedAbortController = null;
         this._scrollFrame = null;
+        this._resizeFrame = null;
 
         // Timer ID for auto-refresh
         this.autoRefreshTimerId = null;
@@ -345,6 +347,15 @@ class RelatedTagsUI {
                 this._scrollFrame = null;
                 this.virtualList.render();
                 this.#highlightItem(false);
+            });
+        }, { passive: true });
+
+        window.addEventListener('resize', () => {
+            if (!this.target || this.root.style.display === 'none' || this._resizeFrame !== null) return;
+            this._resizeFrame = requestAnimationFrame(() => {
+                this._resizeFrame = null;
+                this.#updatePosition();
+                this.root.style.display = 'block';
             });
         }, { passive: true });
     }
@@ -610,7 +621,7 @@ class RelatedTagsUI {
         }
 
         const categoryText = TagCategory[tagData.source][tagData.category] || "unknown";
-        const aliasText = filterAliasesForLocale(tagData.alias).join(', ');
+        const aliasText = getCandidateAliasText(tagData);
 
         // Update header text with current tag
         this.headerText.innerHTML = ''; // Clear previous content
@@ -695,7 +706,7 @@ class RelatedTagsUI {
             tagData.count,
             tagData.similarity,
             tagData.origins?.join(','),
-            filterAliasesForLocale(tagData.alias).join(', '),
+            getCandidateAliasText(tagData),
             getCandidateTranslationState(tagData, getCurrentInterfaceLocale()),
             settingValues.hideAlias,
             settingValues.tagSourceIconPosition,
@@ -715,7 +726,7 @@ class RelatedTagsUI {
      */
     #createTagElement(tagData, isExisting) {
         const categoryText = tagData.categoryText;
-        const aliasText = filterAliasesForLocale(tagData.alias).join(', ');
+        const aliasText = getCandidateAliasText(tagData);
 
         const tagRow = document.createElement('div');
         tagRow.classList.add('related-tag-item', tagData.source);
@@ -809,8 +820,15 @@ class RelatedTagsUI {
         this.tagsContainer.style.maxHeight = 'min(320px, calc(100vh - 24px))';
         const rootRect = this.root.getBoundingClientRect();
 
-        // Get the optimal placement area
-        const placementArea = this.#getOptimalPlacementArea(rootRect.width, rootRect.height);
+        const placementArea = calculateRelatedTagsPlacement({
+            anchorRect: this.target.getBoundingClientRect(),
+            preferredWidth: rootRect.width,
+            preferredHeight: rootRect.height,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            margin: getViewportMargin(),
+            orientation: settingValues.relatedTagsDisplayPosition,
+        });
 
         // Apply position and size
         this.root.style.left = `${placementArea.x}px`;
@@ -870,75 +888,6 @@ class RelatedTagsUI {
         }
     }
 
-    /**
-     * Calculates the optimal placement area for the panel based on available space.
-     * @param {number} elemWidth - Width of the panel element.
-     * @param {number} elemHeight - Height of the panel element.
-     * @returns {{ x: number, y: number, width: number, height: number }} The calculated placement area.
-     */
-    #getOptimalPlacementArea(elemWidth, elemHeight) {
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const margin = getViewportMargin();
-        const targetRect = this.target.getBoundingClientRect();
-
-        // Find optimal max width baesd on viewport and textarea element
-        const maxWidth = Math.max(
-            Math.min(targetRect.right, viewportWidth - margin.right) - targetRect.left,
-            (viewportWidth - margin.left - margin.right) / 2
-        );
-
-        const area = {
-            x: Math.max(targetRect.x, margin.left),
-            y: Math.max(targetRect.y, margin.top),
-            width: Math.min(elemWidth, maxWidth),
-            height: Math.min(elemHeight, viewportHeight - margin.top - margin.bottom)
-        };
-
-        if (settingValues.relatedTagsDisplayPosition === 'vertical') {
-            // Vertical placement
-            const topSpace = targetRect.top - margin.top;
-            const bottomSpace = viewportHeight - targetRect.bottom - margin.bottom;
-            if (topSpace > bottomSpace) {
-                // Place above
-                area.height = Math.min(area.height, topSpace);
-                area.y = Math.max(targetRect.y - area.height, margin.top);
-            } else {
-                // Place below
-                area.height = Math.min(area.height, bottomSpace);
-                area.y = targetRect.bottom;
-            }
-
-            // Calculate width considering scrollbar width if vertical scrolling is needed
-            const scrollbarWidth = area.height < elemHeight ? getScrollbarWidth() : 0;
-            area.width = Math.min(elemWidth + scrollbarWidth, maxWidth);
-
-            // Adjust x position to avoid overflow
-            area.x = Math.min(area.x, viewportWidth - area.width - margin.right);
-        } else {
-            // Horizontal placement
-            const leftSpace = targetRect.x - margin.left;
-            const rightSpace = viewportWidth - targetRect.right - margin.right;
-            if (leftSpace > rightSpace) {
-                // Place left
-                area.width = Math.min(area.width, leftSpace);
-                area.x = Math.max(targetRect.x - area.width, margin.left);
-            } else {
-                // Place right
-                area.width = Math.min(area.width, rightSpace);
-                area.x = targetRect.right;
-            }
-
-            // Calculate width considering scrollbar width if vertical scrolling is needed
-            const scrollbarWidth = area.height < elemHeight ? getScrollbarWidth() : 0;
-            area.width = Math.min(area.width + scrollbarWidth, viewportWidth - margin.left - margin.right);
-
-            // Adjust y position to avoid overflow
-            area.y = Math.min(area.y, viewportHeight - area.height - margin.bottom);
-        }
-
-        return area;
-    }
 }
 
 // --- RelatedTags Event Handling Class ---

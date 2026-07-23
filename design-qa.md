@@ -1,53 +1,38 @@
-# Online services panel design QA
+# Design QA: compact autocomplete and related tags
 
-- Source visual truth: `C:/Users/Admin/AppData/Local/Temp/codex-clipboard-87aa50ae-6c36-4981-8320-b82a8758b006.png`
-- Implementation screenshot: `C:/Users/Admin/AppData/Local/Temp/autocomplete-plus-online-redesign-final-full.png`
-- Combined comparison: `C:/Users/Admin/AppData/Local/Temp/autocomplete-plus-online-redesign-comparison.png`
-- Browser viewport: 1280 × 720 CSS px at device scale factor 1
-- Source pixels: 728 × 728
-- Implementation pixels: 1280 × 720
-- State: Simplified Chinese, dark theme, both online features enabled, advanced settings collapsed
+- Source visual truth: `C:/Users/Admin/AppData/Local/Temp/codex-clipboard-493ba00f-300b-4628-b314-35d19d422d39.png`
+- Same-viewport implementation: `C:/Users/Admin/AppData/Local/Temp/autocomplete-plus-design-qa-autocomplete-778.png`, `C:/Users/Admin/AppData/Local/Temp/autocomplete-plus-design-qa-related-tags-778.png`
+- Narrow responsive implementation: `C:/Users/Admin/AppData/Local/Temp/autocomplete-plus-design-qa-autocomplete.png`, `C:/Users/Admin/AppData/Local/Temp/autocomplete-plus-design-qa-related-tags.png`
+- Viewports: `778 × 768` and `480 × 640` CSS px
+- Pixel density: source and implementation screenshots captured at 1 CSS px per output px
+- State: dark theme, Nodes 2.0 `CLIP文本编码`, populated autocomplete and related-tags panels
 
 ## Full-view comparison
 
-The implementation replaces the flat sequence of similarly weighted controls with three distinct working zones: online capabilities, service health, and DeepSeek configuration. The header and footer remain fixed while the form body scrolls. Status, cache, secondary actions, and the single primary save action now have visibly different priorities. Borderless layered surfaces and soft edge shadows replace hard outlines without weakening grouping.
+The source shows a horizontally placed related-tags panel whose metric and source columns are clipped by the textarea. At the same `778 × 768` viewport, both revised panels remain within the viewport, keep every column visible, and preserve the existing ComfyUI visual language. At `480 × 640`, autocomplete contracts to a compact four-content-column layout and related tags move above the input because neither horizontal side is usable.
 
-## Focused-region comparison
+## Focused dense-list comparison
 
-The combined image is large enough to inspect the two important detail regions directly:
+Focused list captures were required because the relevant change is column-level density. Tag, translation, metric, and source values remain readable; `scrollWidth` equals `clientWidth` in every captured panel, confirming there is no hidden horizontal overflow. Long values use the existing ellipsis and hover-title behavior.
 
-- Service controls and health: switches have supporting copy, state dots use semantic colors, diagnostics form one compact group, and cache clearing is visually restrained.
-- Translation form and actions: API key and model share a consistent grid, the API key has an accessible reveal control, metadata is condensed into chips, model actions are secondary, and advanced values remain visible in the collapsed summary.
+## Findings
 
-No raster images, logos, or bespoke illustration assets are part of this interface. PrimeIcons supplies the close and API-key visibility icons.
-
-## Required fidelity surfaces
-
-- Fonts and typography: uses the host-compatible Inter/system stack, a restrained 12–18 px hierarchy, readable line heights, and no clipped primary labels.
-- Spacing and layout rhythm: consistent 8 px-derived spacing, 10 px control radii, aligned two-column grids, stable 780 px desktop width, fixed header/footer regions, and borderless depth created by restrained edge shadows.
-- Colors and visual tokens: neutral near-black surfaces, low-contrast separators, one blue primary action, semantic green/yellow/red states, and restrained destructive styling.
-- Image quality and assets: no image assets are required; standard icon-font glyphs render sharply at the host scale.
-- Copy and content: all existing capabilities remain present, supporting text explains background behavior, and visible UI is localized in Simplified Chinese.
+- No actionable P0, P1, or P2 findings remain.
+- Typography: existing ComfyUI fonts, weights, line height, truncation, and category colors are preserved.
+- Spacing and layout: narrow container queries reduce fixed columns and padding; the smallest mode removes only the low-priority Wiki column. Rounded borderless surfaces and restrained edge shadows improve separation without adding visual weight.
+- Colors and tokens: all row, selection, category, and muted-text colors continue to use existing theme tokens.
+- Image quality: no new raster or decorative assets are required; existing category and Wiki icons remain sharp.
+- Copy and content: labels, translations, counts, and similarities are unchanged. The source column intentionally shows only the final highest-priority `CSV`, `LM`, or `API` badge.
 
 ## Comparison history
 
-### Pass 1
-
-- P2: the dialog received a visible browser focus outline on open.
-  - Fix: focus remains on the dialog for keyboard safety, while the dialog-level outline is suppressed; controls retain their own `:focus-visible` treatment.
-- P2: the online-services category was not reliably first and could briefly expose an English ordering key.
-  - Fix: the category now uses the current interface locale directly and a non-visible leading sort space, keeping the localized group first.
-
-### Pass 2
-
-- The dialog opens at 780 × 688 px in a 1280 × 720 viewport without horizontal overflow.
-- Online services is the first localized settings group.
-- API-key reveal and advanced disclosure interactions work.
-- No `autocomplete-plus` browser console errors were recorded.
-- No actionable P0, P1, or P2 findings remain.
+1. Initial P1: the related-tags metric and source columns were outside the visible panel, and horizontal placement could overlap the input edge.
+2. Fix: introduced viewport-bounded placement with an anchor gap, side selection, above/below fallback, and responsive grid tracks for compact and ultra-compact widths.
+3. Post-fix evidence: same-viewport and narrow captures show complete columns with no horizontal overflow. Autocomplete insertion and related-tag switching were exercised successfully, and no `Autocomplete-Plus` console errors were recorded.
+4. Source-column refinement: autocomplete and related-tags rows were rechecked with mixed CSV, LoRA Manager, and API candidates. Every rendered row contained at most one source badge, and both lists retained `scrollWidth === clientWidth`.
 
 ## Follow-up polish
 
-- P3: very small helper text may be slightly dense on unusually low-DPI displays, but remains readable in the tested ComfyUI scale and does not block use.
+No blocking polish remains.
 
 final result: passed

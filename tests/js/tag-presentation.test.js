@@ -5,6 +5,7 @@ import {
     createTagOriginMarker,
     createTagOriginMarkers,
     createTranslationLoadingIndicator,
+    getCandidateAliasText,
     getTagCategoryEmoji,
     getTagCategoryIconKey,
     getTagCategoryLabel,
@@ -56,7 +57,7 @@ describe('tag category presentation', () => {
         expect(getTagCategoryLabel('artist', 'en-US')).toBe('artist');
     });
 
-    test('uses accessible markers for API, LoRA Manager, and CSV origins', () => {
+    test('shows only the final data source marker', () => {
         const marker = createTagOriginMarker({ origin: 'danbooru_api' });
         expect(marker.dataset.tagOrigin).toBe('danbooru_api');
         expect(marker.className).toBe('autocomplete-plus-origin-marker');
@@ -67,12 +68,15 @@ describe('tag category presentation', () => {
             origin: 'csv',
             origins: ['csv', 'lora_manager', 'danbooru_api'],
         });
-        expect(markers.map(item => item.textContent)).toEqual(['CSV', 'LM', 'API']);
-        expect(markers.map(item => item.dataset.tagOrigin)).toEqual([
-            'csv',
-            'lora_manager',
-            'danbooru_api',
-        ]);
+        expect(markers.map(item => item.textContent)).toEqual(['CSV']);
+        expect(markers.map(item => item.dataset.tagOrigin)).toEqual(['csv']);
+        expect(createTagOriginMarker({
+            origin: 'lora_manager',
+            origins: ['csv', 'lora_manager', 'danbooru_api'],
+        }).textContent).toBe('LM');
+        expect(createTagOriginMarker({
+            origins: ['danbooru_api', 'lora_manager', 'csv'],
+        }).textContent).toBe('CSV');
         expect(createTagOriginMarker({ origin: 'local' })).toBeNull();
     });
 
@@ -96,6 +100,12 @@ describe('tag category presentation', () => {
         expect(indicator.getAttribute('role')).toBe('status');
         expect(indicator.getAttribute('aria-label')).toBeTruthy();
         expect(indicator.querySelectorAll('.autocomplete-plus-translation-loading-dot')).toHaveLength(3);
+    });
+
+    test('shows an artist tag itself as the localized alias without translation', () => {
+        const artist = { tag: 'an_artist', categoryText: 'artist', alias: [] };
+        expect(getCandidateAliasText(artist, 'zh-CN')).toBe('an_artist');
+        expect(getCandidateAliasText(artist, 'ja-JP')).toBe('an_artist');
     });
 
     test('normalizes supported ComfyUI locale variants', () => {

@@ -346,6 +346,13 @@ describe('on-demand translation provider', () => {
         expect(fetchImpl).not.toHaveBeenCalled();
     });
 
+    test('never sends artist candidates to translation', async () => {
+        const fetchImpl = jest.fn();
+        const candidate = new TagData('an_artist', 1, 10, [], TagSource.Danbooru);
+        await resolveCandidateTranslations([candidate], 'zh', { fetchImpl });
+        expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
     test('translates ordinary e621 candidates too', async () => {
         const candidate = new TagData('female', 0, 100, [], TagSource.E621);
         const fetchImpl = jest.fn().mockResolvedValue({
