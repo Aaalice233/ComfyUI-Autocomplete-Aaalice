@@ -18,6 +18,7 @@
 
 - 現行の ComfyUI フロントエンドに合わせて継続的にメンテナンス
 - **Nodes 2.0** のテキスト入力と、**サブグラフノード**に昇格された入力の両方に対応し、元の内部ノードとウィジェットまで解決
+- 停止中の上流パッケージと区別できるよう、Comfy Registry では `ComfyUI-Autocomplete-Aaalice` として独立公開
 
 #### ローカル優先のデータソース
 
@@ -84,7 +85,7 @@
 
 ### ComfyUI-Manager
 
-1. [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager) で `Autocomplete-Plus` と検索して表示されたカスタムノードをインストールし、再起動します
+1. [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager) で `ComfyUI-Autocomplete-Aaalice` と検索し、このメンテナンス版をインストールして再起動します
 2. 起動時に必要な CSV データが HuggingFace から自動的にダウンロードされます
 
 ### マニュアル

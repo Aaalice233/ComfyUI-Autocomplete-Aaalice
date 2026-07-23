@@ -18,6 +18,7 @@ This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plu
 
 - Actively maintained for current ComfyUI frontend versions.
 - Supports **Nodes 2.0** text inputs and promoted **subgraph-node** inputs, including resolution back to the real inner node and widget.
+- Published independently in Comfy Registry as `ComfyUI-Autocomplete-Aaalice`, so this maintained fork is clearly separated from the inactive upstream package.
 
 #### Local-first data sources
 
@@ -85,7 +86,7 @@ The original project remains the foundation of this fork. Existing features and 
 
 ### ComfyUI-Manager
 
-1. Search for `Autocomplete-Plus` in [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager), install the custom node that appears, and restart.
+1. Search for `ComfyUI-Autocomplete-Aaalice` in [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager), install this maintained fork, and restart.
 2. The necessary CSV data will be automatically downloaded from HuggingFace upon startup.
 
 ### Manual

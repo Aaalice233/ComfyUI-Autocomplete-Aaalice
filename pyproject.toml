@@ -1,12 +1,12 @@
 [project]
-name = "comfyui-autocomplete-plus"
+name = "comfyui-autocomplete-aaalice"
 description = "Autocomplete and Related Tag display for ComfyUI"
 version = "1.11.0"
 license = {file = "LICENSE"}
-dependencies = ["",]
+dependencies = []
 
 [project.urls]
-Repository = "https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus"
+Repository = "https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [dependency-groups]
@@ -15,9 +15,10 @@ dev = [
 ]
 
 [tool.comfy]
-PublisherId = "newtextdoc1111"
-DisplayName = "ComfyUI-Autocomplete-Plus"
-Icon = ""
+PublisherId = "aaalice"
+DisplayName = "ComfyUI-Autocomplete-Aaalice"
+Icon = "https://raw.githubusercontent.com/Aaalice233/ComfyUI-Autocomplete-Aaalice/main/assets/icon.png"
+Banner = "https://raw.githubusercontent.com/Aaalice233/ComfyUI-Autocomplete-Aaalice/main/assets/banner.png"
 
 [tool.ruff]
 # Allow lines to be as long as 120.

@@ -18,6 +18,7 @@
 
 - 持续跟进新版 ComfyUI 前端。
 - 同时支持 **Nodes 2.0** 文本输入框和**子图节点**提升后的输入，并能追溯到内部真实节点与字段。
+- 以 `ComfyUI-Autocomplete-Aaalice` 的独立名称发布到 Comfy Registry，避免与已停止维护的上游包混淆。
 
 #### 本地优先的多数据源
 
@@ -85,7 +86,7 @@
 
 ### ComfyUI-Manager
 
-1. 在 [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager) 中搜索 `Autocomplete-Plus`，安装显示的自定义节点后重启 ComfyUI。
+1. 在 [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager) 中搜索 `ComfyUI-Autocomplete-Aaalice`，安装本维护分支后重启 ComfyUI。
 2. 启动时会自动从 HuggingFace 下载所需的 CSV 数据。
 
 ### 手动安装

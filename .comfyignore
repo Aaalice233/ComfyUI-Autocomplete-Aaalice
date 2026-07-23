@@ -1,0 +1,56 @@
+# Comfy Registry 发布包排除（在 .gitignore 之上再裁）
+# 语法同 .gitignore；已被 git 跟踪的路径也会被排除
+
+# 协作 / 本地工具
+AGENTS.md
+design-qa.md
+docs/
+
+# CI / 开发元数据
+.github/
+.babelrc
+.env-cmdrc.json
+.gitignore
+.pylintrc
+.stylelintrc
+.comfyignore
+package.json
+package-lock.json
+test.config.js
+
+# 测试与缓存
+tests/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# 环境与密钥
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+*.local
+
+# 构建产物与本地依赖
+node_modules/
+dist/
+build/
+*.egg-info/
+.eggs/
