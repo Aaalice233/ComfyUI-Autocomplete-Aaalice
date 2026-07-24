@@ -13,6 +13,9 @@ __pycache__/
 # npm packages
 node_modules/
 
+# Comfy Registry local package
+/node.zip
+
 # csv files
 data/*.csv
 data/.download
