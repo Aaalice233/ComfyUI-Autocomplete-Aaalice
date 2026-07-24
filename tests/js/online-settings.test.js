@@ -199,8 +199,12 @@ describe('online services settings panel', () => {
         expect(options).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro']);
         expect(dialog.textContent).toContain('Model list loaded（2）');
 
-        buttons.find(button => button.textContent === 'Test model').click();
+        const testButton = buttons.find(button => button.textContent === 'Test model');
+        expect(testButton.classList.contains('is-model-test')).toBe(true);
+        expect(testButton.querySelector('svg').children.length).toBeGreaterThan(0);
+        testButton.click();
         await new Promise(resolve => setTimeout(resolve, 0));
+        expect(testButton.querySelector('svg').children.length).toBeGreaterThan(0);
         expect(global.fetch).toHaveBeenCalledWith(
             '/autocomplete-plus/translation/test',
             expect.objectContaining({ method: 'POST' }),

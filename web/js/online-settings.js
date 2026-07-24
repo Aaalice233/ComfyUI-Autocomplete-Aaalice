@@ -461,6 +461,7 @@ const LUCIDE_PATHS = {
     globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20"/>',
     database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/>',
     sparkles: '<path d="m12 3-1.9 4.1L6 9l4.1 1.9L12 15l1.9-4.1L18 9l-4.1-1.9ZM5 16l-.9 1.9L2 19l2.1 1.1L5 22l.9-1.9L8 19l-2.1-1.1ZM19 13l-.9 1.9L16 16l2.1 1.1L19 19l.9-1.9L22 16l-2.1-1.1Z"/>',
+    activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
 };
 
 function lucideIcon(icon) {
@@ -489,7 +490,14 @@ function setButtonBusy(target, busy, busyLabel) {
     if (!target.dataset.idleLabel) target.dataset.idleLabel = target.textContent;
     target.disabled = busy;
     target.ariaBusy = String(busy);
-    target.textContent = busy ? busyLabel : target.dataset.idleLabel;
+    const label = busy ? busyLabel : target.dataset.idleLabel;
+    if (target.dataset.icon) {
+        const icon = lucideIcon(target.dataset.icon);
+        if (busy) icon.classList.add("is-busy");
+        target.replaceChildren(icon, element("span", "", label));
+    } else {
+        target.textContent = label;
+    }
 }
 
 function formatBytes(bytes) {
@@ -832,7 +840,10 @@ export async function openOnlineServicesPanel(_app) {
     ]);
     const modelActions = element("div", "autocomplete-plus-online-model-actions");
     const refreshModels = button(text.refreshModels);
-    const testModel = button(text.testModel, "is-emphasized");
+    const testModel = button("", "is-model-test");
+    testModel.dataset.icon = "activity";
+    testModel.dataset.idleLabel = text.testModel;
+    testModel.append(lucideIcon("activity"), element("span", "", text.testModel));
     modelActions.append(refreshModels, testModel);
     form.append(modelActions);
     translationSection.append(form);
