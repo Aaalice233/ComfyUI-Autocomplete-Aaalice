@@ -131,6 +131,10 @@ describe('online services settings panel', () => {
         expect(dialog.querySelector('.autocomplete-plus-online-content')).not.toBeNull();
         expect(dialog.querySelector('.autocomplete-plus-online-status-grid')).not.toBeNull();
         expect(dialog.querySelectorAll('[role="tab"]')).toHaveLength(3);
+        expect(dialog.querySelectorAll('[role="tab"] > svg')).toHaveLength(3);
+        expect(dialog.querySelector('[role="tab"] > svg').namespaceURI)
+            .toBe('http://www.w3.org/2000/svg');
+        expect(dialog.querySelector('[role="tab"] > svg').children.length).toBeGreaterThan(0);
         expect(dialog.textContent).toContain('Simplified Chinese dictionary');
         expect(dialog.textContent).toContain('318,000');
         expect(dialog.querySelector('.autocomplete-plus-online-title p').textContent)
@@ -168,6 +172,8 @@ describe('online services settings panel', () => {
         const reveal = dialog.querySelector('button[aria-label="Show API key"]');
 
         expect(apiKey.type).toBe('password');
+        expect(reveal.querySelector('svg').namespaceURI).toBe('http://www.w3.org/2000/svg');
+        expect(reveal.querySelector('svg').children.length).toBeGreaterThan(0);
         reveal.click();
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(apiKey.type).toBe('text');

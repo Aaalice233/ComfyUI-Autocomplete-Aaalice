@@ -464,13 +464,15 @@ const LUCIDE_PATHS = {
 };
 
 function lucideIcon(icon) {
-    const svg = element("svg", "autocomplete-plus-online-lucide");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "autocomplete-plus-online-lucide");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("fill", "none");
     svg.setAttribute("stroke", "currentColor");
     svg.setAttribute("stroke-width", "1.8");
     svg.setAttribute("stroke-linecap", "round");
     svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("focusable", "false");
     svg.innerHTML = LUCIDE_PATHS[icon] || LUCIDE_PATHS.sparkles;
     svg.ariaHidden = "true";
     return svg;
@@ -575,7 +577,8 @@ export async function openOnlineServicesPanel(_app) {
         ["dictionary", text.navDictionary, "database"],
         ["deepseek", text.navDeepSeek, "sparkles"],
     ]) {
-        const navButton = button("", "autocomplete-plus-online-nav-button");
+        const navButton = element("button", "autocomplete-plus-online-nav-button");
+        navButton.type = "button";
         navButton.setAttribute("role", "tab");
         navButton.append(lucideIcon(icon), element("span", "", label));
         navButton.onclick = () => selectPage(key);
