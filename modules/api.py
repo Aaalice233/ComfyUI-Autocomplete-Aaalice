@@ -7,6 +7,7 @@ import server
 from aiohttp import web
 
 from . import downloader as dl
+from .chinese_dictionary_service import ChineseDictionaryService
 from .completion_cache_store import CompletionCacheStore
 from .completion_service import CompletionSearchService
 from .danbooru_service import DanbooruProvider, DanbooruRelatedTagProvider
@@ -26,13 +27,16 @@ USER_DATA_DIR = os.path.join(folder_paths.get_user_directory(), "autocomplete-pl
 ONLINE_SERVICE_CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
 TRANSLATION_DATABASE_FILE = os.path.join(USER_DATA_DIR, "translations.sqlite3")
 COMPLETION_CACHE_DATABASE_FILE = os.path.join(USER_DATA_DIR, "completion_cache.sqlite3")
+CHINESE_DICTIONARY_DIR = os.path.join(USER_DATA_DIR, "chinese-dictionary")
 
+chinese_dictionary = ChineseDictionaryService(CHINESE_DICTIONARY_DIR)
 translation_store = TranslationStore(TRANSLATION_DATABASE_FILE)
 online_service_config = OnlineServiceConfig(ONLINE_SERVICE_CONFIG_FILE)
 translation_manager = TranslationManager(
     ONLINE_SERVICE_CONFIG_FILE,
     translation_store,
     config_store=online_service_config,
+    primary_store=chinese_dictionary,
 )
 completion_cache_store = CompletionCacheStore(COMPLETION_CACHE_DATABASE_FILE)
 danbooru_search = CompletionSearchService(DanbooruProvider(), completion_cache_store)
@@ -148,6 +152,68 @@ async def save_translation_config(request):
         return web.json_response(translation_manager.save_config(await request.json()))
     except (ValueError, json.JSONDecodeError) as error:
         return web.json_response({"error": str(error)}, status=400)
+    except Exception as error:
+        return web.json_response({"error": str(error)}, status=500)
+
+
+@server.PromptServer.instance.routes.get("/autocomplete-plus/chinese-dictionary/status")
+async def get_chinese_dictionary_status(_request):
+    return web.json_response(chinese_dictionary.status())
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/chinese-dictionary/ensure")
+async def ensure_chinese_dictionary(request):
+    try:
+        payload = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        payload = {}
+    return web.json_response(
+        await chinese_dictionary.ensure(payload.get("locale")),
+        status=202,
+    )
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/chinese-dictionary/check-update")
+async def check_chinese_dictionary_update(_request):
+    return web.json_response(await chinese_dictionary.check_update())
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/chinese-dictionary/update")
+async def update_chinese_dictionary(request):
+    try:
+        payload = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        payload = {}
+    return web.json_response(
+        chinese_dictionary.start_update(force=bool(payload.get("force"))),
+        status=202,
+    )
+
+
+@server.PromptServer.instance.routes.post("/autocomplete-plus/chinese-dictionary/lookup")
+async def lookup_chinese_dictionary(request):
+    try:
+        payload = await request.json()
+        tags = payload.get("tags")
+        if not isinstance(tags, list):
+            raise ValueError("tags must be an array")
+        rows = await asyncio.to_thread(chinese_dictionary.lookup, tags)
+        return web.json_response({"translations": rows})
+    except (ValueError, json.JSONDecodeError) as error:
+        return web.json_response({"error": str(error)}, status=400)
+    except Exception as error:
+        return web.json_response({"error": str(error)}, status=500)
+
+
+@server.PromptServer.instance.routes.get("/autocomplete-plus/chinese-dictionary/search")
+async def search_chinese_dictionary(request):
+    try:
+        rows = await asyncio.to_thread(
+            chinese_dictionary.search,
+            request.query.get("q", ""),
+            request.query.get("limit", 50),
+        )
+        return web.json_response({"results": rows})
     except Exception as error:
         return web.json_response({"error": str(error)}, status=500)
 

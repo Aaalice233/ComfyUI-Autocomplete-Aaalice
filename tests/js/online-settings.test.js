@@ -45,6 +45,20 @@ describe('online services settings panel', () => {
         });
         global.fetch = jest.fn(async url => {
             if (String(url).endsWith('/config')) return { ok: true, json: async () => config };
+            if (String(url).endsWith('/chinese-dictionary/status')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        state: 'ready',
+                        installed: true,
+                        installed_sha: '1234567890abcdef',
+                        remote_sha: '1234567890abcdef',
+                        row_count: 318000,
+                        size_bytes: 30_000_000,
+                        update_available: false,
+                    }),
+                };
+            }
             if (String(url).endsWith('/status')) return { ok: true, json: async () => status };
             if (String(url).startsWith('/api/lm/')) {
                 return { ok: false, status: 404, json: async () => ({}) };
@@ -98,7 +112,7 @@ describe('online services settings panel', () => {
             .toBe(' 在线服务');
     });
 
-    test('is a single page with collapsed advanced settings and thinking off', async () => {
+    test('uses three navigation pages with collapsed advanced settings and thinking off', async () => {
         await openOnlineServicesPanel({});
         const dialog = document.querySelector('dialog');
         const details = dialog.querySelector('details');
@@ -111,14 +125,40 @@ describe('online services settings panel', () => {
         expect(thinking.value).toBe('disabled');
         expect(dialog.textContent).toContain('Waiting for first completion');
         expect(dialog.textContent).toContain('Waiting for fallback');
-        expect(dialog.textContent).toContain('Waiting for model test');
         expect(dialog.textContent).toContain('Persistent Danbooru result cache: 3 pages');
         expect(dialog.textContent).not.toMatch(/scan|resume/i);
         expect(dialog.querySelectorAll('[role="switch"]')).toHaveLength(2);
         expect(dialog.querySelector('.autocomplete-plus-online-content')).not.toBeNull();
         expect(dialog.querySelector('.autocomplete-plus-online-status-grid')).not.toBeNull();
+        expect(dialog.querySelectorAll('[role="tab"]')).toHaveLength(3);
+        expect(dialog.textContent).toContain('Simplified Chinese dictionary');
+        expect(dialog.textContent).toContain('318,000');
         expect(dialog.querySelector('.autocomplete-plus-online-title p').textContent)
             .toContain('local suggestions instant');
+    });
+
+    test('switches pages and starts a manual dictionary update', async () => {
+        await openOnlineServicesPanel({});
+        const dialog = document.querySelector('dialog');
+        const dictionaryTab = [...dialog.querySelectorAll('[role="tab"]')]
+            .find(button => button.textContent.includes('Chinese dictionary'));
+        dictionaryTab.click();
+        expect(dictionaryTab.getAttribute('aria-selected')).toBe('true');
+        expect(dialog.querySelectorAll('.autocomplete-plus-online-page:not([hidden])')).toHaveLength(1);
+
+        const updateButton = [...dialog.querySelectorAll('button')]
+            .find(button => button.textContent === 'Repair download');
+        global.fetch.mockImplementationOnce(async () => ({
+            ok: true,
+            json: async () => ({ state: 'downloading', installed: true }),
+        }));
+        updateButton.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(global.fetch).toHaveBeenCalledWith(
+            '/autocomplete-plus/chinese-dictionary/update',
+            expect.objectContaining({ method: 'POST' }),
+        );
+        dialog.close();
     });
 
     test('offers an accessible API key visibility control', async () => {

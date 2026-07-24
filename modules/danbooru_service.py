@@ -1,5 +1,7 @@
+import asyncio
 import re
 import time
+from collections import deque
 
 import aiohttp
 
@@ -10,11 +12,34 @@ USER_AGENT = "Autocomplete-Plus/1.12"
 SUPPORTED_CATEGORIES = {0, 1, 3, 4, 5}
 
 
+class AsyncReadRateLimiter:
+    def __init__(self, limit=8, window_seconds=1):
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self._timestamps = deque()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self):
+        async with self._lock:
+            while True:
+                now = time.monotonic()
+                while self._timestamps and now - self._timestamps[0] >= self.window_seconds:
+                    self._timestamps.popleft()
+                if len(self._timestamps) < self.limit:
+                    self._timestamps.append(now)
+                    return
+                await asyncio.sleep(max(self.window_seconds - (now - self._timestamps[0]), 0))
+
+
+SHARED_READ_RATE_LIMITER = AsyncReadRateLimiter()
+
+
 class DanbooruHttpProvider:
-    def __init__(self, session_factory=None, timeout_seconds=3, cooldown_seconds=30):
+    def __init__(self, session_factory=None, timeout_seconds=3, cooldown_seconds=30, rate_limiter=None):
         self.session_factory = session_factory or aiohttp.ClientSession
         self.timeout_seconds = timeout_seconds
         self.cooldown_seconds = cooldown_seconds
+        self.rate_limiter = rate_limiter or SHARED_READ_RATE_LIMITER
         self._unavailable_until = 0
 
     async def request_json(self, url, params):
@@ -23,6 +48,7 @@ class DanbooruHttpProvider:
 
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
         try:
+            await self.rate_limiter.acquire()
             async with self.session_factory(timeout=timeout) as session:
                 async with session.get(
                     url,

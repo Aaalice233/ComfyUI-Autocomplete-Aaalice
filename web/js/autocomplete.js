@@ -26,6 +26,7 @@ import {
     searchLoraManagerCandidates,
 } from './integrations/lora-manager-provider.js';
 import { searchDanbooruCandidates } from './integrations/danbooru-provider.js';
+import { searchChineseDictionaryCandidates } from './integrations/chinese-dictionary-provider.js';
 import {
     getCandidateTranslationState,
     resolveCandidateTranslationsProgressively,
@@ -145,6 +146,15 @@ function rankCandidates(candidates, queryVariations, sources, limit = settingVal
     });
 }
 
+function preserveSelectedCandidateIndex(candidates, selectedKey, fallbackIndex) {
+    if (!selectedKey) return fallbackIndex;
+    const preservedIndex = candidates.findIndex(candidate =>
+        `${candidate.source}\0${String(candidate.tag).toLowerCase()}` === selectedKey);
+    return preservedIndex >= 0
+        ? preservedIndex
+        : Math.min(fallbackIndex, candidates.length - 1);
+}
+
 function shouldUseFastSearch() {
     if (settingValues.useFastSearch) return true;
     return getEnabledTagSourceInPriorityOrder().some(source => {
@@ -166,10 +176,11 @@ function addCandidate(candidate, candidates, addedTags) {
     return true;
 }
 
-function addExactCandidates(source, queryVariations, candidates, addedTags) {
+function addExactCandidates(source, queryVariations, candidates, addedTags, locale) {
     const sourceData = autoCompleteData[source];
     for (const query of queryVariations) {
         addCandidate(sourceData.tagMap.get(query), candidates, addedTags);
+        if (locale === "zh" && /[^\x00-\x7f]/u.test(query)) continue;
         const aliasTarget = sourceData.aliasMap.get(query);
         if (aliasTarget) addCandidate(sourceData.tagMap.get(aliasTarget), candidates, addedTags);
     }
@@ -188,9 +199,10 @@ function sequentialSearch(partialTag, queryVariations, resultLimit = settingValu
     const addedTags = new Set();
 
     const sources = getEnabledTagSourceInPriorityOrder();
+    const locale = normalizeInterfaceLocale(getCurrentInterfaceLocale());
     for (const source of sources) {
         if (!autoCompleteData[source]) continue;
-        addExactCandidates(source, queryVariations, candidates, addedTags);
+        addExactCandidates(source, queryVariations, candidates, addedTags, locale);
         let sourceMatchCount = 0;
         const sourceResultLimit = getSearchCandidateLimit(resultLimit);
 
@@ -201,8 +213,9 @@ function sequentialSearch(partialTag, queryVariations, resultLimit = settingValu
             let matched = tagMatch.matched;
 
             // If primary tag didn't match, check aliases against all variations
-            if (!matched && tagData.alias && Array.isArray(tagData.alias) && tagData.alias.length > 0) {
-                for (const alias of tagData.alias) {
+            const aliases = locale === "zh" ? tagData.asciiAlias : tagData.alias;
+            if (!matched && aliases && Array.isArray(aliases) && aliases.length > 0) {
+                for (const alias of aliases) {
                     const aliasMatch = matchWord(alias.toLowerCase(), queryVariations);
                     if (aliasMatch.matched) {
                         matched = true;
@@ -240,15 +253,25 @@ function searchWithFlexSearch(partialTag, queryVariations, resultLimit = setting
     const startTime = performance.now();
 
     const collectedResults = [];
+    const localizedMatches = new WeakSet();
     let totalSearchCount = 0;
 
     const sources = getEnabledTagSourceInPriorityOrder();
     for (const source of sources) {
         const sourceData = autoCompleteData[source];
         const locale = normalizeInterfaceLocale(getCurrentInterfaceLocale());
+        const isLocalizedChineseQuery = locale === "zh" && /[^\x00-\x7f]/u.test(partialTag);
         const indexes = [
-            { document: sourceData.flexSearchDocument, fields: ["tag", "alias"] },
-            { document: sourceData.translationSearchDocuments?.get(locale), fields: ["alias"] },
+            {
+                document: sourceData.flexSearchDocument,
+                fields: isLocalizedChineseQuery ? ["tag"] : ["tag", "alias"],
+                localized: false,
+            },
+            {
+                document: sourceData.translationSearchDocuments?.get(locale),
+                fields: ["alias"],
+                localized: true,
+            },
         ];
 
         for (const index of indexes) {
@@ -261,7 +284,11 @@ function searchWithFlexSearch(partialTag, queryVariations, resultLimit = setting
                 cache: true,
             });
             if (!searchResult?.length) continue;
-            collectedResults.push(...searchResult.map(result => sourceData.sortedTags[result.id]));
+            for (const result of searchResult) {
+                const candidate = sourceData.sortedTags[result.id];
+                collectedResults.push(candidate);
+                if (candidate && index.localized) localizedMatches.add(candidate);
+            }
             totalSearchCount += searchResult.length;
         }
     }
@@ -272,7 +299,10 @@ function searchWithFlexSearch(partialTag, queryVariations, resultLimit = setting
     const currentMatches = collectedResults.filter(candidate => {
         if (!candidate) return false;
         const tagMatch = matchWord(candidate.tag.toLowerCase(), queryVariations).matched;
-        return tagMatch || candidate.alias?.some(alias =>
+        const aliases = normalizeInterfaceLocale(getCurrentInterfaceLocale()) === "zh"
+            ? candidate.asciiAlias
+            : candidate.alias;
+        return localizedMatches.has(candidate) || tagMatch || aliases?.some(alias =>
             matchWord(alias.toLowerCase(), queryVariations).matched);
     });
     const rankedCandidates = rankCandidates(currentMatches, queryVariations, sources, resultLimit);
@@ -504,7 +534,11 @@ class AutocompleteUI {
 
         const allowsDanbooru = ["all", "danbooru"].includes(settingValues.tagSource);
         const shouldQueryDanbooru = !isModelQuery && allowsDanbooru;
-        const [supplemental, onlinePage] = await Promise.all([
+        const selectedCandidate = this.candidates[this.selectedIndex];
+        const selectedKey = selectedCandidate
+            ? `${selectedCandidate.source}\0${String(selectedCandidate.tag).toLowerCase()}`
+            : null;
+        const [supplemental, onlinePage, chineseCandidates] = await Promise.all([
             searchLoraManagerCandidates(partialTag, {
                 limit: Math.min(resultLimit, 100),
                 mode: settingValues.loraManagerIntegration,
@@ -519,12 +553,22 @@ class AutocompleteUI {
                     signal: this._abortController.signal,
                 })
                 : Promise.resolve({ candidates: [], hasMore: false, cacheState: "skipped" }),
+            searchChineseDictionaryCandidates(partialTag, {
+                locale: getCurrentInterfaceLocale(),
+                limit: Math.min(resultLimit, 200),
+                signal: this._abortController.signal,
+            }),
         ]);
         if (requestId !== this._requestId || textareaElement !== this.target) return;
 
         const online = onlinePage.candidates;
-        const combined = [...localCandidates, ...supplemental, ...online];
+        const combined = [...localCandidates, ...supplemental, ...online, ...chineseCandidates];
         this.candidates = rankCandidates(combined, queryVariations, sources, resultLimit);
+        this.selectedIndex = preserveSelectedCandidateIndex(
+            this.candidates,
+            selectedKey,
+            this.selectedIndex,
+        );
         if (!isModelQuery) {
             this.#scheduleTranslationPrefetch(
                 this.candidates,
@@ -1226,6 +1270,7 @@ export const __test__ = isTestEnvironment
         searchWithFlexSearch,
         shouldUseFastSearch,
         getSearchCandidateLimit,
+        preserveSelectedCandidateIndex,
         matchWord,
         getCurrentPartialTag,
         insertTagToTextArea

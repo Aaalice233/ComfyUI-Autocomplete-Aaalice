@@ -170,9 +170,10 @@ class DeepSeekClient:
 
 
 class TranslationManager:
-    def __init__(self, config_path, store, session_factory=None, config_store=None):
+    def __init__(self, config_path, store, session_factory=None, config_store=None, primary_store=None):
         self.config_store = config_store or OnlineServiceConfig(config_path)
         self.store = store
+        self.primary_store = primary_store
         self.session_factory = session_factory or aiohttp.ClientSession
         self._inflight = {}
         self._inflight_lock = asyncio.Lock()
@@ -197,7 +198,12 @@ class TranslationManager:
         }
 
     def catalog(self, locale):
-        return self.store.catalog(normalize_locale(locale))
+        normalized_locale = normalize_locale(locale)
+        catalog = self.store.catalog(normalized_locale)
+        if self._is_simplified_chinese(normalized_locale) and self.primary_store and catalog:
+            primary = self._get_primary(list(catalog))
+            return {tag: value for tag, value in catalog.items() if tag not in primary}
+        return catalog
 
     async def list_models(self, supplied_key=None):
         config = self.config_store.load()["deepseek"]
@@ -265,13 +271,25 @@ class TranslationManager:
             pass
         locale = normalize_locale(locale)
         tag_names = [item["name"] for item in normalize_items(raw_items)]
-        return await asyncio.to_thread(self.store.get_many, locale, tag_names)
+        cached = await asyncio.to_thread(self.store.get_many, locale, tag_names)
+        primary = await self._get_primary(locale, tag_names)
+        return {**cached, **primary}
 
     async def resolve_stream(self, locale, raw_items):
         locale = normalize_locale(locale)
+        normalized_items = normalize_items(raw_items)
+        primary = await self._get_primary(locale, [item["name"] for item in normalized_items])
+        primary_translations = {
+            tag_name: row["text"] for tag_name, row in primary.items() if row.get("text")
+        }
+        if primary_translations:
+            yield {
+                "translations": primary_translations,
+                "completed": list(primary_translations),
+            }
         items = [
-            item for item in normalize_items(raw_items)
-            if item["category"] != 1
+            item for item in normalized_items
+            if item["category"] != 1 and item["name"] not in primary
         ]
         tag_names = [item["name"] for item in items]
         cached = await asyncio.to_thread(self.store.get_many, locale, tag_names)
@@ -284,6 +302,12 @@ class TranslationManager:
                 "completed": list(cached_translations),
             }
         if locale == "en" or not items:
+            return
+        if (
+            locale == "zh"
+            and self.primary_store is not None
+            and self.primary_store.status().get("state") in {"missing", "checking", "downloading"}
+        ):
             return
 
         full_config = self.config_store.load()
@@ -364,6 +388,11 @@ class TranslationManager:
             for waiter in pending_waiters:
                 if not waiter.done():
                     waiter.cancel()
+
+    async def _get_primary(self, locale, tag_names):
+        if locale != "zh" or self.primary_store is None or not tag_names:
+            return {}
+        return await asyncio.to_thread(self.primary_store.lookup, tag_names)
 
     async def _translate_owned(self, locale, items, config):
         translations = {}

@@ -346,11 +346,18 @@ describe('on-demand translation provider', () => {
         expect(fetchImpl).not.toHaveBeenCalled();
     });
 
-    test('never sends artist candidates to translation', async () => {
-        const fetchImpl = jest.fn();
+    test('allows Simplified Chinese dictionary lookup for artist candidates', async () => {
+        const fetchImpl = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                translations: { an_artist: '艺术家译名' },
+                completed: ['an_artist'],
+            }),
+        });
         const candidate = new TagData('an_artist', 1, 10, [], TagSource.Danbooru);
         await resolveCandidateTranslations([candidate], 'zh', { fetchImpl });
-        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        expect(candidate.alias).toContain('艺术家译名');
     });
 
     test('translates ordinary e621 candidates too', async () => {

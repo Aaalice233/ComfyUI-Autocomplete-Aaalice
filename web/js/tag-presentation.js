@@ -112,8 +112,9 @@ const ORIGIN_MARKERS = {
     csv: { label: 'CSV', tooltipKey: 'csvOrigin' },
     lora_manager: { label: 'LM', tooltipKey: 'loraManagerOrigin' },
     danbooru_api: { label: 'API', tooltipKey: 'danbooruOnlineFallback' },
+    chinese_dictionary: { label: 'ZH', tooltipKey: 'chineseDictionaryOrigin' },
 };
-const ORIGIN_PRIORITY = ['csv', 'lora_manager', 'danbooru_api'];
+const ORIGIN_PRIORITY = ['csv', 'chinese_dictionary', 'lora_manager', 'danbooru_api'];
 
 function createOriginMarker(origin) {
     const markerConfig = ORIGIN_MARKERS[origin];
@@ -158,9 +159,19 @@ export function createTranslationLoadingIndicator() {
 }
 
 export function getCandidateAliasText(tagData, locale = getCurrentInterfaceLocale()) {
+    const normalizedLocale = normalizeInterfaceLocale(locale);
+    const isArtist = String(tagData?.categoryText || "").toLowerCase() === "artist";
     if (
-        String(tagData?.categoryText || "").toLowerCase() === "artist"
-        && normalizeInterfaceLocale(locale) !== "en"
+        normalizedLocale === "zh"
+        && tagData?.origin !== "chinese_dictionary"
+        && !tagData?.resolvedTranslationLocales?.has("zh")
+    ) {
+        return isArtist ? String(tagData?.tag || "") : "";
+    }
+    if (
+        isArtist
+        && normalizedLocale !== "en"
+        && normalizedLocale !== "zh"
     ) {
         return String(tagData?.tag || "");
     }

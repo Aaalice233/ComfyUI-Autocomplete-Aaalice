@@ -689,7 +689,7 @@ body.dark-theme {
   --online-surface-raised: #1e1e1e;
 
   overflow: hidden;
-  width: min(780px, calc(100vw - 32px));
+  width: min(900px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
   padding: 0;
   border: 0;
@@ -715,6 +715,54 @@ body.dark-theme {
   display: flex;
   max-height: calc(100vh - 32px);
   flex-direction: column;
+}
+
+.autocomplete-plus-online-body {
+  display: grid;
+  overflow: hidden;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.autocomplete-plus-online-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 10px;
+  background: rgb(255 255 255 / 2%);
+  box-shadow: inset -1px 0 rgb(255 255 255 / 5%);
+  gap: 5px;
+}
+
+.autocomplete-plus-online-nav-button {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 11px;
+  background: transparent;
+  box-shadow: none;
+  gap: 10px;
+  text-align: left;
+}
+
+.autocomplete-plus-online-nav-button.is-active {
+  background: rgb(91 140 255 / 13%);
+  box-shadow:
+    inset 3px 0 var(--online-accent),
+    inset 0 1px rgb(255 255 255 / 5%);
+  color: white;
+}
+
+.autocomplete-plus-online-lucide {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.autocomplete-plus-online-page[hidden] {
+  display: none;
 }
 
 .autocomplete-plus-online-header,
@@ -803,6 +851,10 @@ body.dark-theme {
   overflow: auto;
   min-height: 0;
   scrollbar-gutter: stable;
+}
+
+.autocomplete-plus-online-page {
+  min-height: 100%;
 }
 
 .autocomplete-plus-online-section {
@@ -954,6 +1006,118 @@ body.dark-theme {
 .autocomplete-plus-online-cache-copy small {
   color: var(--online-muted);
   font-size: 0.68rem;
+}
+
+.autocomplete-plus-online-dictionary {
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--online-surface-raised);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 5%),
+    0 8px 24px rgb(0 0 0 / 16%);
+}
+
+.autocomplete-plus-online-dictionary-state {
+  display: inline-flex;
+  align-items: center;
+  color: rgb(255 255 255 / 90%);
+  font-size: 0.88rem;
+  gap: 8px;
+}
+
+.autocomplete-plus-online-dictionary-state::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #737373;
+  content: "";
+}
+
+.autocomplete-plus-online-dictionary-state[data-state="ready"]::before {
+  background: var(--p-green-400, #4ade80);
+}
+
+.autocomplete-plus-online-dictionary-state[data-state="error"]::before {
+  background: var(--p-red-400, #f87171);
+}
+
+.autocomplete-plus-online-dictionary-state[data-state="checking"]::before,
+.autocomplete-plus-online-dictionary-state[data-state="downloading"]::before {
+  background: var(--p-yellow-400, #facc15);
+}
+
+.autocomplete-plus-online-dictionary-meta {
+  display: grid;
+  margin-top: 14px;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.autocomplete-plus-online-dictionary-meta span {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 3%);
+  gap: 10px;
+}
+
+.autocomplete-plus-online-dictionary-meta small {
+  color: var(--online-muted);
+}
+
+.autocomplete-plus-online-dictionary-meta b {
+  overflow: hidden;
+  color: rgb(255 255 255 / 80%);
+  font-size: 0.72rem;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autocomplete-plus-online-progress {
+  overflow: hidden;
+  height: 5px;
+  border-radius: 999px;
+  margin-top: 14px;
+  background: rgb(255 255 255 / 7%);
+}
+
+.autocomplete-plus-online-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--online-accent);
+  transition: width 180ms ease;
+}
+
+.autocomplete-plus-online-progress span[style*="28%"] {
+  animation: autocomplete-plus-online-progress 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes autocomplete-plus-online-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(350%); }
+}
+
+.autocomplete-plus-online-dictionary-error {
+  margin: 10px 0 0;
+  color: var(--error-text);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.autocomplete-plus-online-dictionary-error:empty {
+  display: none;
+}
+
+.autocomplete-plus-online-dictionary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 14px;
+  gap: 8px;
 }
 
 .autocomplete-plus-online-toggle-grid {
@@ -1277,6 +1441,28 @@ body.dark-theme {
     max-height: calc(100vh - 16px);
   }
 
+  .autocomplete-plus-online-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .autocomplete-plus-online-nav {
+    flex-direction: row;
+    padding: 8px 10px;
+    box-shadow: inset 0 -1px rgb(255 255 255 / 5%);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .autocomplete-plus-online-nav-button {
+    width: auto;
+    min-width: max-content;
+  }
+
+  .autocomplete-plus-online-nav-button.is-active {
+    box-shadow: inset 0 -3px var(--online-accent);
+  }
+
   .autocomplete-plus-online-header,
   .autocomplete-plus-online-actions,
   .autocomplete-plus-online-section {
@@ -1302,6 +1488,10 @@ body.dark-theme {
 
   .autocomplete-plus-online-summary {
     display: none;
+  }
+
+  .autocomplete-plus-online-dictionary-meta {
+    grid-template-columns: 1fr;
   }
 
   .autocomplete-plus-online-model-actions {

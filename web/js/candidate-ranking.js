@@ -1,5 +1,13 @@
 import { isDanbooruCompletionEnabled } from './online-service-state.js';
 
+const ORIGIN_RANK = {
+    csv: 0,
+    local: 0,
+    chinese_dictionary: 0,
+    lora_manager: 1,
+    danbooru_api: 2,
+};
+
 function normalizeComparableText(value) {
     return String(value || '')
         .trim()
@@ -64,13 +72,18 @@ export function getCandidateOrigins(candidate) {
 }
 
 export function mergeDuplicateCandidate(primary, duplicate) {
+    if (
+        (ORIGIN_RANK[duplicate?.origin] ?? Number.MAX_SAFE_INTEGER)
+        < (ORIGIN_RANK[primary?.origin] ?? Number.MAX_SAFE_INTEGER)
+    ) {
+        return mergeDuplicateCandidate(duplicate, primary);
+    }
     const primaryAliases = Array.isArray(primary.alias) ? primary.alias : [];
     const duplicateAliases = Array.isArray(duplicate.alias) ? duplicate.alias : [];
     const aliases = [...new Set([...primaryAliases, ...duplicateAliases].filter(Boolean))];
     const primaryOrigins = getCandidateOrigins(primary);
     const origins = [...new Set([...primaryOrigins, ...getCandidateOrigins(duplicate)])];
-    const sameSource = primary.source === duplicate.source;
-    const count = sameSource ? Math.max(Number(primary.count) || 0, Number(duplicate.count) || 0) : primary.count;
+    const count = primary.count;
     if (
         aliases.length === primaryAliases.length
         && count === primary.count
@@ -121,10 +134,12 @@ export function rankCompletionCandidates(candidates, queryVariations, options = 
             matchTier: getCandidateMatchTier(candidate, queryVariations),
             count: Math.max(0, Number(candidate?.count) || 0),
             sourceRank: sourceRanks.get(candidate.source) ?? sourcePriority.length,
+            originRank: ORIGIN_RANK[candidate?.origin] ?? Object.keys(ORIGIN_RANK).length,
         }))
         .sort((a, b) =>
-            b.count - a.count
-            || b.matchTier - a.matchTier
+            b.matchTier - a.matchTier
+            || b.count - a.count
+            || a.originRank - b.originRank
             || a.sourceRank - b.sourceRank
             || String(a.candidate.tag).localeCompare(String(b.candidate.tag))
             || a.originalIndex - b.originalIndex)

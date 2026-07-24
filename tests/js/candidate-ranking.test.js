@@ -13,7 +13,7 @@ function candidate(tag, source, count, alias = []) {
 describe('unified autocomplete candidate ranking', () => {
     beforeEach(() => updateOnlineServiceFeatures({ danbooru_completion: true, translation: true }));
 
-    test('orders matching tags by raw popularity before match type', () => {
+    test('orders matching tags by match precision before raw popularity', () => {
         const query = new Set(['blue']);
         const candidates = [
             candidate('ocean', 'e621', 10_000_000, ['deep_blue']),
@@ -28,11 +28,11 @@ describe('unified autocomplete candidate ranking', () => {
             sourcePriority: ['danbooru', 'e621'],
             sourceMaxCounts: { danbooru: 10_000_000, e621: 10_000_000 },
         }).map(item => item.tag)).toEqual([
-            'azure',
-            'ocean',
-            'dark_blue_hair',
-            'blue_hair',
             'blue',
+            'blue_hair',
+            'azure',
+            'dark_blue_hair',
+            'ocean',
         ]);
     });
 
@@ -86,7 +86,7 @@ describe('unified autocomplete candidate ranking', () => {
         )).toEqual([localZeroCount]);
     });
 
-    test('merges duplicate aliases and fresher counts without changing the preferred source', () => {
+    test('merges duplicate aliases without letting supplemental metadata replace CSV', () => {
         const merged = mergeDuplicateCandidates([
             { ...candidate('same_tag', 'danbooru', 100, ['first']), origin: 'csv', origins: ['csv'] },
             { ...candidate('SAME_TAG', 'danbooru', 150, ['second']), origin: 'lora_manager', origins: ['lora_manager'] },
@@ -97,7 +97,7 @@ describe('unified autocomplete candidate ranking', () => {
         expect(merged[0]).toMatchObject({
             tag: 'same_tag',
             source: 'danbooru',
-            count: 150,
+            count: 100,
             alias: ['first', 'second', 'third'],
             origins: ['csv', 'lora_manager', 'danbooru_api'],
         });
@@ -118,6 +118,19 @@ describe('unified autocomplete candidate ranking', () => {
 
         expect(rankCompletionCandidates([csv, api], new Set(['same']), { limit: 10 })[0])
             .toMatchObject({ count: 100, origins: ['csv'] });
+    });
+
+    test('selects CSV metadata even when supplemental duplicates arrive first', () => {
+        const merged = mergeDuplicateCandidates([
+            { ...candidate('same_tag', 'danbooru', 999, ['lm']), origin: 'lora_manager' },
+            { ...candidate('same_tag', 'danbooru', 100, ['csv']), origin: 'csv' },
+            { ...candidate('same_tag', 'danbooru', 5000, ['api']), origin: 'danbooru_api' },
+        ]);
+        expect(merged[0]).toMatchObject({
+            origin: 'csv',
+            count: 100,
+            alias: ['csv', 'lm', 'api'],
+        });
     });
 
     test('classifies direct and alias matches consistently', () => {

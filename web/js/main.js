@@ -12,6 +12,7 @@ import { isInputOwnedByAnotherExtension } from "./integrations/input-compatibili
 import { getCurrentInterfaceLocale, getInterfaceText, setInterfaceLocalizationApp } from "./localization.js";
 import { loadTranslationCatalog } from "./integrations/translation-provider.js";
 import { loadOnlineServiceFeatures } from "./online-service-state.js";
+import { ensureChineseDictionary } from "./integrations/chinese-dictionary-provider.js";
 
 // --- Constants ---
 const id = "AutocompletePlus";
@@ -232,7 +233,9 @@ app.registerExtension({
         loadCSS(rootPath + "css/autocomplete-plus.css"); // Load CSS for autocomplete
 
         await Promise.all([loadDataAsync(), loadOnlineServiceFeatures()]);
-        void loadTranslationCatalog(getCurrentInterfaceLocale());
+        const locale = getCurrentInterfaceLocale();
+        void ensureChineseDictionary(locale);
+        void loadTranslationCatalog(locale);
     },
 
     // --- Commands ---

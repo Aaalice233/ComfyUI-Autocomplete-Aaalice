@@ -68,6 +68,9 @@ export class TagData {
         /** @type {string[]} */
         this.alias = alias;
 
+        /** @type {string[]} */
+        this.asciiAlias = alias.filter(value => /^[\x00-\x7f]*$/u.test(value));
+
         /** @type {number} */
         this.category = category;
 
@@ -76,11 +79,14 @@ export class TagData {
 
         this.source = source;
 
-        /** @type {'local'|'csv'|'lora_manager'|'danbooru_api'} */
+        /** @type {'local'|'csv'|'lora_manager'|'danbooru_api'|'chinese_dictionary'} */
         this.origin = origin;
 
         /** @type {string[]} */
         this.origins = origin ? [origin] : [];
+
+        /** @type {Set<string>} */
+        this.resolvedTranslationLocales = new Set();
     }
 
     /**

@@ -108,6 +108,20 @@ describe('tag category presentation', () => {
         expect(getCandidateAliasText(artist, 'ja-JP')).toBe('an_artist');
     });
 
+    test('does not display Hugging Face CJK aliases as Simplified Chinese translations', () => {
+        const tag = {
+            tag: 'blue_hair',
+            categoryText: 'general',
+            alias: ['蓝色头发', '青い髪'],
+            origin: 'csv',
+            resolvedTranslationLocales: new Set(),
+        };
+        expect(getCandidateAliasText(tag, 'zh-CN')).toBe('');
+        tag.alias.unshift('蓝发');
+        tag.resolvedTranslationLocales.add('zh');
+        expect(getCandidateAliasText(tag, 'zh-CN')).toContain('蓝发');
+    });
+
     test('normalizes supported ComfyUI locale variants', () => {
         expect(normalizeInterfaceLocale('zh_Hant')).toBe('zh-TW');
         expect(normalizeInterfaceLocale('zh-CN')).toBe('zh');

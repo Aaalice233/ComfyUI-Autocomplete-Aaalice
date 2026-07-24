@@ -66,6 +66,31 @@ const TEXT = {
         cancel: "Cancel",
         close: "Close",
         saved: "Settings saved",
+        navDanbooru: "Danbooru API",
+        navDictionary: "Chinese dictionary",
+        navDeepSeek: "DeepSeek LLM",
+        danbooruTitle: "Danbooru API",
+        danbooruDescription: "Anonymous read-only completion and related-tag fallback.",
+        dictionaryTitle: "Simplified Chinese dictionary",
+        dictionaryDescription: "Managed from ffdkj and used only for Simplified Chinese.",
+        dictionaryMissing: "Not installed",
+        dictionaryDownloading: "Downloading",
+        dictionaryReady: "Ready",
+        dictionaryChecking: "Checking",
+        dictionaryError: "Error",
+        dictionaryVersion: "Version",
+        dictionaryRows: "records",
+        dictionarySize: "Size",
+        dictionaryLastCheck: "Last checked",
+        dictionaryLastUpdate: "Last updated",
+        checkDictionary: "Check for updates",
+        updateDictionary: "Install / update",
+        repairDictionary: "Repair download",
+        dictionaryCurrent: "Dictionary is up to date",
+        dictionaryUpdateFound: "A dictionary update is available",
+        dictionaryActionStarted: "Dictionary download started",
+        deepSeekTitle: "DeepSeek LLM",
+        deepSeekDescription: "Translates only tags missing from the primary Simplified Chinese dictionary.",
     },
     zh: {
         title: "在线补全与翻译",
@@ -123,6 +148,31 @@ const TEXT = {
         cancel: "取消",
         close: "关闭",
         saved: "设置已保存",
+        navDanbooru: "Danbooru API",
+        navDictionary: "中文汉化数据库",
+        navDeepSeek: "DeepSeek LLM",
+        danbooruTitle: "Danbooru API",
+        danbooruDescription: "无需账号的只读标签补全与共现兜底。",
+        dictionaryTitle: "简体中文汉化数据库",
+        dictionaryDescription: "数据来自 ffdkj，仅在简体中文界面中用于主力汉化。",
+        dictionaryMissing: "未安装",
+        dictionaryDownloading: "正在下载",
+        dictionaryReady: "可用",
+        dictionaryChecking: "正在检测",
+        dictionaryError: "错误",
+        dictionaryVersion: "版本",
+        dictionaryRows: "条记录",
+        dictionarySize: "大小",
+        dictionaryLastCheck: "最后检测",
+        dictionaryLastUpdate: "最后更新",
+        checkDictionary: "检测更新",
+        updateDictionary: "安装 / 更新",
+        repairDictionary: "修复重装",
+        dictionaryCurrent: "汉化数据库已是最新版本",
+        dictionaryUpdateFound: "发现新的汉化数据库",
+        dictionaryActionStarted: "汉化数据库下载已开始",
+        deepSeekTitle: "DeepSeek LLM",
+        deepSeekDescription: "仅翻译简体中文主数据库缺失的标签。",
     },
     "zh-TW": {
         title: "線上補全與翻譯",
@@ -180,6 +230,31 @@ const TEXT = {
         cancel: "取消",
         close: "關閉",
         saved: "設定已儲存",
+        navDanbooru: "Danbooru API",
+        navDictionary: "簡中漢化資料庫",
+        navDeepSeek: "DeepSeek LLM",
+        danbooruTitle: "Danbooru API",
+        danbooruDescription: "免帳號的唯讀標籤補全與共現備援。",
+        dictionaryTitle: "簡體中文漢化資料庫",
+        dictionaryDescription: "資料來自 ffdkj，僅套用於簡體中文介面。",
+        dictionaryMissing: "未安裝",
+        dictionaryDownloading: "下載中",
+        dictionaryReady: "可用",
+        dictionaryChecking: "檢查中",
+        dictionaryError: "錯誤",
+        dictionaryVersion: "版本",
+        dictionaryRows: "筆記錄",
+        dictionarySize: "大小",
+        dictionaryLastCheck: "最後檢查",
+        dictionaryLastUpdate: "最後更新",
+        checkDictionary: "檢查更新",
+        updateDictionary: "安裝 / 更新",
+        repairDictionary: "修復下載",
+        dictionaryCurrent: "漢化資料庫已是最新版本",
+        dictionaryUpdateFound: "發現新的漢化資料庫",
+        dictionaryActionStarted: "漢化資料庫下載已開始",
+        deepSeekTitle: "DeepSeek LLM",
+        deepSeekDescription: "簡中資料庫以外的語言仍由 DeepSeek 補充。",
     },
     ja: {
         title: "オンライン補完と翻訳",
@@ -237,6 +312,31 @@ const TEXT = {
         cancel: "キャンセル",
         close: "閉じる",
         saved: "設定を保存しました",
+        navDanbooru: "Danbooru API",
+        navDictionary: "簡体字中国語辞書",
+        navDeepSeek: "DeepSeek LLM",
+        danbooruTitle: "Danbooru API",
+        danbooruDescription: "アカウント不要の読み取り専用補完・関連タグフォールバックです。",
+        dictionaryTitle: "簡体字中国語翻訳辞書",
+        dictionaryDescription: "ffdkj が提供し、簡体字中国語 UI でのみ使用します。",
+        dictionaryMissing: "未インストール",
+        dictionaryDownloading: "ダウンロード中",
+        dictionaryReady: "利用可能",
+        dictionaryChecking: "確認中",
+        dictionaryError: "エラー",
+        dictionaryVersion: "バージョン",
+        dictionaryRows: "件",
+        dictionarySize: "サイズ",
+        dictionaryLastCheck: "最終確認",
+        dictionaryLastUpdate: "最終更新",
+        checkDictionary: "更新を確認",
+        updateDictionary: "インストール / 更新",
+        repairDictionary: "修復ダウンロード",
+        dictionaryCurrent: "辞書は最新です",
+        dictionaryUpdateFound: "新しい辞書があります",
+        dictionaryActionStarted: "辞書のダウンロードを開始しました",
+        deepSeekTitle: "DeepSeek LLM",
+        deepSeekDescription: "簡体字中国語辞書にないタグだけを補完翻訳します。",
     },
 };
 
@@ -292,7 +392,7 @@ function passwordField(parent, label, value, text, loadSavedValue, handleLoadErr
     input.type = "password";
     input.value = value ?? "";
     input.ariaLabel = label;
-    const reveal = iconButton("pi-eye", text.showApiKey);
+    const reveal = iconButton("eye", text.showApiKey);
     reveal.onclick = async event => {
         event.preventDefault();
         const showing = input.type === "text";
@@ -309,7 +409,7 @@ function passwordField(parent, label, value, text, loadSavedValue, handleLoadErr
         }
         input.type = showing ? "password" : "text";
         reveal.ariaLabel = showing ? text.showApiKey : text.hideApiKey;
-        reveal.firstElementChild.className = `pi ${showing ? "pi-eye" : "pi-eye-slash"}`;
+        reveal.replaceChildren(lucideIcon(showing ? "eye" : "eyeOff"));
     };
     inputShell.append(input, reveal);
     wrapper.append(inputShell);
@@ -354,12 +454,32 @@ function button(label, className = "") {
     return result;
 }
 
+const LUCIDE_PATHS = {
+    close: '<path d="M18 6 6 18M6 6l12 12"/>',
+    eye: '<path d="M2.1 12a10.8 10.8 0 0 1 19.8 0 10.8 10.8 0 0 1-19.8 0"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="m2 2 20 20M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 4.2A10.8 10.8 0 0 1 21.9 12a11.4 11.4 0 0 1-2.1 3.2M6.6 6.6A11.2 11.2 0 0 0 2.1 12a10.8 10.8 0 0 0 14.2 6.1"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20"/>',
+    database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/>',
+    sparkles: '<path d="m12 3-1.9 4.1L6 9l4.1 1.9L12 15l1.9-4.1L18 9l-4.1-1.9ZM5 16l-.9 1.9L2 19l2.1 1.1L5 22l.9-1.9L8 19l-2.1-1.1ZM19 13l-.9 1.9L16 16l2.1 1.1L19 19l.9-1.9L22 16l-2.1-1.1Z"/>',
+};
+
+function lucideIcon(icon) {
+    const svg = element("svg", "autocomplete-plus-online-lucide");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.8");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.innerHTML = LUCIDE_PATHS[icon] || LUCIDE_PATHS.sparkles;
+    svg.ariaHidden = "true";
+    return svg;
+}
+
 function iconButton(icon, label) {
     const result = button("", "autocomplete-plus-online-icon-button");
     result.ariaLabel = label;
-    const iconElement = element("i", `pi ${icon}`);
-    iconElement.ariaHidden = "true";
-    result.append(iconElement);
+    result.append(lucideIcon(icon));
     return result;
 }
 
@@ -422,7 +542,7 @@ export async function openOnlineServicesPanel(_app) {
         element("p", "", text.subtitle),
     );
     header.append(titleGroup);
-    const closeHeader = iconButton("pi-times", text.close);
+    const closeHeader = iconButton("close", text.close);
     closeHeader.onclick = () => dialog.close();
     header.append(closeHeader);
     panel.append(header);
@@ -431,8 +551,41 @@ export async function openOnlineServicesPanel(_app) {
     message.setAttribute("role", "status");
     message.setAttribute("aria-live", "polite");
     panel.append(message);
+    const body = element("div", "autocomplete-plus-online-body");
+    const navigation = element("nav", "autocomplete-plus-online-nav");
+    navigation.ariaLabel = text.title;
     const content = element("main", "autocomplete-plus-online-content");
-    panel.append(content);
+    const pages = {
+        danbooru: element("div", "autocomplete-plus-online-page"),
+        dictionary: element("div", "autocomplete-plus-online-page"),
+        deepseek: element("div", "autocomplete-plus-online-page"),
+    };
+    const navButtons = {};
+    const selectPage = key => {
+        for (const [pageKey, page] of Object.entries(pages)) {
+            const selected = pageKey === key;
+            page.hidden = !selected;
+            navButtons[pageKey].classList.toggle("is-active", selected);
+            navButtons[pageKey].setAttribute("aria-selected", String(selected));
+            navButtons[pageKey].tabIndex = selected ? 0 : -1;
+        }
+    };
+    for (const [key, label, icon] of [
+        ["danbooru", text.navDanbooru, "globe"],
+        ["dictionary", text.navDictionary, "database"],
+        ["deepseek", text.navDeepSeek, "sparkles"],
+    ]) {
+        const navButton = button("", "autocomplete-plus-online-nav-button");
+        navButton.setAttribute("role", "tab");
+        navButton.append(lucideIcon(icon), element("span", "", label));
+        navButton.onclick = () => selectPage(key);
+        navigation.append(navButton);
+        navButtons[key] = navButton;
+        pages[key].setAttribute("role", "tabpanel");
+        content.append(pages[key]);
+    }
+    body.append(navigation, content);
+    panel.append(body);
 
     let config;
     let status;
@@ -448,23 +601,29 @@ export async function openOnlineServicesPanel(_app) {
     }
     updateOnlineServiceFeatures(config.features);
 
-    const featureSection = element("section", "autocomplete-plus-online-section");
-    featureSection.append(sectionHeading(text.features));
-    const featureGrid = element("div", "autocomplete-plus-online-toggle-grid");
+    const danbooruFeatureSection = element("section", "autocomplete-plus-online-section");
+    danbooruFeatureSection.append(sectionHeading(text.danbooruTitle, text.danbooruDescription));
+    const danbooruFeatureGrid = element("div", "autocomplete-plus-online-toggle-grid");
     const danbooruEnabled = toggleField(
-        featureGrid,
+        danbooruFeatureGrid,
         text.enableDanbooru,
         text.danbooruHelp,
         config.features?.danbooru_completion !== false,
     );
+    danbooruFeatureSection.append(danbooruFeatureGrid);
+    pages.danbooru.append(danbooruFeatureSection);
+
+    const translationFeatureSection = element("section", "autocomplete-plus-online-section");
+    translationFeatureSection.append(sectionHeading(text.deepSeekTitle, text.deepSeekDescription));
+    const translationFeatureGrid = element("div", "autocomplete-plus-online-toggle-grid");
     const translationEnabled = toggleField(
-        featureGrid,
+        translationFeatureGrid,
         text.enableTranslation,
         text.translationHelp,
         config.features?.translation !== false,
     );
-    featureSection.append(featureGrid);
-    content.append(featureSection);
+    translationFeatureSection.append(translationFeatureGrid);
+    pages.deepseek.append(translationFeatureSection);
 
     const statusSection = element("section", "autocomplete-plus-online-section");
     const checkSources = button(text.checkSources);
@@ -475,7 +634,6 @@ export async function openOnlineServicesPanel(_app) {
         ["huggingface", text.huggingface],
         ["loraManager", text.loraManager],
         ["danbooru", text.danbooru],
-        ["deepseek", text.deepseek],
     ]) {
         const card = element("div", "autocomplete-plus-online-status-card");
         const value = element("strong");
@@ -528,7 +686,122 @@ export async function openOnlineServicesPanel(_app) {
     cacheCopy.append(cacheSummary, element("small", "", text.cacheHint));
     statusActions.append(cacheCopy, clearCache);
     statusSection.append(statusActions);
-    content.append(statusSection);
+    pages.danbooru.append(statusSection);
+
+    const dictionarySection = element("section", "autocomplete-plus-online-section");
+    dictionarySection.append(sectionHeading(text.dictionaryTitle, text.dictionaryDescription));
+    const dictionaryCard = element("div", "autocomplete-plus-online-dictionary");
+    const dictionaryState = element("strong", "autocomplete-plus-online-dictionary-state");
+    const dictionaryMeta = element("div", "autocomplete-plus-online-dictionary-meta");
+    const dictionaryProgress = element("div", "autocomplete-plus-online-progress");
+    const dictionaryProgressBar = element("span");
+    dictionaryProgress.append(dictionaryProgressBar);
+    const dictionaryError = element("p", "autocomplete-plus-online-dictionary-error");
+    const dictionaryActions = element("div", "autocomplete-plus-online-dictionary-actions");
+    const checkDictionary = button(text.checkDictionary);
+    const updateDictionary = button(text.updateDictionary, "is-emphasized");
+    const repairDictionary = button(text.repairDictionary, "is-danger");
+    dictionaryActions.append(checkDictionary, updateDictionary, repairDictionary);
+    dictionaryCard.append(
+        dictionaryState,
+        dictionaryMeta,
+        dictionaryProgress,
+        dictionaryError,
+        dictionaryActions,
+    );
+    dictionarySection.append(dictionaryCard);
+    pages.dictionary.append(dictionarySection);
+
+    let dictionaryStatus = null;
+    let dictionaryPoll = null;
+    const dictionaryStateText = state => ({
+        missing: text.dictionaryMissing,
+        downloading: text.dictionaryDownloading,
+        ready: text.dictionaryReady,
+        checking: text.dictionaryChecking,
+        error: text.dictionaryError,
+    })[state] || state;
+    const renderDictionaryStatus = nextStatus => {
+        dictionaryStatus = nextStatus;
+        dictionaryState.textContent = dictionaryStateText(nextStatus.state);
+        dictionaryState.dataset.state = nextStatus.state;
+        const metaRows = [
+            [text.dictionaryVersion, nextStatus.installed_sha?.slice(0, 12) || "—"],
+            [text.dictionaryRows, Number(nextStatus.row_count || 0).toLocaleString()],
+            [text.dictionarySize, formatBytes(nextStatus.size_bytes)],
+            [text.dictionaryLastCheck, nextStatus.last_checked_at || "—"],
+            [text.dictionaryLastUpdate, nextStatus.last_updated_at || "—"],
+        ];
+        dictionaryMeta.replaceChildren(...metaRows.map(([label, value]) => {
+            const row = element("span");
+            row.append(element("small", "", label), element("b", "", value));
+            return row;
+        }));
+        const total = Number(nextStatus.total_bytes) || 0;
+        const downloaded = Number(nextStatus.downloaded_bytes) || 0;
+        dictionaryProgress.hidden = nextStatus.state !== "downloading";
+        dictionaryProgressBar.style.width = total > 0
+            ? `${Math.min((downloaded / total) * 100, 100)}%`
+            : "28%";
+        dictionaryError.textContent = nextStatus.error || "";
+        updateDictionary.disabled = nextStatus.state === "downloading"
+            || (nextStatus.installed && !nextStatus.update_available);
+        repairDictionary.disabled = nextStatus.state === "downloading";
+        checkDictionary.disabled = ["checking", "downloading"].includes(nextStatus.state);
+        if (nextStatus.state === "downloading" && dictionaryPoll === null) {
+            dictionaryPoll = window.setInterval(async () => {
+                try {
+                    renderDictionaryStatus(await requestJson("/autocomplete-plus/chinese-dictionary/status"));
+                } catch (_error) {
+                    // The next poll or a manual action can recover the status view.
+                }
+                if (dictionaryStatus?.state !== "downloading") {
+                    window.clearInterval(dictionaryPoll);
+                    dictionaryPoll = null;
+                }
+            }, 750);
+        }
+    };
+    try {
+        renderDictionaryStatus(await requestJson("/autocomplete-plus/chinese-dictionary/status"));
+    } catch (error) {
+        renderDictionaryStatus({ state: "error", error: error.message });
+    }
+    const runDictionaryAction = async (target, path, payload, successMessage) => {
+        setButtonBusy(target, true, `${target.dataset.idleLabel || target.textContent}…`);
+        try {
+            const nextStatus = await requestJson(`/autocomplete-plus/chinese-dictionary/${path}`, {
+                method: "POST",
+                body: JSON.stringify(payload || {}),
+            });
+            renderDictionaryStatus(nextStatus);
+            message.textContent = successMessage(nextStatus);
+            message.dataset.tone = "success";
+        } catch (error) {
+            message.textContent = error.message;
+            message.dataset.tone = "error";
+        } finally {
+            setButtonBusy(target, false, "");
+        }
+    };
+    checkDictionary.onclick = () => runDictionaryAction(
+        checkDictionary,
+        "check-update",
+        {},
+        nextStatus => nextStatus.update_available ? text.dictionaryUpdateFound : text.dictionaryCurrent,
+    );
+    updateDictionary.onclick = () => runDictionaryAction(
+        updateDictionary,
+        "update",
+        {},
+        () => text.dictionaryActionStarted,
+    );
+    repairDictionary.onclick = () => runDictionaryAction(
+        repairDictionary,
+        "update",
+        { force: true },
+        () => text.dictionaryActionStarted,
+    );
 
     const translationSection = element("section", "autocomplete-plus-online-section");
     const localeRow = element("div", "autocomplete-plus-online-summary");
@@ -592,7 +865,8 @@ export async function openOnlineServicesPanel(_app) {
     }
     advanced.append(advancedGrid);
     translationSection.append(advanced);
-    content.append(translationSection);
+    pages.deepseek.append(translationSection);
+    selectPage("danbooru");
 
     const actions = element("footer", "autocomplete-plus-online-actions");
     const close = button(text.cancel);
@@ -739,7 +1013,10 @@ export async function openOnlineServicesPanel(_app) {
     dialog.addEventListener("click", event => {
         if (event.target === dialog) dialog.close();
     });
-    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+    dialog.addEventListener("close", () => {
+        if (dictionaryPoll !== null) window.clearInterval(dictionaryPoll);
+        dialog.remove();
+    }, { once: true });
     dialog.tabIndex = -1;
     dialog.showModal();
     dialog.focus({ preventScroll: true });

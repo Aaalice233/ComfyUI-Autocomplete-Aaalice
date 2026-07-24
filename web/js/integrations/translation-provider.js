@@ -107,6 +107,7 @@ function addTranslationToCandidate(candidate, locale, translation) {
     const localizedAliases = new Set(filterAliasesForLocale(candidate.alias, locale));
     candidate.alias = candidate.alias.filter(alias => !localizedAliases.has(alias));
     candidate.alias.unshift(translation);
+    candidate.resolvedTranslationLocales?.add(normalizeInterfaceLocale(locale));
     translationCache.set(cacheKey(locale, candidate.tag), translation);
     setCandidateTranslationState(candidate, locale, "translated");
 
@@ -135,6 +136,7 @@ function addTranslationToCandidate(candidate, locale, translation) {
         const canonicalLocalized = new Set(filterAliasesForLocale(canonical.alias, locale));
         canonical.alias = canonical.alias.filter(alias => !canonicalLocalized.has(alias));
         canonical.alias.unshift(translation);
+        canonical.resolvedTranslationLocales?.add(normalizeInterfaceLocale(locale));
     }
     sourceData.aliasMap.set(translation.toLowerCase(), candidate.tag);
     const indexedCandidate = canonical || candidate;
@@ -208,7 +210,10 @@ export async function resolveCandidateTranslations(candidates, locale, options =
     const seen = new Set();
     for (const candidate of candidates) {
         if (!Object.values(TagSource).includes(candidate?.source)) continue;
-        if (String(candidate.categoryText).toLowerCase() === "artist") continue;
+        if (
+            String(candidate.categoryText).toLowerCase() === "artist"
+            && normalizedLocale !== "zh"
+        ) continue;
         const key = `${candidate.source}\0${cacheKey(normalizedLocale, candidate.tag)}`;
         if (seen.has(key)) continue;
         seen.add(key);

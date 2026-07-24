@@ -21,6 +21,7 @@ const {
     searchWithFlexSearch,
     shouldUseFastSearch,
     getSearchCandidateLimit,
+    preserveSelectedCandidateIndex,
     matchWord,
     getCurrentPartialTag,
     insertTagToTextArea
@@ -380,6 +381,18 @@ describe('Autocomplete Functions', () => {
             expect(results.map(item => item.tag)).not.toContain('translated_tag');
         });
 
+    });
+
+    test('preserves the selected tag identity after asynchronous candidates reorder', () => {
+        const candidates = [
+            new TagData('new_exact', 0, 1000, [], TagSource.Danbooru),
+            new TagData('selected_tag', 0, 10, [], TagSource.Danbooru),
+        ];
+        expect(preserveSelectedCandidateIndex(
+            candidates,
+            `${TagSource.Danbooru}\0selected_tag`,
+            0,
+        )).toBe(1);
     });
 
     describe('insertTagToTextArea', () => {
