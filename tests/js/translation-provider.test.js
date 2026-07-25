@@ -427,6 +427,16 @@ describe('on-demand translation provider', () => {
         expect(candidate.alias).toEqual([]);
     });
 
+    test('never requests translations for tags without letters', async () => {
+        const fetchImpl = jest.fn();
+        const ratio = new TagData('14:9', 5, 100, [], TagSource.Danbooru);
+        const kaomoji = new TagData(':3', 0, 50, [], TagSource.Danbooru);
+        await resolveCandidateTranslations([ratio, kaomoji], 'zh', { fetchImpl });
+        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(getCandidateTranslationState(ratio, 'zh')).toBe('idle');
+        expect(getCandidateTranslationState(kaomoji, 'zh')).toBe('idle');
+    });
+
     test('translates ordinary e621 candidates too', async () => {
         const candidate = new TagData('female', 0, 100, [], TagSource.E621);
         const fetchImpl = jest.fn().mockResolvedValue({

@@ -291,6 +291,29 @@ class TranslationManagerTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(chunks, [])
 
+    async def test_letterless_tags_complete_without_a_deepseek_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            manager = TranslationManager(os.path.join(directory, "config.json"), store)
+            manager.save_config({"deepseek": {"api_key": "secret"}})
+
+            async def unexpected_worker(*_args):
+                self.fail("letterless tags must not start a DeepSeek worker")
+
+            manager._translate_owned = unexpected_worker
+            chunks = [
+                chunk
+                async for chunk in manager.resolve_stream(
+                    "zh",
+                    [{"name": "14:9", "category": 0}, {"name": ":3", "category": 0}],
+                )
+            ]
+
+            self.assertEqual(
+                chunks,
+                [{"translations": {}, "sources": {}, "completed": ["14:9", ":3"]}],
+            )
+
     async def test_stream_publishes_completed_tags_before_the_whole_job_finishes(self):
         with tempfile.TemporaryDirectory() as directory:
             store = TranslationStore(os.path.join(directory, "translations.sqlite3"))

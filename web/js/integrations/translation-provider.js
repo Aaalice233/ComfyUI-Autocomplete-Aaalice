@@ -274,6 +274,9 @@ export async function resolveCandidateTranslations(candidates, locale, options =
         if (
             String(candidate.categoryText).toLowerCase() === "artist"
         ) continue;
+        // Tags without letters (aspect ratios, kaomoji) have nothing to
+        // translate; requesting them only leaves the indicator spinning.
+        if (!/\p{L}/u.test(candidate.tag)) continue;
         const key = `${candidate.source}\0${cacheKey(normalizedLocale, candidate.tag)}`;
         if (seen.has(key)) continue;
         seen.add(key);

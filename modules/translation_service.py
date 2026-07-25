@@ -320,6 +320,12 @@ class TranslationManager:
             return
         config = full_config["deepseek"]
         missing = [item for item in items if item["name"] not in cached]
+        # Tags without letters (aspect ratios, kaomoji) are untranslatable;
+        # asking DeepSeek only burns retries while the client spinner waits.
+        skipped = [item["name"] for item in missing if not has_translatable_characters(item["name"])]
+        if skipped:
+            yield {"translations": {}, "sources": {}, "completed": skipped}
+        missing = [item for item in missing if has_translatable_characters(item["name"])]
         if not config["api_key"] or not missing:
             return
 
@@ -486,6 +492,10 @@ def normalize_locale(locale):
     if lowered.startswith("ja"):
         return "ja"
     return "en"
+
+
+def has_translatable_characters(name):
+    return any(character.isalpha() for character in name)
 
 
 def normalize_items(raw_items):
