@@ -175,7 +175,11 @@ export function getCandidateAliasText(tagData, locale = getCurrentInterfaceLocal
     ) {
         return String(tagData?.tag || "");
     }
-    return filterAliasesForLocale(tagData?.alias, locale).join(", ");
+    const localizedAlias = filterAliasesForLocale(tagData?.alias, locale).join(", ");
+    if (isArtist && normalizedLocale !== "en" && !localizedAlias) {
+        return String(tagData?.tag || "");
+    }
+    return localizedAlias;
 }
 
 export function renderTagNameWithCategoryIcon(element, tagData, position = 'left', includeOrigins = true) {

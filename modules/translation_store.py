@@ -10,8 +10,6 @@ def is_translation_acceptable(tag_name, text, locale, category=0):
     value = str(text or "").strip()
     if not value:
         return False
-    if int(category or 0) == 1:
-        return True
     if value.casefold() == str(tag_name or "").strip().casefold():
         return False
     normalized_locale = str(locale or "").replace("_", "-").lower()

@@ -75,6 +75,7 @@ function processCatalogInChunks(items, locale) {
             for (; index < end; index++) {
                 const item = items[index];
                 if (item?.origin === "danbooru_api" && Number(item.post_count) <= 0) continue;
+                if (!isUsableTranslation(item?.tag_name, item?.text, locale)) continue;
                 translationCache.set(cacheKey(locale, item.tag_name), item.text);
                 applyCatalogItem(item, locale);
             }
@@ -92,6 +93,22 @@ function cacheKey(locale, tag) {
     return `${normalizeInterfaceLocale(locale)}\0${String(tag).toLowerCase()}`;
 }
 
+function isUsableTranslation(tag, translation, locale) {
+    const value = String(translation || "").trim();
+    if (!value || value.toLocaleLowerCase() === String(tag || "").trim().toLocaleLowerCase()) {
+        return false;
+    }
+    const normalizedLocale = normalizeInterfaceLocale(locale);
+    if (normalizedLocale === "zh") {
+        return /\p{Script=Han}/u.test(value)
+            && !/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(value);
+    }
+    if (normalizedLocale === "ja") {
+        return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value);
+    }
+    return true;
+}
+
 export function getCandidateTranslationState(candidate, locale) {
     if (!candidate?.tag) return "idle";
     return translationStates.get(cacheKey(locale, candidate.tag)) || "idle";
@@ -103,7 +120,7 @@ function setCandidateTranslationState(candidate, locale, state) {
 }
 
 function addTranslationToCandidate(candidate, locale, translation) {
-    if (!candidate || !translation) return;
+    if (!candidate || !isUsableTranslation(candidate.tag, translation, locale)) return false;
     const localizedAliases = new Set(filterAliasesForLocale(candidate.alias, locale));
     candidate.alias = candidate.alias.filter(alias => !localizedAliases.has(alias));
     candidate.alias.unshift(translation);
@@ -112,7 +129,7 @@ function addTranslationToCandidate(candidate, locale, translation) {
     setCandidateTranslationState(candidate, locale, "translated");
 
     const sourceData = autoCompleteData[candidate.source];
-    if (!sourceData) return;
+    if (!sourceData) return true;
     for (const alias of localizedAliases) {
         for (const key of [alias, alias.toLowerCase()]) {
             if (sourceData.aliasMap.get(key) === candidate.tag) sourceData.aliasMap.delete(key);
@@ -143,10 +160,11 @@ function addTranslationToCandidate(candidate, locale, translation) {
     const index = sourceData.tagIndexMap?.get(indexedCandidate.tag)
         ?? sourceData.sortedTags.indexOf(indexedCandidate);
     indexTranslation(sourceData, indexedCandidate, index, normalizeInterfaceLocale(locale), translation);
+    return true;
 }
 
 function applyCatalogItem(item, locale) {
-    if (!item?.tag_name || !item?.text) return;
+    if (!item?.tag_name || !isUsableTranslation(item.tag_name, item.text, locale)) return;
     if (item.origin === "danbooru_api" && Number(item.post_count) <= 0) return;
     let applied = false;
     for (const source of Object.values(TagSource)) {
@@ -199,6 +217,18 @@ export async function loadTranslationCatalog(locale, options = {}) {
     } catch (error) {
         // Translation enrichment is deliberately silent while typing.
     }
+}
+
+export function invalidateTranslationCatalog(locale) {
+    const normalizedLocale = normalizeInterfaceLocale(locale);
+    const prefix = `${normalizedLocale}\0`;
+    for (const key of translationCache.keys()) {
+        if (key.startsWith(prefix)) translationCache.delete(key);
+    }
+    for (const key of translationStates.keys()) {
+        if (key.startsWith(prefix)) translationStates.delete(key);
+    }
+    loadedLocales.delete(normalizedLocale);
 }
 
 export async function resolveCandidateTranslations(candidates, locale, options = {}) {
@@ -376,6 +406,7 @@ export const __test__ = {
     flushIndexOperations,
     getTranslationIndex,
     indexTranslation,
+    isUsableTranslation,
     readTranslationPayloads,
     loadedLocales,
     pendingIndexOperations,

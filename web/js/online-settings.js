@@ -4,7 +4,10 @@ import {
 } from "./integrations/lora-manager-provider.js";
 import { getCurrentInterfaceLocale } from "./localization.js";
 import { updateOnlineServiceFeatures } from "./online-service-state.js";
-import { loadTranslationCatalog } from "./integrations/translation-provider.js";
+import {
+    invalidateTranslationCatalog,
+    loadTranslationCatalog,
+} from "./integrations/translation-provider.js";
 import { clearDanbooruSessionCache } from "./integrations/danbooru-provider.js";
 
 const API_ROOT = "/autocomplete-plus/translation";
@@ -79,7 +82,7 @@ const TEXT = {
         dictionaryChecking: "Checking",
         dictionaryError: "Error",
         dictionaryVersion: "Version",
-        dictionaryRows: "records",
+        dictionaryRows: "Records",
         dictionarySize: "Size",
         dictionaryLastCheck: "Last checked",
         dictionaryLastUpdate: "Last updated",
@@ -89,6 +92,7 @@ const TEXT = {
         dictionaryCurrent: "Dictionary is up to date",
         dictionaryUpdateFound: "A dictionary update is available",
         dictionaryActionStarted: "Dictionary download started",
+        dictionaryActionCompleted: "Dictionary download completed",
         deepSeekTitle: "DeepSeek LLM",
         deepSeekDescription: "Translates only tags missing from the primary Simplified Chinese dictionary.",
     },
@@ -161,7 +165,7 @@ const TEXT = {
         dictionaryChecking: "正在检测",
         dictionaryError: "错误",
         dictionaryVersion: "版本",
-        dictionaryRows: "条记录",
+        dictionaryRows: "记录数",
         dictionarySize: "大小",
         dictionaryLastCheck: "最后检测",
         dictionaryLastUpdate: "最后更新",
@@ -171,6 +175,7 @@ const TEXT = {
         dictionaryCurrent: "汉化数据库已是最新版本",
         dictionaryUpdateFound: "发现新的汉化数据库",
         dictionaryActionStarted: "汉化数据库下载已开始",
+        dictionaryActionCompleted: "汉化数据库下载完成",
         deepSeekTitle: "DeepSeek LLM",
         deepSeekDescription: "仅翻译简体中文主数据库缺失的标签。",
     },
@@ -243,7 +248,7 @@ const TEXT = {
         dictionaryChecking: "檢查中",
         dictionaryError: "錯誤",
         dictionaryVersion: "版本",
-        dictionaryRows: "筆記錄",
+        dictionaryRows: "記錄數",
         dictionarySize: "大小",
         dictionaryLastCheck: "最後檢查",
         dictionaryLastUpdate: "最後更新",
@@ -253,6 +258,7 @@ const TEXT = {
         dictionaryCurrent: "漢化資料庫已是最新版本",
         dictionaryUpdateFound: "發現新的漢化資料庫",
         dictionaryActionStarted: "漢化資料庫下載已開始",
+        dictionaryActionCompleted: "漢化資料庫下載完成",
         deepSeekTitle: "DeepSeek LLM",
         deepSeekDescription: "簡中資料庫以外的語言仍由 DeepSeek 補充。",
     },
@@ -325,7 +331,7 @@ const TEXT = {
         dictionaryChecking: "確認中",
         dictionaryError: "エラー",
         dictionaryVersion: "バージョン",
-        dictionaryRows: "件",
+        dictionaryRows: "件数",
         dictionarySize: "サイズ",
         dictionaryLastCheck: "最終確認",
         dictionaryLastUpdate: "最終更新",
@@ -335,6 +341,7 @@ const TEXT = {
         dictionaryCurrent: "辞書は最新です",
         dictionaryUpdateFound: "新しい辞書があります",
         dictionaryActionStarted: "辞書のダウンロードを開始しました",
+        dictionaryActionCompleted: "辞書のダウンロードが完了しました",
         deepSeekTitle: "DeepSeek LLM",
         deepSeekDescription: "簡体字中国語辞書にないタグだけを補完翻訳します。",
     },
@@ -507,6 +514,15 @@ function formatBytes(bytes) {
     return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatDateTime(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    const pad = part => String(part).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+        + ` ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function statusText(status, text, idleText) {
     if (status?.state === "success") return text.ready;
     if (status?.state === "error") return text.unavailable;
@@ -540,6 +556,7 @@ export function createOnlineServicesSetting(app, extensionName, extensionId) {
 export async function openOnlineServicesPanel(_app) {
     const locale = getCurrentInterfaceLocale();
     const text = TEXT[locale] || TEXT.en;
+    const showDictionary = locale.startsWith("zh");
     const dialog = element("dialog", "autocomplete-plus-online-dialog");
     const panel = element("div", "autocomplete-plus-online-panel");
     dialog.append(panel);
@@ -572,19 +589,23 @@ export async function openOnlineServicesPanel(_app) {
     };
     const navButtons = {};
     const selectPage = key => {
-        for (const [pageKey, page] of Object.entries(pages)) {
+        for (const [pageKey, navButton] of Object.entries(navButtons)) {
             const selected = pageKey === key;
+            const page = pages[pageKey];
             page.hidden = !selected;
-            navButtons[pageKey].classList.toggle("is-active", selected);
-            navButtons[pageKey].setAttribute("aria-selected", String(selected));
-            navButtons[pageKey].tabIndex = selected ? 0 : -1;
+            navButton.classList.toggle("is-active", selected);
+            navButton.setAttribute("aria-selected", String(selected));
+            navButton.tabIndex = selected ? 0 : -1;
         }
     };
-    for (const [key, label, icon] of [
+    const navigationItems = [
         ["danbooru", text.navDanbooru, "globe"],
-        ["dictionary", text.navDictionary, "database"],
         ["deepseek", text.navDeepSeek, "sparkles"],
-    ]) {
+    ];
+    if (showDictionary) {
+        navigationItems.splice(1, 0, ["dictionary", text.navDictionary, "database"]);
+    }
+    for (const [key, label, icon] of navigationItems) {
         const navButton = element("button", "autocomplete-plus-online-nav-button");
         navButton.type = "button";
         navButton.setAttribute("role", "tab");
@@ -733,6 +754,7 @@ export async function openOnlineServicesPanel(_app) {
         error: text.dictionaryError,
     })[state] || state;
     const renderDictionaryStatus = nextStatus => {
+        const previousState = dictionaryStatus?.state;
         dictionaryStatus = nextStatus;
         dictionaryState.textContent = dictionaryStateText(nextStatus.state);
         dictionaryState.dataset.state = nextStatus.state;
@@ -740,8 +762,8 @@ export async function openOnlineServicesPanel(_app) {
             [text.dictionaryVersion, nextStatus.installed_sha?.slice(0, 12) || "—"],
             [text.dictionaryRows, Number(nextStatus.row_count || 0).toLocaleString()],
             [text.dictionarySize, formatBytes(nextStatus.size_bytes)],
-            [text.dictionaryLastCheck, nextStatus.last_checked_at || "—"],
-            [text.dictionaryLastUpdate, nextStatus.last_updated_at || "—"],
+            [text.dictionaryLastCheck, formatDateTime(nextStatus.last_checked_at)],
+            [text.dictionaryLastUpdate, formatDateTime(nextStatus.last_updated_at)],
         ];
         dictionaryMeta.replaceChildren(...metaRows.map(([label, value]) => {
             const row = element("span");
@@ -755,10 +777,20 @@ export async function openOnlineServicesPanel(_app) {
             ? `${Math.min((downloaded / total) * 100, 100)}%`
             : "28%";
         dictionaryError.textContent = nextStatus.error || "";
-        updateDictionary.disabled = nextStatus.state === "downloading"
+        const isDownloading = nextStatus.state === "downloading";
+        updateDictionary.disabled = isDownloading
             || (nextStatus.installed && !nextStatus.update_available);
-        repairDictionary.disabled = nextStatus.state === "downloading";
+        repairDictionary.disabled = isDownloading;
         checkDictionary.disabled = ["checking", "downloading"].includes(nextStatus.state);
+        for (const action of [checkDictionary, updateDictionary, repairDictionary]) {
+            action.ariaBusy = String(isDownloading);
+        }
+        if (previousState === "downloading" && nextStatus.state === "ready") {
+            message.textContent = text.dictionaryActionCompleted;
+            message.dataset.tone = "success";
+            invalidateTranslationCatalog("zh");
+            void loadTranslationCatalog("zh");
+        }
         if (nextStatus.state === "downloading" && dictionaryPoll === null) {
             dictionaryPoll = window.setInterval(async () => {
                 try {
@@ -773,46 +805,52 @@ export async function openOnlineServicesPanel(_app) {
             }, 750);
         }
     };
-    try {
-        renderDictionaryStatus(await requestJson("/autocomplete-plus/chinese-dictionary/status"));
-    } catch (error) {
-        renderDictionaryStatus({ state: "error", error: error.message });
-    }
-    const runDictionaryAction = async (target, path, payload, successMessage) => {
-        setButtonBusy(target, true, `${target.dataset.idleLabel || target.textContent}…`);
+    if (showDictionary) {
         try {
-            const nextStatus = await requestJson(`/autocomplete-plus/chinese-dictionary/${path}`, {
-                method: "POST",
-                body: JSON.stringify(payload || {}),
-            });
-            renderDictionaryStatus(nextStatus);
-            message.textContent = successMessage(nextStatus);
-            message.dataset.tone = "success";
+            renderDictionaryStatus(await requestJson("/autocomplete-plus/chinese-dictionary/status"));
         } catch (error) {
-            message.textContent = error.message;
-            message.dataset.tone = "error";
-        } finally {
-            setButtonBusy(target, false, "");
+            renderDictionaryStatus({ state: "error", error: error.message });
         }
-    };
-    checkDictionary.onclick = () => runDictionaryAction(
-        checkDictionary,
-        "check-update",
-        {},
-        nextStatus => nextStatus.update_available ? text.dictionaryUpdateFound : text.dictionaryCurrent,
-    );
-    updateDictionary.onclick = () => runDictionaryAction(
-        updateDictionary,
-        "update",
-        {},
-        () => text.dictionaryActionStarted,
-    );
-    repairDictionary.onclick = () => runDictionaryAction(
-        repairDictionary,
-        "update",
-        { force: true },
-        () => text.dictionaryActionStarted,
-    );
+        const runDictionaryAction = async (target, path, payload, successMessage) => {
+            setButtonBusy(target, true, `${target.dataset.idleLabel || target.textContent}…`);
+            try {
+                const nextStatus = await requestJson(`/autocomplete-plus/chinese-dictionary/${path}`, {
+                    method: "POST",
+                    body: JSON.stringify(payload || {}),
+                });
+                setButtonBusy(target, false, "");
+                renderDictionaryStatus(nextStatus);
+                message.textContent = successMessage(nextStatus);
+                message.dataset.tone = "success";
+            } catch (error) {
+                setButtonBusy(target, false, "");
+                message.textContent = error.message;
+                message.dataset.tone = "error";
+            }
+        };
+        checkDictionary.onclick = () => runDictionaryAction(
+            checkDictionary,
+            "check-update",
+            {},
+            nextStatus => nextStatus.update_available ? text.dictionaryUpdateFound : text.dictionaryCurrent,
+        );
+        updateDictionary.onclick = () => runDictionaryAction(
+            updateDictionary,
+            "update",
+            {},
+            nextStatus => nextStatus.state === "downloading"
+                ? text.dictionaryActionStarted
+                : text.dictionaryActionCompleted,
+        );
+        repairDictionary.onclick = () => runDictionaryAction(
+            repairDictionary,
+            "update",
+            { force: true },
+            nextStatus => nextStatus.state === "downloading"
+                ? text.dictionaryActionStarted
+                : text.dictionaryActionCompleted,
+        );
+    }
 
     const translationSection = element("section", "autocomplete-plus-online-section");
     const localeRow = element("div", "autocomplete-plus-online-summary");

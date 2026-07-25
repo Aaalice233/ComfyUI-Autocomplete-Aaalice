@@ -200,9 +200,12 @@ class TranslationManager:
     def catalog(self, locale):
         normalized_locale = normalize_locale(locale)
         catalog = self.store.catalog(normalized_locale)
-        if self._is_simplified_chinese(normalized_locale) and self.primary_store and catalog:
-            primary = self._get_primary(list(catalog))
-            return {tag: value for tag, value in catalog.items() if tag not in primary}
+        if normalized_locale == "zh" and self.primary_store is not None and catalog:
+            primary = self._lookup_primary([row["tag_name"] for row in catalog])
+            return [
+                {**row, **primary.get(row["tag_name"], {})}
+                for row in catalog
+            ]
         return catalog
 
     async def list_models(self, supplied_key=None):
@@ -392,7 +395,11 @@ class TranslationManager:
     async def _get_primary(self, locale, tag_names):
         if locale != "zh" or self.primary_store is None or not tag_names:
             return {}
-        return await asyncio.to_thread(self.primary_store.lookup, tag_names)
+        return await asyncio.to_thread(self._lookup_primary, tag_names)
+
+    def _lookup_primary(self, tag_names):
+        lookup = getattr(self.primary_store, "lookup_all", self.primary_store.lookup)
+        return lookup(tag_names)
 
     async def _translate_owned(self, locale, items, config):
         translations = {}

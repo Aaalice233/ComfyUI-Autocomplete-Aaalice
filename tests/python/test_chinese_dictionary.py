@@ -81,6 +81,18 @@ class ChineseDictionaryTests(unittest.TestCase):
         self.assertNotIn("identity", rows)
         self.assertEqual(service.search("少女", 10)[0]["name"], "magical_girl")
 
+    def test_internal_lookup_can_read_matches_beyond_public_request_limit(self):
+        service = ChineseDictionaryService(self.install_dir)
+        rows = [
+            (f"tag_{index}", 4, f"标签{index}", 1)
+            for index in range(501)
+        ]
+        create_dictionary(service.database_path, rows=rows)
+        names = [row[0] for row in rows]
+
+        self.assertNotIn("tag_500", service.lookup(names))
+        self.assertEqual(service.lookup_all(names)["tag_500"]["text"], "标签500")
+
     def test_rejects_wrong_schema(self):
         wrong_path = os.path.join(self.temp.name, "wrong.sqlite")
         create_dictionary(wrong_path, valid_schema=False)
@@ -165,25 +177,38 @@ class PrimaryTranslationStore:
 
 
 class DictionaryTranslationPrecedenceTests(unittest.IsolatedAsyncioTestCase):
+    def create_manager(self, directory):
+        store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+        store.save_many(
+            "zh",
+            [{"name": "known_tag", "category": 0, "post_count": 1, "origin": "local"}],
+            {"known_tag": "旧的LLM译名"},
+            "model",
+            "prompt",
+        )
+        config_path = os.path.join(directory, "config.json")
+        config_store = OnlineServiceConfig(config_path)
+        config_store.save({"deepseek": {"api_key": "not-used"}})
+        manager = TranslationManager(
+            config_path,
+            store,
+            config_store=config_store,
+            primary_store=PrimaryTranslationStore(),
+        )
+        return manager
+
+    def test_primary_dictionary_replaces_cached_llm_translation_in_catalog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = self.create_manager(directory)
+
+            catalog = manager.catalog("zh")
+
+            self.assertEqual(catalog[0]["text"], "数据库译名")
+            self.assertEqual(catalog[0]["origin"], "ffdkj")
+
     async def test_primary_dictionary_wins_before_cached_or_new_llm_translation(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
-            store.save_many(
-                "zh",
-                [{"name": "known_tag", "category": 0, "post_count": 1, "origin": "local"}],
-                {"known_tag": "旧的LLM译名"},
-                "model",
-                "prompt",
-            )
-            config_path = os.path.join(directory, "config.json")
-            config_store = OnlineServiceConfig(config_path)
-            config_store.save({"deepseek": {"api_key": "not-used"}})
-            manager = TranslationManager(
-                config_path,
-                store,
-                config_store=config_store,
-                primary_store=PrimaryTranslationStore(),
-            )
+            manager = self.create_manager(directory)
 
             chunks = [
                 chunk

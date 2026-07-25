@@ -2,361 +2,140 @@
 
 ## English • [简体中文](docs/README_zh.md) • [日本語](docs/README_jp.md)
 
-![ss01](https://github.com/user-attachments/assets/45dd0598-4c04-49ab-85f7-33fc9026921c)
+![Autocomplete preview](https://github.com/user-attachments/assets/45dd0598-4c04-49ab-85f7-33fc9026921c)
 
-## Overview
+Autocomplete, related tags, translation, and prompt formatting for ComfyUI text inputs. Supports Danbooru tags, optional e621 data, current ComfyUI frontends, Nodes 2.0, and promoted subgraph inputs.
 
-**ComfyUI-Autocomplete-Plus** is a custom node that provides multiple input assistance features for any text area in [ComfyUI](https://github.com/comfyanonymous/ComfyUI). Currently, it supports Danbooru and e621 tags (e621 does not support some functions).
+## Why this fork?
 
-## Why This Fork?
+This is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plus](https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus).
 
-This repository is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plus](https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus). The upstream project has been inactive for an extended period and has not kept pace with recent ComfyUI frontend changes. This fork was created to keep the extension usable on current ComfyUI versions and to continue compatibility fixes.
+Main differences:
 
-### Differences from Upstream
+#### Compatibility
 
-#### Compatibility and maintenance
+- Actively maintained for current ComfyUI, including Nodes 2.0 text inputs and inputs promoted from subgraphs.
 
-- Actively maintained for current ComfyUI frontend versions.
-- Supports **Nodes 2.0** text inputs and promoted **subgraph-node** inputs, including resolution back to the real inner node and widget.
-- Published independently in Comfy Registry as `ComfyUI-Autocomplete-Aaalice`, so this maintained fork is clearly separated from the inactive upstream package.
+#### Data and completion
 
-#### Local-first data sources
+- Uses a local-first workflow: bundled CSV results appear immediately, while LoRA Manager and Danbooru can supplement missing or newer results in the background.
+- Merges duplicate candidates predictably and shows a compact source badge, so users can tell whether the displayed data came from CSV, LoRA Manager, or Danbooru.
+- Keeps the selected tag stable while background results arrive, avoiding accidental selection changes.
+- Improves insertion around commas, spaces, and line breaks; existing tags are recognized instead of being inserted twice.
+- Opens related tags immediately from local data, then appends API-only results without reordering the visible list or moving the current selection.
 
-- Shows the bundled Hugging Face CSV immediately, then merges LoRA Manager and Danbooru results concurrently in the background. Duplicate tags use `CSV > LoRA Manager > Danbooru`; different tags sort by match quality, popularity, then source priority.
-- Longer Danbooru queries use contains-style matching, so a series fragment can discover character tags that include it.
-- Reuses LoRA Manager's tag, LoRA, Embedding, and Wildcard APIs, while avoiding duplicate autocomplete inside LoRA Manager's own inputs.
-- Displays one `CSV`, `LM`, or `API` badge in a dedicated trailing source column. The badge identifies the highest-priority source whose data is actually used, so duplicate-source markers never crowd the row.
-- Keeps the selected tag stable by name while asynchronous sources arrive and the list is re-ranked.
+#### Interaction and performance
 
-#### A smoother autocomplete workflow
+- Supports continued related-tag exploration, panel pinning, cursor-based opening, Wiki links, and keyboard-first operation.
+- Uses virtualized lists and bounded result snapshots to keep large tag collections responsive and prevent list width or scroll position from jumping.
 
-- Partial tags reopen autocomplete; accepting a complete tag switches directly to related tags; a trailing comma still resolves the preceding tag.
-- Related tags open from the complete local snapshot without waiting for Danbooru. API-only rows append later without reordering results or shifting the selection and scroll position.
-- Tag insertion reuses and normalizes nearby commas and line breaks, avoiding empty slots and duplicate separators.
-- Related-tag exploration continues after insertion. The panel can be pinned or opened at the cursor with `Ctrl+Shift+Space`.
-- Existing tags are grayed out and selected in place instead of being inserted twice.
-- Wiki pages are available from row and panel controls, or with `F1` for the keyboard-selected tag.
+#### Online services and languages
 
-#### Fast, stable large lists
-
-- Builds one bounded result snapshot up front, so the scrollbar has its final length immediately.
-- Fixed-row virtualization mounts only visible rows plus overscan; scrolling performs no search, pagination, or translation work.
-- Keeps typing responsive with frame-coalesced searches, bounded candidate pools, chunked CSV parsing, an append-only translation index, deferred SQLite work, and cached related-tag scoring.
-- Uses alternating rows, a persistent selection accent, stable keyboard navigation, reserved scrollbar space, and viewport-aware popup positioning.
-- Locks the popup width for its visible lifetime so virtual scrolling and late translations cannot make the list wobble.
-- Gives more room to English tags and a shorter fixed translation column; hover reveals any truncated text.
-- Adapts both panels for narrow windows with tighter columns and spacing. Autocomplete stays near the caret, related tags prefer the roomier side of the input, and fall back above or below when neither side is usable.
-
-#### Persistent online services and translation
-
-- Persists Danbooru completion and related-tag snapshots with background refresh, offline fallback, concurrent-request coalescing, bounded LRU cleanup, statistics, and manual clearing.
-- Uses the ffdkj Chinese dictionary before cached or new DeepSeek translations for Simplified Chinese. DeepSeek only receives dictionary misses; Traditional Chinese and Japanese continue to use DeepSeek.
-- Supports model discovery through a real selection list, health checks, saved API-key reveal, and optional thinking effort.
-- Places a three-page manager in **Online services** for Danbooru API, the Chinese dictionary, and DeepSeek LLM. The fixed sidebar becomes a horizontal tab bar in narrow windows.
-- Keeps dictionary install/update actions independent from the DeepSeek configuration save action, with per-service status, progress, errors, and cache controls.
-- Online enrichment never blocks local typing; failures remain non-disruptive while useful diagnostics stay available in settings.
-
-#### Small details that add up
-
-- Filters displayed aliases to the current ComfyUI language while keeping the complete alias set searchable.
-- Uses category-specific emoji markers with localized hover labels for general, artist, copyright, character, meta, model, and other tag types.
-- Localizes every setting name and tooltip, plus titles, loading and empty states, controls, Wiki links, and source badges, in English, Simplified Chinese, Traditional Chinese, and Japanese.
-- Maintains matching English, Simplified Chinese, and Japanese documentation for both headline features and smaller interaction refinements.
-
-The original project remains the foundation of this fork. Existing features and credits are preserved wherever possible.
-
-## Features
-
-- **:zap:No setup required**: Automatically downloads CSV data optimized for Danbooru tags.
-- **:mag:Autocomplete**: Displays tag suggestions in real-time based on your input as you type.
-- **:file_cabinet:Related Tags Display**: Shows a list of tags highly related to the selected tag.
-- **:triangular_ruler:Auto Formatter**: Automatically formats prompt text when the textarea loses focus, cleaning up extra spaces and commas.
-- **:earth_asia:Multilingual Support**: Supports input completion in Japanese, Chinese, and Korean.
-- **:computer_mouse:Intuitive Operation**:
-    - Supports both mouse and keyboard operations.
-    - Natural tag insertion that considers cursor position and existing text.
-- **:art:Design**: Supports both light and dark themes of ComfyUI.
-- **:pencil:User CSV**: Allows users to add their own CSV files for autocomplete suggestions.
-- **:twisted_rightwards_arrows:Modern ComfyUI Compatibility**: Supports Nodes 2.0 and promoted text inputs on subgraph nodes.
-- **:arrows_counterclockwise:Online Tag Completion**: Checks and merges Danbooru results in the background without downloading a second tag database.
-- **:speech_balloon:On-demand Translation**: Translates visible ordinary Danbooru and e621 tags through DeepSeek once, caches the result, and makes translated aliases searchable.
-- **:link:LoRA Manager Integration**: Reuses LoRA Manager's local indexes for supplemental tag, LoRA, Embedding, and Wildcard suggestions.
+- Persists Danbooru results for faster reuse and offline fallback, with cache status and manual clearing available in **Online Services**.
+- For Simplified Chinese, the ffdkj dictionary is preferred and DeepSeek handles missing translations; other supported languages can continue to use DeepSeek.
+- Provides a responsive online-services manager and localized UI in English, Simplified Chinese, Traditional Chinese, and Japanese.
 
 ## Installation
 
 ### ComfyUI-Manager
 
-1. Search for `ComfyUI-Autocomplete-Aaalice` in [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager), install this maintained fork, and restart.
-2. The necessary CSV data will be automatically downloaded from HuggingFace upon startup.
+Search for `ComfyUI-Autocomplete-Aaalice`, install it, and restart ComfyUI. Required Danbooru CSV data downloads automatically on first startup.
 
 ### Manual
 
-1. Clone or copy this repository into the `custom_nodes` folder of ComfyUI.
-   `git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git`
-2. Launch ComfyUI. The necessary CSV data will be automatically downloaded from HuggingFace upon startup.
+Clone the repository into ComfyUI's `custom_nodes` directory, then restart ComfyUI:
 
-## Autocomplete
+```bash
+git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
+```
 
-When you type in a text input area, tags that partially match the text are displayed in descending order of post count. You can select a tag with the up and down keys, and insert the selected tag by pressing Enter or Tab.
+## Using the extension
 
-- Tag aliases are also included in the search. Japanese hiragana and katakana are searched without distinction.
-- Tags are color-coded by category. The color-coding rules are the same as Danbooru.
-- Each suggestion uses a distinct category emoji; hover it to see the category and source.
-- Matching suggestions are ranked globally by their displayed post count (popularity) by default. Match quality and source priority are only used to break equal-popularity results.
-- The active suggestion uses a persistent accent highlight, including the initially selected first row and while the pointer is hovering it.
-- Tags that have already been entered are displayed grayed out.
-- You can display Danbooru and e621 tags at the same time. You can also change the priority from the settings.
-- Supports autocomplete for Lora and Embedding inputs. You can enable/disable this feature in the settings.
-- Clicking the 📖 icon opens the tag's Wiki page. If a tag is selected via keyboard, you can open it with the `F1` key.
+### Autocomplete
 
-## Related Tags
+Type in a text input to open tag suggestions. Use the arrow keys to select a result and press Enter or Tab to insert it.
 
-![ss02](https://github.com/user-attachments/assets/854571cd-01eb-4e92-a118-2303bec0b175)
+- Searches tag names and aliases.
+- Supports Danbooru categories, LoRA, Embedding, Wildcard, and optional e621 results.
+- Existing tags are dimmed instead of inserted twice.
+- Click the Wiki control, or press `F1` on the keyboard-selected tag, to open its Wiki page.
 
-When you select any tag in a text input area, a list of highly related tags is displayed. You can insert a tag by clicking it or by selecting it with the up/down arrow keys and then pressing Enter or Tab. The UI's position and size are automatically adjusted based on the text area being edited.
+### Related tags
 
-- The complete local co-occurrence snapshot is rendered first. Danbooru's official related-tag API is requested afterward, and API-only tags are appended without reordering local rows, moving the current selection, or waiting before opening the panel.
-- Clicking a partial tag reopens autocomplete. Related tags are shown only when the clicked tag has co-occurrence data, so an empty related-tags panel does not replace useful completion suggestions.
-- Accepting an autocomplete suggestion with Enter, Tab, or a mouse click immediately displays related tags for the completed tag when co-occurrence data is available.
-- Clicking immediately after a tag's trailing comma or the spaces following that comma displays the related tags for the preceding tag.
-- Inserting a related tag reuses and normalizes nearby separators, so it works consistently at the end of a prompt, between existing tags, and next to line breaks without producing duplicate commas.
-- After a related tag is inserted, the panel immediately switches to that tag's co-occurrences, allowing related tags to be selected continuously. A pinned panel intentionally stays on its pinned tag.
-- When clicking switches between autocomplete and related tags, opening one closes the other (except when the related-tags panel is pinned).
+![Related tags preview](https://github.com/user-attachments/assets/854571cd-01eb-4e92-a118-2303bec0b175)
 
-- The display position is primarily at the bottom of the text area and automatically adjusts vertically based on available space.
-  - You can switch between vertical and horizontal display positions using the "↕️|↔️" button in the header.
-- You can toggle the pinned state of the displayed related tags using the "📌|🎯" button in the header. To close the UI when pinned, press the Esc key.
-- Clicking the tag in the header opens the tag's Wiki page.
-- Tags that have already been entered are displayed grayed out. If you try to insert a grayed-out tag, the already entered tag will instead be selected.
-- You can display related tags for the cursor position by pressing `Ctrl+Shift+Space`.
+Select or confirm a complete tag to explore related tags. The panel can be repositioned, pinned, and used repeatedly without closing after every insertion.
 
-## Auto Formatter
+### Auto formatter
 
-When a text input area loses focus (e.g., by clicking outside or pressing Tab), the prompt text is automatically formatted. This feature improves readability when editing large amounts of text.
+The formatter can clean repeated spaces and commas when leaving a text input. It can also be run manually and disabled in settings.
 
-Detailed behavior is as follows:
-- Automatically adds a comma and space after each tag for proper separation
-- Removes extra commas and spaces between tags
-- You can manually trigger formatting using the keyboard shortcut `Alt+Shift+F` (keybinding can be customized in ComfyUI settings)
-- You can enable/disable this feature in the settings
+| Action | Default shortcut |
+| --- | --- |
+| Open related tags at the cursor | `Ctrl+Shift+Space` |
+| Open Wiki for the selected tag | `F1` |
+| Format the current prompt | `Alt+Shift+F` |
+| Close an open panel | `Esc` |
 
-> [!NOTE]
-> Auto-formatting is disabled for certain nodes to prevent errors.  
-> Example: [Power Puter (rgthree)](https://github.com/rgthree/rgthree-comfy/wiki/Node:-Power-Puter) `code` field, [LoraLoaderBlockWeight (Inspire)](https://github.com/ltdrdata/ComfyUI-Inspire-Pack) `block_vector` field
+## Data sources and translation
 
-## CSV Data
+- The bundled Danbooru CSV is the primary local source and may include SFW and NSFW tags.
+- [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) can provide local tag, LoRA, Embedding, and Wildcard results.
+- Anonymous Danbooru requests can supplement missing or newer tags and related tags. Local results remain available if the service is offline.
+- Simplified Chinese can use the [ffdkj translation dictionary](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table). It is downloaded separately because its upstream repository does not currently declare a license.
+- DeepSeek can translate dictionary misses and languages not covered by the Chinese dictionary. Configure it under **Online Services**.
+- The Chinese-dictionary page is shown only when ComfyUI uses a Chinese interface.
 
-Two basic CSV data files are required for operation. These are managed on [HuggingFace](https://huggingface.co/datasets/newtextdoc1111/danbooru-tag-csv) and are automatically downloaded when ComfyUI is first launched after installation, so no setup is required.  
-Since the basic CSV files are based on the Danbooru dataset publicly available on HuggingFace, the post counts and related tag information may differ from the Danbooru website.
+## Custom CSV files
 
-> [!IMPORTANT]
-> The basic CSV contains both SFW and NSFW tags.
+Place custom files in `data/`, then refresh the browser:
 
-**danbooru_tags.csv**
+- Autocomplete: `<danbooru|e621>_tags*.csv`
+- Related tags: `<danbooru|e621>_tags_cooccurrence*.csv`
 
-This is a tag information CSV file for autocomplete, containing tag names, categories, post counts, and aliases (including Japanese, Chinese, and Korean). The column structure is the same as that used in [DominikDoom/a1111-sd-webui-tagcomplete](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete).
+Autocomplete CSV rows use:
 
-Tag information is filtered under the following conditions:
-- Post count of 100 or more
-- Image score of 5 or more
-- Category is `general, character, or copyright`
-- Tag name does not contain `(cosplay)`
-
-**danbooru_tags_cooccurrence.csv**
-
-This is a CSV file for related tag calculation, recording tag pairs and their co-occurrence counts.
-
-Tag pairs are further filtered from the tag information CSV under the following conditions:
-- Co-occurrence count of 100 or more
-
-### e621 CSV
-
-Currently, automatic download of CSV for e621 is not supported, so please manually place a CSV with the same structure as `danbooru_tags.csv` in the data folder with the name `e621_tags.csv`.
-Also, displaying related tags is not supported.
-
-### User CSV
-
-Users can also use their own CSV files. CSV files should be placed in the `data` folder according to the following naming convention:
-
-- **CSV for Autocomplete**: `<danbooru | e621>_tags*.csv`
-- **CSV for Related Tags**: `<danbooru | e621>_tags_cooccurrence*.csv`
-
-For example, you can add frequently used meta tags to the autocomplete suggestions by placing a file named `danbooru_tags_meta.csv` in the `data` folder.
-A header row is not required. A browser reload is necessary to apply the changes.
-
-**Example of meta tags:**
 ```csv
 tag,category,count,alias
 masterpiece,5,9999999,
-best_quality,5,9999999,
-high_quality,5,9999999,
-normal_quality,5,9999999,
-low_quality,5,9999999,
-worst_quality,5,9999999,
 ```
 
-When the browser is reloaded, you can check the list of loaded CSV files in the ComfyUI console log. If a file is not included in the log output, please verify that the file name follows the naming convention.
+Quoted tag combinations can be inserted as one preset:
 
-**Example of ComfyUI console log output:**
-```
-[Autocomplete-Plus] CSV file status:
-  * Danbooru -> base: True, extra: danbooru_tags_meta.csv // If displayed here, meta tags can be autocompleted
-  * E621 -> base: False, extra:
+```csv
+"masterpiece, best quality, highres",5,9999999,<c:HighQuality>
 ```
 
->[!NOTE]
-> If there are multiple user CSV files, they are loaded in alphabetical order. If the same tag exists in multiple files, the one loaded first is retained. The basic CSV is loaded last.
-
-### Bulk Tag Insertion (Pseudo "Chants")
-
-By enclosing multiple tags with `""` (double quotation marks), you can insert frequently used tags in bulk.
-This is similar to the **Chants** feature in [DominikDoom/a1111-sd-webui-tagcomplete](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete?tab=readme-ov-file#chants).
-
-For example, by preparing the following CSV, you can quickly insert corresponding tags by typing `<c:Basic-HighQuality>` or `<c:Basic-Negative>`.
-
-**`danbooru_tags_chants.csv`:**
-```
-"masterpiece, best quality, high quality, highres, ultra-detailed",5,9999999,<c:Basic-HighQuality>
-"(worst quality, low quality:1.4), normal quality",5,9999999,<c:Basic-Negative>
-```
-
->[!TIP]
-> * Text enclosed in `""` does not escape `()` (parentheses). Tags that originally contain parentheses should be written in the CSV with escaped parentheses. Example: `copyright_(series)` -> `copyright_\(series\)`
-> * The alias column also supports `""`, allowing you to assign multiple aliases
+e621 data is not downloaded automatically. Add an `e621_tags.csv` file manually; e621 related tags are not currently supported.
 
 ## Settings
 
-### Tag Source
+Open ComfyUI settings and find **Autocomplete Plus**.
 
-> [!NOTE]
-> The source of tag data such as Danbooru or e621 is called the "tag source".
+- Choose enabled tag sources, result limits, comma insertion, underscore replacement, and LoRA/Embedding completion.
+- Configure related-tag triggers, panel direction, alias display, and auto formatting.
+- Use **Online Services** to manage Danbooru caching, the Chinese dictionary, and DeepSeek.
 
-- **Autocomplete Tag Source**: The tag source to display in the autocomplete suggestions. Select "all" to display all loaded tag sources.
-- **Primary source for 'all' Source**: When `Autocomplete Tag Source` is set to "all", the tag source specified here will be displayed with priority.
-- **Tag category icon position**: Where to display the category emoji. Hover it for the localized category and source; select "hidden" to hide it.
+To disable automatic CSV update checks at startup, edit `csv_meta.json`:
 
-### Autocomplete
-
-- **Enable Autocomplete**: Enable/disable the autocomplete feature.
-- **Maximum autocomplete results**: Safety limit for the complete in-memory result snapshot (default: 1,000; configurable up to 2,000). Only visible rows are mounted in the DOM.
-- **Auto-Insert Comma**: Automatically insert a comma after tags when inserting from autocomplete.
-- **Replace '_' with 'Space'**: Replaces underscores with spaces when inserting tags. This setting also affects related tag display.
-- **String to add before artist tags**: Text to prepend when inserting an artist tag. For Anima models, specify `@`.
-- **Enable Loras and Embeddings**: Display Lora and Embedding in the suggestions.
-- **Use Fast Search**: Use indexed autocomplete search (enabled by default). Sources with at least 50,000 loaded tags always avoid the blocking sequential scan, even if this setting was previously saved as disabled.
-
-### Related Tags
-
-- **Enable Related Tags**: Enable/disable the related tags feature.
-- **Maximum co-occurrence results**: Safety limit for the complete in-memory co-occurrence snapshot (default: 25,000). Only visible rows are mounted in the DOM.
-- **Default Display Position**: Default display position when ComfyUI starts.
-- **Related Tags Trigger Mode**: Which action will trigger displaying related tags for the entered tag (click only, Ctrl+click)
-
-### Display
-
-- **Hide Alias**: Hide/show the Alias ​​column in autocomplete and related tags (default is show)
-
-### Auto Formatter
-
-- **Enable Auto Format**: Enable/disable the automatically format prompt text when the textarea loses focus.
-- **Auto Format Trigger**: Choose when formatting is applied.
-  - **Auto**: Format automatically when leaving text field
-  - **Manual**: Format only via keyboard shortcut (default: `Alt+Shift+F`)
-- **Use Trailing Comma**: When enabled, ensures all lines end with a trailing comma when formatting. If disabled, removes trailing commas.
-- **Trim Surrounding Spaces**: When enabled, trim any blank lines or spaces from the beginning and end of the prompt.
-
-### LoRA Manager Integration
-
-When [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) is installed, **Auto** mode supplements autocomplete from its local `/api/lm/custom-words/search`, `/api/lm/loras/relative-paths`, `/api/lm/embeddings/relative-paths`, and `/api/lm/wildcards/search` indexes. API failures fall back to the built-in data without interrupting input. LoRA Manager's own autocomplete text boxes are excluded automatically; additional third-party node types can be listed under **Excluded node types**.
-
-### Online Completion and Translation
-
-Autocomplete computes the complete bounded local snapshot immediately, then queries LoRA Manager and one Danbooru snapshot of up to 200 tags concurrently and merges them. Duplicate tags strictly keep data from `CSV > LoRA Manager > Danbooru`; different tags sort by match quality, popularity, then source priority. The currently selected tag is restored by name after asynchronous re-ranking. Danbooru uses prefix matching for two- or three-character input, then switches to contains matching so a franchise query such as `wuthering_wave` also finds character tags ending in `_(wuthering_waves)`. The snapshot remains fixed while scrolling; no provider is queried from the scroll handler.
-
-Related tags follow the same local-first rule. The full local CSV snapshot is displayed immediately, then one official Danbooru `/related_tag.json` snapshot of up to 500 Jaccard-ranked tags is requested in the background. Only API-only rows are appended, so delayed results cannot reorder existing rows or change the scroll offset; scrolling itself never starts a request.
-
-Successful Danbooru completion pages and related-tag snapshots are stored together in `completion_cache.sqlite3`, so they survive browser refreshes and ComfyUI restarts without becoming a second permanent tag database. Completion, related-tag, and health requests share request coalescing, caching, and an anonymous read limiter capped at 8 requests per second. No Danbooru account, password, or API key is required. The manager shows cache size and entry count and can clear this cache without touching `translations.sqlite3`.
-
-Autocomplete and related-tag rows carry one compact provenance chip: `CSV` for the bundled dataset, `LM` for LoRA Manager, or `API` for Danbooru. When several sources contain the same tag, only the highest-priority source actually used by the merged candidate is shown; hovering the chip reveals its full source name.
-
-For Simplified Chinese, translations and Chinese searches come from the [`ffdkj-Danbooru_Tag-Chinese-English-Translation-Table`](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table) database first, then cached DeepSeek results, then new DeepSeek requests. Hugging Face's mixed CJK aliases are ignored in this mode. Artist translations are displayed only when the dictionary contains a non-empty value different from the original tag; artist tags are never sent to DeepSeek. Traditional Chinese and Japanese keep the existing DeepSeek path, and English never requests translation.
-
-The ffdkj database is not redistributed with this plugin because the upstream repository does not currently declare a license. The first Simplified Chinese session downloads about 29.3 MB in the background to the ComfyUI user directory at `autocomplete-plus/chinese-dictionary/`; English completion remains available, and DeepSeek waits until the download fails before filling misses. Later checks and updates are manual. Downloads are verified by Git blob SHA, SQLite header/schema, `PRAGMA quick_check`, and a non-empty row count before atomic replacement, so a failed update preserves the installed database. Many thanks to ffdkj and the project contributors for maintaining the Chinese tag translations; the data remains maintained by and attributable to that upstream project.
-
-The manager has separate **Danbooru API**, **Chinese dictionary**, and **DeepSeek LLM** pages. Dictionary detection, install/update, and repair run immediately and are not tied to the configuration save button. The DeepSeek page retains model discovery through `/models`, API-key reveal, model health checks, thinking effort, concurrency, batch size, retries, timeout, and system-prompt controls. The local dictionary applies only to Simplified Chinese; `translations.sqlite3` remains the separate LLM cache.
-
-Autocomplete and related-tag panels only preview aliases matching the current ComfyUI language. This is display filtering only: all aliases remain searchable. Configuration and the new translation dictionary are stored under the ComfyUI user directory in `autocomplete-plus/`; old live-tag databases and CSV files are not read or deleted automatically.
-
-## Advanced Settings
-
-### Disabling CSV Update Check on Startup
-
-By default, ComfyUI performs CSV file update checks and downloads at regular intervals during startup.
-When starting in an environment without internet access, startup may be delayed until a timeout occurs.
-
-You can skip the check process during ComfyUI startup by following these steps:
-
-1. Start ComfyUI once with this custom node installed to generate the `csv_meta.json` file.  
-  The `csv_meta.json` file is created directly under this custom node's folder.
-2. Open `csv_meta.json` in a text editor and change the value of `check_updates_on_startup` from `true` to `false` and save.  
-  If `check_updates_on_startup` does not exist, add it under `version`.
-
-**`csv_meta.json` after modification:**
 ```json
 {
   "version": 1,
-  "check_updates_on_startup": false,
-  ...
+  "check_updates_on_startup": false
 }
 ```
 
-**Additional notes:**
-- The check process will not be performed until the value of `check_updates_on_startup` is changed back to `true` or the `version` is switched.
-- Even when `check_updates_on_startup` is `false`, manual checking is still possible by pressing the `Check CSV updates` button in the Autocomplete Plus settings.
+Manual CSV update checks remain available in settings.
 
-## More details on how it works
+## Known limitations
 
-### About Fast Search for Autocomplete
-
-Fast indexed search is enabled by default so the local candidate list can render immediately while LoRA Manager, Danbooru, and translation enrichment arrive later. Sources with at least 50,000 loaded tags automatically avoid sequential scans even when an older saved setting says otherwise.
-
-Keystrokes are coalesced to the next frame instead of running index work inside the keyboard event. Search only collects a bounded pool before ranking, while CSV parsing yields between small chunks. Runtime translations use a separate append-only alias index, so typing never rebuilds the large base FlexSearch index. Co-occurrence loading retains the highest-frequency pairs needed by the UI instead of expanding the entire CSV in memory; related-tag results also use bounded scoring and an in-memory cache.
-
-- When the loaded CSV files contain a large number of tags or aliases. This is especially useful when the total number of tags exceeds **100,000**.
-- When using natural language instead of comma-separated tags in prompt input.
-
-**Browser startup behavior**
-
-Fast search requires tag index building. While a large source is still building, it is temporarily skipped instead of synchronously scanning the entire dataset and blocking list appearance or disappearance.
-As of `v1.3.0`, The notification when building is completed is displayed only in the browser's developer tools. This is planned to be improved in future versions.
-
-For example, when index building for approximately 220,000 tags is completed, the following log is recorded:
-
-```
-[Autocomplete-Plus] Building 221787 index for danbooru took 9398.70ms.
-```
-
-> [!NOTE]
-> - Index building occurs in the background even when fast search is disabled in settings
-> - Fast search uses the full-text search library [nextapps-de/flexsearch](https://github.com/nextapps-de/flexsearch)
-
-## Known Issues
-
-### Performance
-
-- Due to the large size of the CSV files, browser startup time may be longer.
-- It consumes memory to operate quickly in the browser. This should not be an issue on machines with specs capable of running ComfyUI.
-
-### Autocomplete
-
-### Related Tags
-- Cannot retrieve the correct tag when clicking on a dynamic prompt like `from {above|below|side}`. This is because the exact tag is not determined until the wildcard processor is executed.
+- Large CSV collections increase browser startup time and memory use.
+- Dynamic prompts such as `from {above|below|side}` cannot provide reliable related tags before their wildcard value is resolved.
 
 ## Credits
 
-- [pythongosssss/ComfyUI-Custom-Node](https://github.com/pythongosssss/ComfyUI-Custom-Scripts)
-  - Referenced for implementing the autocomplete function.
+- [newtextdoc1111/ComfyUI-Autocomplete-Plus](https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus)
+- [pythongosssss/ComfyUI-Custom-Scripts](https://github.com/pythongosssss/ComfyUI-Custom-Scripts)
 - [DominikDoom/a1111-sd-webui-tagcomplete](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete)
-  - Referenced for autocomplete function and CSV specifications.
 - [nextapps-de/flexsearch](https://github.com/nextapps-de/flexsearch)
-  - Used to implement fast tag search processing for autocomplete.
+- [ffdkj-Danbooru_Tag-Chinese-English-Translation-Table](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table)

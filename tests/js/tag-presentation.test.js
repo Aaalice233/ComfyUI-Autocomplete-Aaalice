@@ -106,6 +106,10 @@ describe('tag category presentation', () => {
         const artist = { tag: 'an_artist', categoryText: 'artist', alias: [] };
         expect(getCandidateAliasText(artist, 'zh-CN')).toBe('an_artist');
         expect(getCandidateAliasText(artist, 'ja-JP')).toBe('an_artist');
+
+        artist.alias = ['an_artist'];
+        artist.resolvedTranslationLocales = new Set(['zh']);
+        expect(getCandidateAliasText(artist, 'zh-CN')).toBe('an_artist');
     });
 
     test('does not display Hugging Face CJK aliases as Simplified Chinese translations', () => {

@@ -56,6 +56,8 @@ describe('online services settings panel', () => {
                         row_count: 318000,
                         size_bytes: 30_000_000,
                         update_available: false,
+                        last_checked_at: '2026-07-25T03:48:42.553Z',
+                        last_updated_at: '2026-07-25T03:28:39.336Z',
                     }),
                 };
             }
@@ -112,7 +114,7 @@ describe('online services settings panel', () => {
             .toBe(' 在线服务');
     });
 
-    test('uses three navigation pages with collapsed advanced settings and thinking off', async () => {
+    test('hides the Chinese dictionary page outside Chinese locales', async () => {
         await openOnlineServicesPanel({});
         const dialog = document.querySelector('dialog');
         const details = dialog.querySelector('details');
@@ -130,28 +132,37 @@ describe('online services settings panel', () => {
         expect(dialog.querySelectorAll('[role="switch"]')).toHaveLength(2);
         expect(dialog.querySelector('.autocomplete-plus-online-content')).not.toBeNull();
         expect(dialog.querySelector('.autocomplete-plus-online-status-grid')).not.toBeNull();
-        expect(dialog.querySelectorAll('[role="tab"]')).toHaveLength(3);
-        expect(dialog.querySelectorAll('[role="tab"] > svg')).toHaveLength(3);
+        expect(dialog.querySelectorAll('[role="tab"]')).toHaveLength(2);
+        expect(dialog.querySelectorAll('[role="tab"] > svg')).toHaveLength(2);
         expect(dialog.querySelector('[role="tab"] > svg').namespaceURI)
             .toBe('http://www.w3.org/2000/svg');
         expect(dialog.querySelector('[role="tab"] > svg').children.length).toBeGreaterThan(0);
-        expect(dialog.textContent).toContain('Simplified Chinese dictionary');
-        expect(dialog.textContent).toContain('318,000');
+        expect([...dialog.querySelectorAll('[role="tab"]')]
+            .some(button => button.textContent.includes('Chinese dictionary'))).toBe(false);
+        expect(global.fetch).not.toHaveBeenCalledWith(
+            '/autocomplete-plus/chinese-dictionary/status',
+            expect.anything(),
+        );
         expect(dialog.querySelector('.autocomplete-plus-online-title p').textContent)
             .toContain('local suggestions instant');
     });
 
     test('switches pages and starts a manual dictionary update', async () => {
+        document.documentElement.lang = 'zh-CN';
         await openOnlineServicesPanel({});
         const dialog = document.querySelector('dialog');
         const dictionaryTab = [...dialog.querySelectorAll('[role="tab"]')]
-            .find(button => button.textContent.includes('Chinese dictionary'));
+            .find(button => button.textContent.includes('中文汉化数据库'));
         dictionaryTab.click();
         expect(dictionaryTab.getAttribute('aria-selected')).toBe('true');
         expect(dialog.querySelectorAll('.autocomplete-plus-online-page:not([hidden])')).toHaveLength(1);
+        expect(dialog.textContent).toContain('记录数');
+        expect(dialog.textContent).not.toContain('条记录');
+        expect(dialog.textContent).not.toContain('T03:48:42.553Z');
+        expect(dialog.textContent).not.toContain(':42.553');
 
         const updateButton = [...dialog.querySelectorAll('button')]
-            .find(button => button.textContent === 'Repair download');
+            .find(button => button.textContent === '修复重装');
         global.fetch.mockImplementationOnce(async () => ({
             ok: true,
             json: async () => ({ state: 'downloading', installed: true }),
@@ -163,6 +174,42 @@ describe('online services settings panel', () => {
             expect.objectContaining({ method: 'POST' }),
         );
         dialog.close();
+    });
+
+    test('reports dictionary completion after polling and only marks active downloads busy', async () => {
+        jest.useFakeTimers();
+        try {
+            document.documentElement.lang = 'zh-CN';
+            await openOnlineServicesPanel({});
+            const dialog = document.querySelector('dialog');
+            const repairButton = [...dialog.querySelectorAll('button')]
+                .find(button => button.textContent === '修复重装');
+            const installButton = [...dialog.querySelectorAll('button')]
+                .find(button => button.textContent === '安装 / 更新');
+
+            expect(installButton.disabled).toBe(true);
+            expect(installButton.ariaBusy).toBe('false');
+
+            global.fetch.mockImplementationOnce(async () => ({
+                ok: true,
+                json: async () => ({ state: 'downloading', installed: true }),
+            }));
+            repairButton.click();
+            await jest.advanceTimersByTimeAsync(0);
+
+            expect(dialog.textContent).toContain('汉化数据库下载已开始');
+            expect(repairButton.disabled).toBe(true);
+            expect(repairButton.ariaBusy).toBe('true');
+
+            await jest.advanceTimersByTimeAsync(750);
+
+            expect(dialog.textContent).toContain('汉化数据库下载完成');
+            expect(repairButton.disabled).toBe(false);
+            expect(repairButton.ariaBusy).toBe('false');
+            dialog.close();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test('offers an accessible API key visibility control', async () => {

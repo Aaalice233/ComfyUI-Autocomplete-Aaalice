@@ -139,9 +139,10 @@ class TranslationStoreTests(unittest.TestCase):
             self.assertEqual(reopened.get_many("zh", ["1girl"]), {})
             self.assertEqual(reopened.count(), 0)
 
-    def test_artist_identity_text_is_allowed_but_not_required_from_deepseek(self):
+    def test_artist_identity_text_is_not_saved_as_a_translation(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            database_path = os.path.join(directory, "translations.sqlite3")
+            store = TranslationStore(database_path)
             store.save_many(
                 "zh",
                 [{"name": "an_artist", "category": 1, "post_count": 10, "origin": "local"}],
@@ -150,7 +151,23 @@ class TranslationStoreTests(unittest.TestCase):
                 "hash",
             )
 
-            self.assertEqual(store.get_many("zh", ["an_artist"])["an_artist"]["text"], "an_artist")
+            self.assertEqual(store.get_many("zh", ["an_artist"]), {})
+            connection = sqlite3.connect(database_path)
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO translations(
+                        tag_name, locale, text, category, post_count, origin, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("legacy_artist", "zh", "legacy_artist", 1, 10, "local", "2026-01-01T00:00:00+00:00"),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            reopened = TranslationStore(database_path)
+            self.assertEqual(reopened.get_many("zh", ["legacy_artist"]), {})
 
 
 class TranslationValidationTests(unittest.TestCase):
@@ -196,7 +213,7 @@ class TranslationValidationTests(unittest.TestCase):
 
         self.assertEqual(
             validate_translation_response(content, items, "zh"),
-            ({"an_artist": "an_artist"}, ["1girl", "blue_hair"]),
+            ({}, ["1girl", "an_artist", "blue_hair"]),
         )
 
 

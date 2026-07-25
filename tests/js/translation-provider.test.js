@@ -149,6 +149,25 @@ describe('on-demand translation provider', () => {
         expect(__test__.translationCache.has(__test__.cacheKey('zh', '1gir-'))).toBe(false);
     });
 
+    test('rejects unusable cached values instead of marking them translated', async () => {
+        const fetchImpl = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                items: [
+                    { tag_name: 'empty_tag', text: '', category: 0, post_count: 10, origin: 'local' },
+                    { tag_name: 'same_tag', text: 'same_tag', category: 0, post_count: 10, origin: 'local' },
+                    { tag_name: 'latin_tag', text: 'Latin only', category: 0, post_count: 10, origin: 'local' },
+                ],
+            }),
+        });
+
+        await loadTranslationCatalog('zh', { fetchImpl });
+
+        for (const tag of ['empty_tag', 'same_tag', 'latin_tag']) {
+            expect(__test__.translationCache.has(__test__.cacheKey('zh', tag))).toBe(false);
+        }
+    });
+
     test('exposes pending and translated states while a request is in flight', async () => {
         const candidate = new TagData('long_character_tag', 4, 100, [], TagSource.Danbooru);
         let release;
@@ -442,7 +461,7 @@ describe('on-demand translation provider', () => {
             return {
                 ok: true,
                 json: async () => ({
-                    translations: Object.fromEntries(tags.map(item => [item.name, `translated_${item.name}`])),
+                    translations: Object.fromEntries(tags.map(item => [item.name, `译名_${item.name}`])),
                 }),
             };
         });
@@ -455,6 +474,6 @@ describe('on-demand translation provider', () => {
 
         expect(fetchImpl).toHaveBeenCalledTimes(1);
         expect(JSON.parse(fetchImpl.mock.calls[0][1].body).tags).toHaveLength(320);
-        expect(candidates[319].alias).toContain('translated_tag_319');
+        expect(candidates[319].alias).toContain('译名_tag_319');
     });
 });

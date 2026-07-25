@@ -128,11 +128,20 @@ class ChineseDictionaryService:
         return self.status()
 
     def lookup(self, tag_names):
+        return self._lookup(tag_names, MAX_LOOKUP_ITEMS)
+
+    def lookup_all(self, tag_names):
+        return self._lookup(tag_names, None)
+
+    def _lookup(self, tag_names, limit):
         if not os.path.exists(self.database_path):
             return {}
         names = []
         seen = set()
-        for raw_name in list(tag_names or [])[:MAX_LOOKUP_ITEMS]:
+        raw_names = list(tag_names or [])
+        if limit is not None:
+            raw_names = raw_names[:limit]
+        for raw_name in raw_names:
             name = str(raw_name or "").strip()
             if not name or len(name) > MAX_TAG_LENGTH or name in seen:
                 continue

@@ -1283,6 +1283,16 @@ body.dark-theme {
   min-height: 38px;
 }
 
+.autocomplete-plus-online-field select {
+  padding-right: 36px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23aeb4c0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+  background-position: right 11px center;
+  background-repeat: no-repeat;
+  background-size: 14px;
+  cursor: pointer;
+}
+
 .autocomplete-plus-online-field textarea {
   min-height: 108px;
   resize: vertical;
@@ -1302,16 +1312,27 @@ body.dark-theme {
   display: block;
 }
 
-.autocomplete-plus-online-secret {
-  padding-right: 42px;
+.autocomplete-plus-online-field input.autocomplete-plus-online-secret {
+  padding-right: 46px;
 }
 
 .autocomplete-plus-online-input-action .autocomplete-plus-online-icon-button {
   position: absolute;
+  z-index: 1;
   top: 2px;
   right: 2px;
   width: 34px;
   height: 34px;
+  border-radius: 6px;
+  background: var(--online-surface-raised);
+  box-shadow: inset 1px 0 rgb(255 255 255 / 4%);
+}
+
+.autocomplete-plus-online-input-action .autocomplete-plus-online-icon-button:hover {
+  background: var(--online-surface-raised);
+  box-shadow:
+    inset 1px 0 rgb(255 255 255 / 7%),
+    0 2px 7px rgb(0 0 0 / 12%);
 }
 
 .autocomplete-plus-online-model-actions {
@@ -1399,8 +1420,12 @@ body.dark-theme {
 }
 
 .autocomplete-plus-online-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.58;
+}
+
+.autocomplete-plus-online-button[aria-busy="true"]:disabled {
+  cursor: wait;
 }
 
 .autocomplete-plus-online-button:hover:not(:disabled) {
