@@ -1,6 +1,7 @@
 import { TagData, TagSource, autoCompleteData } from "../data.js";
 import { filterAliasesForLocale, normalizeInterfaceLocale } from "../localization.js";
 import { createTranslationSearchDocument } from "../searchengine.js";
+import { hasTranslatableText } from "../tag-presentation.js";
 import { isDanbooruCompletionEnabled, isTranslationEnabled } from "../online-service-state.js";
 
 const translationCache = new Map();
@@ -276,7 +277,7 @@ export async function resolveCandidateTranslations(candidates, locale, options =
         ) continue;
         // Tags without letters (aspect ratios, kaomoji) have nothing to
         // translate; requesting them only leaves the indicator spinning.
-        if (!/\p{L}/u.test(candidate.tag)) continue;
+        if (!hasTranslatableText(candidate.tag)) continue;
         const key = `${candidate.source}\0${cacheKey(normalizedLocale, candidate.tag)}`;
         if (seen.has(key)) continue;
         seen.add(key);

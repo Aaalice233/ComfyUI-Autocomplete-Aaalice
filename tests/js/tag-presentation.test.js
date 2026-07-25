@@ -126,6 +126,13 @@ describe('tag category presentation', () => {
         expect(getCandidateAliasText(tag, 'zh-CN')).toContain('蓝发');
     });
 
+    test('echoes the original text for untranslatable letterless tags', () => {
+        const ratio = { tag: '16:9', categoryText: 'meta', alias: [], resolvedTranslationLocales: new Set() };
+        expect(getCandidateAliasText(ratio, 'zh-CN')).toBe('16:9');
+        const kaomoji = { tag: ':3', categoryText: 'general', alias: [], resolvedTranslationLocales: new Set() };
+        expect(getCandidateAliasText(kaomoji, 'zh-CN')).toBe(':3');
+    });
+
     test('displays a source-confirmed dictionary value even when it has no Han characters', () => {
         const tag = {
             tag: 'strong_zero',

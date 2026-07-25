@@ -158,6 +158,10 @@ export function createTranslationLoadingIndicator() {
     return indicator;
 }
 
+export function hasTranslatableText(tag) {
+    return /\p{L}/u.test(String(tag || ""));
+}
+
 export function getCandidateAliasText(tagData, locale = getCurrentInterfaceLocale()) {
     const normalizedLocale = normalizeInterfaceLocale(locale);
     const isArtist = String(tagData?.categoryText || "").toLowerCase() === "artist";
@@ -166,6 +170,10 @@ export function getCandidateAliasText(tagData, locale = getCurrentInterfaceLocal
     }
     const resolvedTranslation = tagData?.resolvedTranslations?.get(normalizedLocale);
     if (resolvedTranslation) return resolvedTranslation;
+    // Untranslatable tags (aspect ratios, kaomoji) echo the original text
+    // instead of leaving the column blank.
+    const tagText = String(tagData?.tag || "");
+    if (tagText && !hasTranslatableText(tagText)) return tagText;
     if (
         normalizedLocale === "zh"
         && tagData?.origin !== "chinese_dictionary"
