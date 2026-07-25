@@ -16,6 +16,7 @@ function resetData() {
     __test__.flushIndexOperations();
     for (const key of Object.keys(autoCompleteData)) delete autoCompleteData[key];
     __test__.translationCache.clear();
+    __test__.translationSources.clear();
     __test__.translationStates.clear();
     __test__.loadedLocales.clear();
     autoCompleteData.danbooru = {
@@ -166,6 +167,58 @@ describe('on-demand translation provider', () => {
         for (const tag of ['empty_tag', 'same_tag', 'latin_tag']) {
             expect(__test__.translationCache.has(__test__.cacheKey('zh', tag))).toBe(false);
         }
+    });
+
+    test('trusts a non-Han display name from the Simplified Chinese dictionary', async () => {
+        const candidate = new TagData(
+            'zero_two_(darling_in_the_franxx)',
+            4,
+            100,
+            [],
+            TagSource.Danbooru,
+            'csv',
+        );
+        const fetchImpl = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                translations: {
+                    'zero_two_(darling_in_the_franxx)': '02 (Darling in the Franxx)',
+                },
+                sources: {
+                    'zero_two_(darling_in_the_franxx)': 'ffdkj',
+                },
+                completed: ['zero_two_(darling_in_the_franxx)'],
+            }),
+        });
+
+        await resolveCandidateTranslations([candidate], 'zh', { fetchImpl });
+
+        expect(candidate.resolvedTranslations.get('zh')).toBe('02 (Darling in the Franxx)');
+        expect(candidate.resolvedTranslationSources.get('zh')).toBe('ffdkj');
+        expect(getCandidateTranslationState(candidate, 'zh')).toBe('translated');
+    });
+
+    test('restores a non-Han dictionary value from the persistent catalog', async () => {
+        const candidate = new TagData('strong_zero', 3, 100, [], TagSource.Danbooru, 'csv');
+        autoCompleteData.danbooru.sortedTags.push(candidate);
+        autoCompleteData.danbooru.tagMap.set(candidate.tag, candidate);
+        const fetchImpl = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                items: [{
+                    tag_name: 'strong_zero',
+                    text: 'Strong Zero',
+                    category: 3,
+                    post_count: 100,
+                    origin: 'ffdkj',
+                }],
+            }),
+        });
+
+        await loadTranslationCatalog('zh', { fetchImpl });
+
+        expect(candidate.resolvedTranslations.get('zh')).toBe('Strong Zero');
+        expect(candidate.resolvedTranslationSources.get('zh')).toBe('ffdkj');
     });
 
     test('exposes pending and translated states while a request is in flight', async () => {
@@ -333,9 +386,10 @@ describe('on-demand translation provider', () => {
 
         const requested = fetchImpl.mock.calls.flatMap(([, options]) =>
             JSON.parse(options.body).tags.map(item => item.name));
-        expect(requested).toEqual(['priority_tag', 'missing_tag']);
+        expect(requested).toEqual(['priority_tag', 'localized_tag', 'missing_tag']);
+        expect(localized.alias).toContain('译_localized_tag');
         expect(missing.alias).toContain('译_missing_tag');
-        expect(getCandidateTranslationState(localized, 'zh')).toBe('idle');
+        expect(getCandidateTranslationState(localized, 'zh')).toBe('translated');
     });
 
     test('does not restore online-only catalog tags when Danbooru completion is disabled', async () => {
@@ -365,18 +419,12 @@ describe('on-demand translation provider', () => {
         expect(fetchImpl).not.toHaveBeenCalled();
     });
 
-    test('allows Simplified Chinese dictionary lookup for artist candidates', async () => {
-        const fetchImpl = jest.fn().mockResolvedValue({
-            ok: true,
-            json: async () => ({
-                translations: { an_artist: '艺术家译名' },
-                completed: ['an_artist'],
-            }),
-        });
+    test('keeps artist candidates as their original tag without translation requests', async () => {
+        const fetchImpl = jest.fn();
         const candidate = new TagData('an_artist', 1, 10, [], TagSource.Danbooru);
         await resolveCandidateTranslations([candidate], 'zh', { fetchImpl });
-        expect(fetchImpl).toHaveBeenCalledTimes(1);
-        expect(candidate.alias).toContain('艺术家译名');
+        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(candidate.alias).toEqual([]);
     });
 
     test('translates ordinary e621 candidates too', async () => {
@@ -475,5 +523,33 @@ describe('on-demand translation provider', () => {
         expect(fetchImpl).toHaveBeenCalledTimes(1);
         expect(JSON.parse(fetchImpl.mock.calls[0][1].body).tags).toHaveLength(320);
         expect(candidates[319].alias).toContain('译名_tag_319');
+    });
+
+    test('backfills hidden CSV aliases that are not confirmed translations', async () => {
+        const candidates = Array.from({ length: 201 }, (_, index) =>
+            new TagData(`tag_${index}`, 4, 201 - index, [], TagSource.Danbooru, 'csv'));
+        const target = candidates[200];
+        target.tag = 'ambriel_(arknights)';
+        target.alias = ['安比尔', 'アンブリエル'];
+        const fetchImpl = jest.fn().mockImplementation(async (_url, options) => {
+            const tags = JSON.parse(options.body).tags;
+            return {
+                ok: true,
+                json: async () => ({
+                    translations: Object.fromEntries(tags.map(item => [item.name, `译名_${item.name}`])),
+                }),
+            };
+        });
+
+        await resolveCandidateTranslationsProgressively(
+            candidates,
+            'zh',
+            { fetchImpl, priorityLimit: 200 },
+        );
+
+        const requested = JSON.parse(fetchImpl.mock.calls[0][1].body).tags;
+        expect(requested).toHaveLength(201);
+        expect(requested.map(item => item.name)).toContain('ambriel_(arknights)');
+        expect(target.alias).toContain('译名_ambriel_(arknights)');
     });
 });

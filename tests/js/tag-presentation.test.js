@@ -126,6 +126,19 @@ describe('tag category presentation', () => {
         expect(getCandidateAliasText(tag, 'zh-CN')).toContain('蓝发');
     });
 
+    test('displays a source-confirmed dictionary value even when it has no Han characters', () => {
+        const tag = {
+            tag: 'strong_zero',
+            categoryText: 'copyright',
+            alias: ['Strong Zero'],
+            origin: 'csv',
+            resolvedTranslationLocales: new Set(['zh']),
+            resolvedTranslations: new Map([['zh', 'Strong Zero']]),
+        };
+
+        expect(getCandidateAliasText(tag, 'zh-CN')).toBe('Strong Zero');
+    });
+
     test('normalizes supported ComfyUI locale variants', () => {
         expect(normalizeInterfaceLocale('zh_Hant')).toBe('zh-TW');
         expect(normalizeInterfaceLocale('zh-CN')).toBe('zh');

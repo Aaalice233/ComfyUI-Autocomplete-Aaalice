@@ -288,6 +288,7 @@ class TranslationManager:
         if primary_translations:
             yield {
                 "translations": primary_translations,
+                "sources": dict.fromkeys(primary_translations, "ffdkj"),
                 "completed": list(primary_translations),
             }
         items = [
@@ -302,6 +303,7 @@ class TranslationManager:
         if cached_translations:
             yield {
                 "translations": cached_translations,
+                "sources": dict.fromkeys(cached_translations, "ai_cache"),
                 "completed": list(cached_translations),
             }
         if locale == "en" or not items:
@@ -354,6 +356,7 @@ class TranslationManager:
         if refreshed_translations:
             yield {
                 "translations": refreshed_translations,
+                "sources": dict.fromkeys(refreshed_translations, "ai_cache"),
                 "completed": list(refreshed_translations),
             }
 
@@ -385,6 +388,7 @@ class TranslationManager:
                         chunk[tag_name] = translation
                 yield {
                     "translations": chunk,
+                    "sources": dict.fromkeys(chunk, "deepseek"),
                     "completed": completed_tags,
                 }
         finally:

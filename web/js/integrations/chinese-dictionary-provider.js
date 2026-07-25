@@ -53,14 +53,22 @@ export async function searchChineseDictionaryCandidates(query, options = {}) {
             { signal },
             fetchImpl,
         );
-        const results = (Array.isArray(payload.results) ? payload.results : []).map(item => new TagData(
-            item.name,
-            Number(item.category) || 0,
-            Number(item.post_count) || 0,
-            item.cn_name ? [item.cn_name] : [],
-            TagSource.Danbooru,
-            "chinese_dictionary",
-        ));
+        const results = (Array.isArray(payload.results) ? payload.results : []).map(item => {
+            const candidate = new TagData(
+                item.name,
+                Number(item.category) || 0,
+                Number(item.post_count) || 0,
+                item.cn_name ? [item.cn_name] : [],
+                TagSource.Danbooru,
+                "chinese_dictionary",
+            );
+            if (item.cn_name) {
+                candidate.resolvedTranslationLocales.add("zh");
+                candidate.resolvedTranslations.set("zh", item.cn_name);
+                candidate.resolvedTranslationSources.set("zh", "ffdkj");
+            }
+            return candidate;
+        });
         searchCache.set(cacheKey, { results, expiresAt: Date.now() + SEARCH_CACHE_TTL_MS });
         return results;
     } catch (error) {

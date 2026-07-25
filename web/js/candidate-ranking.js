@@ -83,11 +83,26 @@ export function mergeDuplicateCandidate(primary, duplicate) {
     const aliases = [...new Set([...primaryAliases, ...duplicateAliases].filter(Boolean))];
     const primaryOrigins = getCandidateOrigins(primary);
     const origins = [...new Set([...primaryOrigins, ...getCandidateOrigins(duplicate)])];
+    const resolvedTranslationLocales = new Set([
+        ...(primary.resolvedTranslationLocales || []),
+        ...(duplicate.resolvedTranslationLocales || []),
+    ]);
+    const resolvedTranslations = new Map([
+        ...(duplicate.resolvedTranslations || []),
+        ...(primary.resolvedTranslations || []),
+    ]);
+    const resolvedTranslationSources = new Map([
+        ...(duplicate.resolvedTranslationSources || []),
+        ...(primary.resolvedTranslationSources || []),
+    ]);
     const count = primary.count;
     if (
         aliases.length === primaryAliases.length
         && count === primary.count
         && origins.length === primaryOrigins.length
+        && resolvedTranslationLocales.size === (primary.resolvedTranslationLocales?.size || 0)
+        && resolvedTranslations.size === (primary.resolvedTranslations?.size || 0)
+        && resolvedTranslationSources.size === (primary.resolvedTranslationSources?.size || 0)
     ) {
         return primary;
     }
@@ -96,6 +111,9 @@ export function mergeDuplicateCandidate(primary, duplicate) {
         alias: aliases,
         count,
         origins,
+        resolvedTranslationLocales,
+        resolvedTranslations,
+        resolvedTranslationSources,
     });
 }
 

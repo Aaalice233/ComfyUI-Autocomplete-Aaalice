@@ -314,7 +314,11 @@ class TranslationManagerTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(
                 await stream.__anext__(),
-                {"translations": {"first_tag": "第一项"}, "completed": ["first_tag"]},
+                {
+                    "translations": {"first_tag": "第一项"},
+                    "sources": {"first_tag": "deepseek"},
+                    "completed": ["first_tag"],
+                },
             )
             second_chunk = asyncio.create_task(stream.__anext__())
             await asyncio.sleep(0)
@@ -323,7 +327,11 @@ class TranslationManagerTests(unittest.IsolatedAsyncioTestCase):
             release_second.set()
             self.assertEqual(
                 await second_chunk,
-                {"translations": {"second_tag": "第二项"}, "completed": ["second_tag"]},
+                {
+                    "translations": {"second_tag": "第二项"},
+                    "sources": {"second_tag": "deepseek"},
+                    "completed": ["second_tag"],
+                },
             )
             await stream.aclose()
 

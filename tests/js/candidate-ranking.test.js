@@ -133,6 +133,37 @@ describe('unified autocomplete candidate ranking', () => {
         });
     });
 
+    test('preserves resolved translation data while merging duplicate candidates', () => {
+        const csv = {
+            ...candidate('zero_two_(darling_in_the_franxx)', 'danbooru', 100),
+            origin: 'csv',
+            origins: ['csv'],
+            resolvedTranslationLocales: new Set(),
+            resolvedTranslations: new Map(),
+            resolvedTranslationSources: new Map(),
+        };
+        const dictionary = {
+            ...candidate(
+                'zero_two_(darling_in_the_franxx)',
+                'danbooru',
+                100,
+                ['02 (Darling in the Franxx)'],
+            ),
+            origin: 'chinese_dictionary',
+            origins: ['chinese_dictionary'],
+            resolvedTranslationLocales: new Set(['zh']),
+            resolvedTranslations: new Map([['zh', '02 (Darling in the Franxx)']]),
+            resolvedTranslationSources: new Map([['zh', 'ffdkj']]),
+        };
+
+        const [merged] = mergeDuplicateCandidates([csv, dictionary]);
+
+        expect(merged.origin).toBe('csv');
+        expect(merged.resolvedTranslationLocales).toContain('zh');
+        expect(merged.resolvedTranslations.get('zh')).toBe('02 (Darling in the Franxx)');
+        expect(merged.resolvedTranslationSources.get('zh')).toBe('ffdkj');
+    });
+
     test('classifies direct and alias matches consistently', () => {
         const query = new Set(['1girl']);
         expect(getCandidateMatchTier(candidate('1girl', 'danbooru', 1), query)).toBe(5);

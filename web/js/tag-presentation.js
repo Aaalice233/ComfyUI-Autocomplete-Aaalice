@@ -161,19 +161,17 @@ export function createTranslationLoadingIndicator() {
 export function getCandidateAliasText(tagData, locale = getCurrentInterfaceLocale()) {
     const normalizedLocale = normalizeInterfaceLocale(locale);
     const isArtist = String(tagData?.categoryText || "").toLowerCase() === "artist";
+    if (isArtist && normalizedLocale !== "en") {
+        return String(tagData?.tag || "");
+    }
+    const resolvedTranslation = tagData?.resolvedTranslations?.get(normalizedLocale);
+    if (resolvedTranslation) return resolvedTranslation;
     if (
         normalizedLocale === "zh"
         && tagData?.origin !== "chinese_dictionary"
         && !tagData?.resolvedTranslationLocales?.has("zh")
     ) {
-        return isArtist ? String(tagData?.tag || "") : "";
-    }
-    if (
-        isArtist
-        && normalizedLocale !== "en"
-        && normalizedLocale !== "zh"
-    ) {
-        return String(tagData?.tag || "");
+        return "";
     }
     const localizedAlias = filterAliasesForLocale(tagData?.alias, locale).join(", ");
     if (isArtist && normalizedLocale !== "en" && !localizedAlias) {

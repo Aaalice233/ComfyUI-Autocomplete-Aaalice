@@ -87,6 +87,12 @@ export class TagData {
 
         /** @type {Set<string>} */
         this.resolvedTranslationLocales = new Set();
+
+        /** @type {Map<string, string>} */
+        this.resolvedTranslations = new Map();
+
+        /** @type {Map<string, string>} */
+        this.resolvedTranslationSources = new Map();
     }
 
     /**

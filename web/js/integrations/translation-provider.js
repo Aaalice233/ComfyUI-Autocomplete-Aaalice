@@ -4,6 +4,7 @@ import { createTranslationSearchDocument } from "../searchengine.js";
 import { isDanbooruCompletionEnabled, isTranslationEnabled } from "../online-service-state.js";
 
 const translationCache = new Map();
+const translationSources = new Map();
 const translationStates = new Map();
 const loadedLocales = new Set();
 const pendingIndexOperations = new Map();
@@ -75,9 +76,11 @@ function processCatalogInChunks(items, locale) {
             for (; index < end; index++) {
                 const item = items[index];
                 if (item?.origin === "danbooru_api" && Number(item.post_count) <= 0) continue;
-                if (!isUsableTranslation(item?.tag_name, item?.text, locale)) continue;
+                const source = item?.origin === "ffdkj" ? "ffdkj" : "ai_cache";
+                if (!isUsableTranslation(item?.tag_name, item?.text, locale, source)) continue;
                 translationCache.set(cacheKey(locale, item.tag_name), item.text);
-                applyCatalogItem(item, locale);
+                translationSources.set(cacheKey(locale, item.tag_name), source);
+                applyCatalogItem(item, locale, source);
             }
             if (index < items.length) {
                 setTimeout(processChunk, 0);
@@ -93,11 +96,16 @@ function cacheKey(locale, tag) {
     return `${normalizeInterfaceLocale(locale)}\0${String(tag).toLowerCase()}`;
 }
 
-function isUsableTranslation(tag, translation, locale) {
+function isAuthoritativeTranslationSource(source) {
+    return source === "ffdkj";
+}
+
+function isUsableTranslation(tag, translation, locale, source = "ai_cache") {
     const value = String(translation || "").trim();
     if (!value || value.toLocaleLowerCase() === String(tag || "").trim().toLocaleLowerCase()) {
         return false;
     }
+    if (isAuthoritativeTranslationSource(source)) return true;
     const normalizedLocale = normalizeInterfaceLocale(locale);
     if (normalizedLocale === "zh") {
         return /\p{Script=Han}/u.test(value)
@@ -107,6 +115,14 @@ function isUsableTranslation(tag, translation, locale) {
         return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value);
     }
     return true;
+}
+
+function hasUsableResolvedTranslation(candidate, locale) {
+    const normalizedLocale = normalizeInterfaceLocale(locale);
+    if (!candidate?.resolvedTranslationLocales?.has(normalizedLocale)) return false;
+    const translation = candidate.resolvedTranslations?.get(normalizedLocale);
+    const source = candidate.resolvedTranslationSources?.get(normalizedLocale);
+    return isUsableTranslation(candidate.tag, translation, normalizedLocale, source);
 }
 
 export function getCandidateTranslationState(candidate, locale) {
@@ -119,13 +135,20 @@ function setCandidateTranslationState(candidate, locale, state) {
     translationStates.set(cacheKey(locale, candidate.tag), state);
 }
 
-function addTranslationToCandidate(candidate, locale, translation) {
-    if (!candidate || !isUsableTranslation(candidate.tag, translation, locale)) return false;
+function addTranslationToCandidate(candidate, locale, translation, source = "ai_cache") {
+    if (!candidate || !isUsableTranslation(candidate.tag, translation, locale, source)) return false;
+    const normalizedLocale = normalizeInterfaceLocale(locale);
     const localizedAliases = new Set(filterAliasesForLocale(candidate.alias, locale));
     candidate.alias = candidate.alias.filter(alias => !localizedAliases.has(alias));
     candidate.alias.unshift(translation);
-    candidate.resolvedTranslationLocales?.add(normalizeInterfaceLocale(locale));
-    translationCache.set(cacheKey(locale, candidate.tag), translation);
+    candidate.resolvedTranslationLocales ??= new Set();
+    candidate.resolvedTranslations ??= new Map();
+    candidate.resolvedTranslationSources ??= new Map();
+    candidate.resolvedTranslationLocales.add(normalizedLocale);
+    candidate.resolvedTranslations.set(normalizedLocale, translation);
+    candidate.resolvedTranslationSources.set(normalizedLocale, source);
+    translationCache.set(cacheKey(normalizedLocale, candidate.tag), translation);
+    translationSources.set(cacheKey(normalizedLocale, candidate.tag), source);
     setCandidateTranslationState(candidate, locale, "translated");
 
     const sourceData = autoCompleteData[candidate.source];
@@ -153,7 +176,12 @@ function addTranslationToCandidate(candidate, locale, translation) {
         const canonicalLocalized = new Set(filterAliasesForLocale(canonical.alias, locale));
         canonical.alias = canonical.alias.filter(alias => !canonicalLocalized.has(alias));
         canonical.alias.unshift(translation);
-        canonical.resolvedTranslationLocales?.add(normalizeInterfaceLocale(locale));
+        canonical.resolvedTranslationLocales ??= new Set();
+        canonical.resolvedTranslations ??= new Map();
+        canonical.resolvedTranslationSources ??= new Map();
+        canonical.resolvedTranslationLocales.add(normalizedLocale);
+        canonical.resolvedTranslations.set(normalizedLocale, translation);
+        canonical.resolvedTranslationSources.set(normalizedLocale, source);
     }
     sourceData.aliasMap.set(translation.toLowerCase(), candidate.tag);
     const indexedCandidate = canonical || candidate;
@@ -163,15 +191,15 @@ function addTranslationToCandidate(candidate, locale, translation) {
     return true;
 }
 
-function applyCatalogItem(item, locale) {
-    if (!item?.tag_name || !isUsableTranslation(item.tag_name, item.text, locale)) return;
+function applyCatalogItem(item, locale, source = item?.origin === "ffdkj" ? "ffdkj" : "ai_cache") {
+    if (!item?.tag_name || !isUsableTranslation(item.tag_name, item.text, locale, source)) return;
     if (item.origin === "danbooru_api" && Number(item.post_count) <= 0) return;
     let applied = false;
-    for (const source of Object.values(TagSource)) {
-        const sourceData = autoCompleteData[source];
+    for (const tagSource of Object.values(TagSource)) {
+        const sourceData = autoCompleteData[tagSource];
         const candidate = sourceData?.tagMap.get(item.tag_name);
         if (candidate) {
-            addTranslationToCandidate(candidate, locale, item.text);
+            addTranslationToCandidate(candidate, locale, item.text, source);
             applied = true;
         }
     }
@@ -197,7 +225,7 @@ function applyCatalogItem(item, locale) {
         index,
         candidate,
     );
-    addTranslationToCandidate(candidate, locale, item.text);
+    addTranslationToCandidate(candidate, locale, item.text, source);
 }
 
 export async function loadTranslationCatalog(locale, options = {}) {
@@ -225,6 +253,9 @@ export function invalidateTranslationCatalog(locale) {
     for (const key of translationCache.keys()) {
         if (key.startsWith(prefix)) translationCache.delete(key);
     }
+    for (const key of translationSources.keys()) {
+        if (key.startsWith(prefix)) translationSources.delete(key);
+    }
     for (const key of translationStates.keys()) {
         if (key.startsWith(prefix)) translationStates.delete(key);
     }
@@ -242,7 +273,6 @@ export async function resolveCandidateTranslations(candidates, locale, options =
         if (!Object.values(TagSource).includes(candidate?.source)) continue;
         if (
             String(candidate.categoryText).toLowerCase() === "artist"
-            && normalizedLocale !== "zh"
         ) continue;
         const key = `${candidate.source}\0${cacheKey(normalizedLocale, candidate.tag)}`;
         if (seen.has(key)) continue;
@@ -252,8 +282,16 @@ export async function resolveCandidateTranslations(candidates, locale, options =
     if (!eligible.length) return {};
 
     for (const candidate of eligible) {
-        const cached = translationCache.get(cacheKey(normalizedLocale, candidate.tag));
-        if (cached) addTranslationToCandidate(candidate, normalizedLocale, cached);
+        const key = cacheKey(normalizedLocale, candidate.tag);
+        const cached = translationCache.get(key);
+        if (cached) {
+            addTranslationToCandidate(
+                candidate,
+                normalizedLocale,
+                cached,
+                translationSources.get(key) || "ai_cache",
+            );
+        }
     }
     const missing = eligible.filter(candidate => !translationCache.has(cacheKey(normalizedLocale, candidate.tag)));
     if (!missing.length) return Object.fromEntries(eligible.map(candidate => [
@@ -293,7 +331,14 @@ export async function resolveCandidateTranslations(candidates, locale, options =
             const completed = new Set(payload.completed || []);
             for (const candidate of missing) {
                 const translation = payload.translations?.[candidate.tag];
-                if (translation) addTranslationToCandidate(candidate, normalizedLocale, translation);
+                if (translation) {
+                    addTranslationToCandidate(
+                        candidate,
+                        normalizedLocale,
+                        translation,
+                        payload.sources?.[candidate.tag] || "ai_cache",
+                    );
+                }
                 if (completed.has(candidate.tag)) {
                     setCandidateTranslationState(
                         candidate,
@@ -379,12 +424,12 @@ export async function resolveCandidateTranslationsProgressively(candidates, loca
 
     const priority = unique.slice(0, priorityLimit);
     const backfill = unique.slice(priorityLimit).filter(
-        candidate => filterAliasesForLocale(candidate.alias, normalizedLocale).length === 0,
+        candidate => !hasUsableResolvedTranslation(candidate, normalizedLocale),
     );
     const queue = [...priority, ...backfill].filter(candidate => {
         const state = getCandidateTranslationState(candidate, normalizedLocale);
         return state !== "translated"
-            || filterAliasesForLocale(candidate.alias, normalizedLocale).length === 0;
+            || !hasUsableResolvedTranslation(candidate, normalizedLocale);
     });
 
     if (!queue.length || !shouldContinue()) return;
@@ -405,11 +450,13 @@ export const __test__ = {
     cacheKey,
     flushIndexOperations,
     getTranslationIndex,
+    hasUsableResolvedTranslation,
     indexTranslation,
     isUsableTranslation,
     readTranslationPayloads,
     loadedLocales,
     pendingIndexOperations,
     translationCache,
+    translationSources,
     translationStates,
 };

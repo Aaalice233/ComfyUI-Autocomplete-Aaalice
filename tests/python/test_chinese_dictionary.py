@@ -218,6 +218,7 @@ class DictionaryTranslationPrecedenceTests(unittest.IsolatedAsyncioTestCase):
                 )
             ]
             self.assertEqual(chunks[0]["translations"], {"known_tag": "数据库译名"})
+            self.assertEqual(chunks[0]["sources"], {"known_tag": "ffdkj"})
             self.assertEqual(len(chunks), 1)
 
 
