@@ -25,6 +25,10 @@
             "all": "全部"
         }
     },
+    "AutocompletePlus_Autocompletion_EnableChineseCompletion": {
+        "name": "啟用中文補全",
+        "tooltip": "輸入中文時搜尋簡體中文漢化資料庫，並插入對應的英文 Tag。"
+    },
     "AutocompletePlus_Autocompletion_UseFastSearch": {
         "name": "啟用快速搜尋",
         "tooltip": "使用索引搜尋立即顯示結果。大型標籤來源會自動啟用，以免阻塞介面。"

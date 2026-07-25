@@ -7,6 +7,11 @@ const ORIGIN_RANK = {
     lora_manager: 1,
     danbooru_api: 2,
 };
+const CHINESE_MATCH_TIER = {
+    exact: 5,
+    prefix: 4,
+    contains: 3,
+};
 
 function normalizeComparableText(value) {
     return String(value || '')
@@ -46,6 +51,8 @@ function getTextMatchType(value, queryVariations) {
 }
 
 export function getCandidateMatchTier(candidate, queryVariations) {
+    const chineseMatchTier = CHINESE_MATCH_TIER[candidate?.chineseMatchType];
+    if (chineseMatchTier) return chineseMatchTier;
     const tagMatch = getTextMatchType(candidate?.tag, queryVariations);
     if (tagMatch === 'exact') return 5;
     if (tagMatch === 'prefix') return 4;
@@ -95,6 +102,14 @@ export function mergeDuplicateCandidate(primary, duplicate) {
         ...(duplicate.resolvedTranslationSources || []),
         ...(primary.resolvedTranslationSources || []),
     ]);
+    const primaryChineseMatchTier = CHINESE_MATCH_TIER[primary.chineseMatchType] || 0;
+    const duplicateChineseMatchTier = CHINESE_MATCH_TIER[duplicate.chineseMatchType] || 0;
+    const chineseMatchType = duplicateChineseMatchTier > primaryChineseMatchTier
+        ? duplicate.chineseMatchType
+        : primary.chineseMatchType;
+    const matchedChineseText = duplicateChineseMatchTier > primaryChineseMatchTier
+        ? duplicate.matchedChineseText
+        : primary.matchedChineseText;
     const count = primary.count;
     if (
         aliases.length === primaryAliases.length
@@ -103,6 +118,8 @@ export function mergeDuplicateCandidate(primary, duplicate) {
         && resolvedTranslationLocales.size === (primary.resolvedTranslationLocales?.size || 0)
         && resolvedTranslations.size === (primary.resolvedTranslations?.size || 0)
         && resolvedTranslationSources.size === (primary.resolvedTranslationSources?.size || 0)
+        && chineseMatchType === primary.chineseMatchType
+        && matchedChineseText === primary.matchedChineseText
     ) {
         return primary;
     }
@@ -114,6 +131,8 @@ export function mergeDuplicateCandidate(primary, duplicate) {
         resolvedTranslationLocales,
         resolvedTranslations,
         resolvedTranslationSources,
+        chineseMatchType,
+        matchedChineseText,
     });
 }
 

@@ -6,6 +6,7 @@ export const settingValues = {
 
     // Autocomplete feature settings
     enabled: true,
+    enableChineseCompletion: true,
     maxSuggestions: 1000,
     enableModels: true, // Enable Lora and Embedding suggestions
     useFastSearch: true,

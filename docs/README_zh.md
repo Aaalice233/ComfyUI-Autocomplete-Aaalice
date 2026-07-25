@@ -19,6 +19,7 @@
 #### 数据与补全
 
 - 采用本地优先流程：内置 CSV 结果立即显示，LoRA Manager 和 Danbooru 在后台补充缺失或较新的结果。
+- 简体中文用户可直接输入 `无职转生` 等中文名称，找到对应英文 Tag 并插入 `mushoku_tensei`；中文完全匹配优先于前缀和包含匹配。
 - 同名候选按固定规则合并，并显示简洁的来源徽章，方便区分 CSV、LoRA Manager 和 Danbooru 数据。
 - 后台结果到达时会保留当前选中的标签，避免列表更新导致误选。
 - 改进逗号、空格和换行附近的插入行为；已存在的标签会被识别，不会重复插入。
@@ -56,6 +57,7 @@ git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 在文本输入框中输入即可显示标签建议。使用上下方向键选择，按 Enter 或 Tab 插入。
 
 - 可搜索标签名和别名。
+- 简体中文界面启用“中文补全”后，输入中文会检索 ffdkj 汉化数据库，最终仍插入英文 Tag。
 - 支持 Danbooru 分类、LoRA、Embedding、Wildcard 和可选 e621 结果。
 - 已存在的标签会置灰，不会重复插入。
 - 点击 Wiki 按钮，或对键盘选中的标签按 `F1`，可打开 Wiki 页面。
@@ -112,7 +114,7 @@ e621 数据不会自动下载，需要手动添加 `e621_tags.csv`；目前不�
 
 打开 ComfyUI 设置，找到 **Autocomplete Plus**。
 
-- 设置标签数据源、结果数量、自动逗号、下划线替换以及 LoRA/Embedding 补全。
+- 设置标签数据源、中文补全、结果数量、自动逗号、下划线替换以及 LoRA/Embedding 补全。
 - 设置共现标签触发方式、面板方向、别名显示和自动格式化。
 - 在**在线服务**中管理 Danbooru 缓存、中文汉化数据库和 DeepSeek。
 

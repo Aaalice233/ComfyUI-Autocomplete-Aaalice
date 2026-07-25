@@ -8,6 +8,7 @@ import {
     invalidateTranslationCatalog,
     loadTranslationCatalog,
 } from "./integrations/translation-provider.js";
+import { invalidateChineseDictionarySearchCache } from "./integrations/chinese-dictionary-provider.js";
 import { clearDanbooruSessionCache } from "./integrations/danbooru-provider.js";
 
 const API_ROOT = "/autocomplete-plus/translation";
@@ -75,7 +76,7 @@ const TEXT = {
         danbooruTitle: "Danbooru API",
         danbooruDescription: "Anonymous read-only completion and related-tag fallback.",
         dictionaryTitle: "Simplified Chinese dictionary",
-        dictionaryDescription: "Managed from ffdkj and used only for Simplified Chinese.",
+        dictionaryDescription: "Managed from ffdkj for Simplified Chinese display names and Chinese-to-English tag autocomplete.",
         dictionaryMissing: "Not installed",
         dictionaryDownloading: "Downloading",
         dictionaryReady: "Ready",
@@ -158,7 +159,7 @@ const TEXT = {
         danbooruTitle: "Danbooru API",
         danbooruDescription: "无需账号的只读标签补全与共现兜底。",
         dictionaryTitle: "简体中文汉化数据库",
-        dictionaryDescription: "数据来自 ffdkj，仅在简体中文界面中用于主力汉化。",
+        dictionaryDescription: "数据来自 ffdkj，在简体中文界面中用于标签汉化和中文反查英文 Tag。",
         dictionaryMissing: "未安装",
         dictionaryDownloading: "正在下载",
         dictionaryReady: "可用",
@@ -241,7 +242,7 @@ const TEXT = {
         danbooruTitle: "Danbooru API",
         danbooruDescription: "免帳號的唯讀標籤補全與共現備援。",
         dictionaryTitle: "簡體中文漢化資料庫",
-        dictionaryDescription: "資料來自 ffdkj，僅套用於簡體中文介面。",
+        dictionaryDescription: "資料來自 ffdkj，用於簡體中文標籤翻譯與中文反查英文 Tag。",
         dictionaryMissing: "未安裝",
         dictionaryDownloading: "下載中",
         dictionaryReady: "可用",
@@ -324,7 +325,7 @@ const TEXT = {
         danbooruTitle: "Danbooru API",
         danbooruDescription: "アカウント不要の読み取り専用補完・関連タグフォールバックです。",
         dictionaryTitle: "簡体字中国語翻訳辞書",
-        dictionaryDescription: "ffdkj が提供し、簡体字中国語 UI でのみ使用します。",
+        dictionaryDescription: "ffdkj が提供し、簡体字中国語の表示名と中国語から英語タグへの補完に使用します。",
         dictionaryMissing: "未インストール",
         dictionaryDownloading: "ダウンロード中",
         dictionaryReady: "利用可能",
@@ -788,6 +789,7 @@ export async function openOnlineServicesPanel(_app) {
         if (previousState === "downloading" && nextStatus.state === "ready") {
             message.textContent = text.dictionaryActionCompleted;
             message.dataset.tone = "success";
+            invalidateChineseDictionarySearchCache();
             invalidateTranslationCatalog("zh");
             void loadTranslationCatalog("zh");
         }

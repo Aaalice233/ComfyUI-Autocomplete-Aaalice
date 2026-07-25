@@ -25,6 +25,10 @@
             "all": "all"
         }
     },
+    "AutocompletePlus_Autocompletion_EnableChineseCompletion": {
+        "name": "Enable Chinese autocomplete",
+        "tooltip": "Search the Simplified Chinese dictionary with Chinese input and insert the matching English tag."
+    },
     "AutocompletePlus_Autocompletion_UseFastSearch": {
         "name": "Use Fast Search",
         "tooltip": "Use indexed search for immediate results. Large tag sources use it automatically to avoid blocking the interface."

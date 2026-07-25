@@ -93,6 +93,49 @@ class ChineseDictionaryTests(unittest.TestCase):
         self.assertNotIn("tag_500", service.lookup(names))
         self.assertEqual(service.lookup_all(names)["tag_500"]["text"], "标签500")
 
+    def test_chinese_search_reports_exact_prefix_and_contains_matches(self):
+        service = ChineseDictionaryService(self.install_dir)
+        create_dictionary(
+            service.database_path,
+            rows=[
+                ("mushoku_tensei", 3, "无职转生", 8_000),
+                ("mushoku_tensei_game", 3, "无职转生：游戏", 80),
+                ("sylphiette", 4, "希露菲叶特 (无职转生)", 1_600),
+            ],
+        )
+
+        rows = service.search("  无职转生  ", 10)
+
+        self.assertEqual(
+            [(row["name"], row["match_type"]) for row in rows],
+            [
+                ("mushoku_tensei", "exact"),
+                ("mushoku_tensei_game", "prefix"),
+                ("sylphiette", "contains"),
+            ],
+        )
+        self.assertTrue(all(row["source"] == "ffdkj" for row in rows))
+
+    def test_chinese_search_treats_sql_wildcards_as_literal_text(self):
+        service = ChineseDictionaryService(self.install_dir)
+        create_dictionary(
+            service.database_path,
+            rows=[
+                ("literal_percent", 0, "百分比%标签", 10),
+                ("literal_underscore", 0, "下划线_标签", 9),
+                ("unrelated", 0, "其他标签", 100),
+            ],
+        )
+
+        self.assertEqual(
+            [row["name"] for row in service.search("%", 10)],
+            ["literal_percent"],
+        )
+        self.assertEqual(
+            [row["name"] for row in service.search("_", 10)],
+            ["literal_underscore"],
+        )
+
     def test_rejects_wrong_schema(self):
         wrong_path = os.path.join(self.temp.name, "wrong.sqlite")
         create_dictionary(wrong_path, valid_schema=False)

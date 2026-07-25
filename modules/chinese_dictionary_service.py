@@ -5,6 +5,7 @@ import os
 import sqlite3
 import tempfile
 import threading
+import unicodedata
 from contextlib import closing
 from datetime import datetime, timezone
 from urllib.parse import urlparse
@@ -22,6 +23,14 @@ MAX_LOOKUP_ITEMS = 500
 MAX_TAG_LENGTH = 200
 MAX_SEARCH_LENGTH = 100
 MAX_SEARCH_RESULTS = 200
+
+
+def normalize_search_query(value):
+    return " ".join(unicodedata.normalize("NFKC", str(value or "")).strip().split())
+
+
+def escape_like_pattern(value):
+    return value.replace("!", "!!").replace("%", "!%").replace("_", "!_")
 
 
 def utc_now():
@@ -178,38 +187,56 @@ class ChineseDictionaryService:
         }
 
     def search(self, query, limit=50):
-        value = str(query or "").strip()
+        value = normalize_search_query(query)
         if not value or len(value) > MAX_SEARCH_LENGTH or not os.path.exists(self.database_path):
             return []
         try:
             bounded_limit = min(max(int(limit), 1), MAX_SEARCH_RESULTS)
         except (TypeError, ValueError):
             bounded_limit = 50
+        escaped_value = escape_like_pattern(value)
+        contains_pattern = f"%{escaped_value}%"
+        prefix_pattern = f"{escaped_value}%"
         with self._database_lock, closing(self._connect_readonly()) as connection:
             rows = connection.execute(
                 """
                 SELECT name, category, cn_name, post_count
                   FROM tags
-                 WHERE cn_name LIKE ?
+                 WHERE cn_name LIKE ? ESCAPE '!'
                    AND TRIM(COALESCE(cn_name, '')) != ''
                  ORDER BY
-                    CASE WHEN cn_name = ? THEN 0 WHEN cn_name LIKE ? THEN 1 ELSE 2 END,
+                    CASE
+                        WHEN cn_name = ? THEN 0
+                        WHEN cn_name LIKE ? ESCAPE '!' THEN 1
+                        ELSE 2
+                    END,
                     post_count DESC,
                     name ASC
                  LIMIT ?
                 """,
-                (f"%{value}%", value, f"{value}%", bounded_limit),
+                (contains_pattern, value, prefix_pattern, bounded_limit),
             ).fetchall()
-        return [
-            {
-                "name": row["name"],
-                "category": int(row["category"] or 0),
-                "cn_name": row["cn_name"].strip(),
-                "post_count": int(row["post_count"] or 0),
-            }
-            for row in rows
-            if row["cn_name"].strip().casefold() != row["name"].casefold()
-        ]
+        results = []
+        comparable_query = value.casefold()
+        for row in rows:
+            chinese_name = row["cn_name"].strip()
+            if chinese_name.casefold() == row["name"].casefold():
+                continue
+            comparable_name = chinese_name.casefold()
+            match_type = "exact" if comparable_name == comparable_query else (
+                "prefix" if comparable_name.startswith(comparable_query) else "contains"
+            )
+            results.append(
+                {
+                    "name": row["name"],
+                    "category": int(row["category"] or 0),
+                    "cn_name": chinese_name,
+                    "post_count": int(row["post_count"] or 0),
+                    "match_type": match_type,
+                    "source": "ffdkj",
+                }
+            )
+        return results
 
     async def _download_and_install(self, force=False):
         temp_path = None

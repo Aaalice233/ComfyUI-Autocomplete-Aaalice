@@ -26,7 +26,10 @@ import {
     searchLoraManagerCandidates,
 } from './integrations/lora-manager-provider.js';
 import { searchDanbooruCandidates } from './integrations/danbooru-provider.js';
-import { searchChineseDictionaryCandidates } from './integrations/chinese-dictionary-provider.js';
+import {
+    isChineseCompletionQuery,
+    searchChineseDictionaryCandidates,
+} from './integrations/chinese-dictionary-provider.js';
 import {
     getCandidateTranslationState,
     resolveCandidateTranslationsProgressively,
@@ -533,50 +536,75 @@ class AutocompleteUI {
         if (!partialTag || invalidPrefix || isLongText(partialTag)) return;
 
         const allowsDanbooru = ["all", "danbooru"].includes(settingValues.tagSource);
-        const shouldQueryDanbooru = !isModelQuery && allowsDanbooru;
-        const selectedCandidate = this.candidates[this.selectedIndex];
-        const selectedKey = selectedCandidate
-            ? `${selectedCandidate.source}\0${String(selectedCandidate.tag).toLowerCase()}`
-            : null;
-        const [supplemental, onlinePage, chineseCandidates] = await Promise.all([
+        const locale = getCurrentInterfaceLocale();
+        const hasHanQuery = /[\u3400-\u9fff]/u.test(partialTag);
+        const shouldQueryDanbooru = !isModelQuery && allowsDanbooru && !hasHanQuery;
+        const shouldQueryChinese = !isModelQuery && isChineseCompletionQuery(
+            partialTag,
+            locale,
+            settingValues.enableChineseCompletion,
+        );
+        const candidatePools = {
+            local: localCandidates,
+            supplemental: [],
+            online: [],
+            chinese: [],
+        };
+        const updateProviderCandidates = (pool, candidates) => {
+            if (requestId !== this._requestId || textareaElement !== this.target) return;
+            const selectedCandidate = this.candidates[this.selectedIndex];
+            const selectedKey = selectedCandidate
+                ? `${selectedCandidate.source}\0${String(selectedCandidate.tag).toLowerCase()}`
+                : null;
+            const hadCandidates = this.candidates.length > 0;
+            const wasVisible = this.root.style.display !== 'none';
+            candidatePools[pool] = candidates;
+            this.candidates = rankCandidates(
+                Object.values(candidatePools).flat(),
+                queryVariations,
+                sources,
+                resultLimit,
+            );
+            this.selectedIndex = preserveSelectedCandidateIndex(
+                this.candidates,
+                selectedKey,
+                this.selectedIndex,
+            );
+            if (!isModelQuery) {
+                this.#scheduleTranslationPrefetch(
+                    this.candidates,
+                    requestId,
+                    textareaElement,
+                );
+            }
+            if (this.candidates.length > 0) {
+                this.#displayCandidates(!hadCandidates || !wasVisible);
+            }
+        };
+        const providerTasks = [
             searchLoraManagerCandidates(partialTag, {
                 limit: Math.min(resultLimit, 100),
                 mode: settingValues.loraManagerIntegration,
                 tagSource: settingValues.tagSource,
                 includeModels: settingValues.enableModels,
                 signal: this._abortController.signal,
-            }),
+            }).then(candidates => updateProviderCandidates("supplemental", candidates)),
             shouldQueryDanbooru
                 ? searchDanbooruCandidates(partialTag, {
                     limit: Math.min(resultLimit, 200),
                     page: 1,
                     signal: this._abortController.signal,
-                })
-                : Promise.resolve({ candidates: [], hasMore: false, cacheState: "skipped" }),
-            searchChineseDictionaryCandidates(partialTag, {
-                locale: getCurrentInterfaceLocale(),
+                }).then(page => updateProviderCandidates("online", page.candidates))
+                : Promise.resolve(),
+            shouldQueryChinese ? searchChineseDictionaryCandidates(partialTag, {
+                enabled: settingValues.enableChineseCompletion,
+                locale,
                 limit: Math.min(resultLimit, 200),
                 signal: this._abortController.signal,
-            }),
-        ]);
-        if (requestId !== this._requestId || textareaElement !== this.target) return;
-
-        const online = onlinePage.candidates;
-        const combined = [...localCandidates, ...supplemental, ...online, ...chineseCandidates];
-        this.candidates = rankCandidates(combined, queryVariations, sources, resultLimit);
-        this.selectedIndex = preserveSelectedCandidateIndex(
-            this.candidates,
-            selectedKey,
-            this.selectedIndex,
-        );
-        if (!isModelQuery) {
-            this.#scheduleTranslationPrefetch(
-                this.candidates,
-                requestId,
-                textareaElement,
-            );
-        }
-        if (this.candidates.length > 0) this.#displayCandidates(false);
+            }).then(candidates => updateProviderCandidates("chinese", candidates))
+                : Promise.resolve(),
+        ];
+        await Promise.allSettled(providerTasks);
     }
 
     #scheduleTranslationPrefetch(candidates, requestId, textareaElement) {

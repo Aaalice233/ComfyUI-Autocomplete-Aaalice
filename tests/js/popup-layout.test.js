@@ -43,6 +43,39 @@ describe('popup layout', () => {
         expect(placement.x).toBe(8);
     });
 
+    test('keeps a useful list height when neither side of the caret fits the preferred height', () => {
+        const placement = calculateAutocompletePlacement({
+            viewportWidth: 800,
+            viewportHeight: 340,
+            margin: {},
+            caretLeft: 160,
+            caretTop: 92,
+            caretBottom: 112,
+            preferredWidth: 672,
+            preferredHeight: 320,
+        });
+
+        expect(placement.height).toBe(256);
+        expect(placement.y).toBeGreaterThanOrEqual(8);
+        expect(placement.y + placement.height).toBeLessThanOrEqual(332);
+    });
+
+    test('still caps autocomplete height to a genuinely tiny viewport', () => {
+        const placement = calculateAutocompletePlacement({
+            viewportWidth: 360,
+            viewportHeight: 180,
+            margin: {},
+            caretLeft: 120,
+            caretTop: 76,
+            caretBottom: 96,
+            preferredWidth: 672,
+            preferredHeight: 320,
+        });
+
+        expect(placement.height).toBe(164);
+        expect(placement.y).toBe(8);
+    });
+
     test('places horizontal related tags on the larger side with an anchor gap', () => {
         const placement = calculateRelatedTagsPlacement({
             ...viewport,

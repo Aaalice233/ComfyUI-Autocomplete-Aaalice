@@ -93,6 +93,12 @@ export class TagData {
 
         /** @type {Map<string, string>} */
         this.resolvedTranslationSources = new Map();
+
+        /** @type {'exact'|'prefix'|'contains'|null} */
+        this.chineseMatchType = null;
+
+        /** @type {string} */
+        this.matchedChineseText = '';
     }
 
     /**

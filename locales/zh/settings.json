@@ -25,6 +25,10 @@
             "all": "全部"
         }
     },
+    "AutocompletePlus_Autocompletion_EnableChineseCompletion": {
+        "name": "启用中文补全",
+        "tooltip": "输入中文时检索简体中文汉化数据库，并插入匹配的英文 Tag。"
+    },
     "AutocompletePlus_Autocompletion_UseFastSearch": {
         "name": "启用快速搜索",
         "tooltip": "使用索引搜索立即显示结果。大型标签源会自动启用，以免阻塞界面。"

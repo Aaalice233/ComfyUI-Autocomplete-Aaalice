@@ -25,6 +25,10 @@
             "all": "全て"
         }
     },
+    "AutocompletePlus_Autocompletion_EnableChineseCompletion": {
+        "name": "中国語オートコンプリートを有効化",
+        "tooltip": "中国語入力で簡体字中国語辞書を検索し、対応する英語タグを挿入します。"
+    },
     "AutocompletePlus_Autocompletion_UseFastSearch": {
         "name": "高速検索の有効化",
         "tooltip": "インデックス検索で候補を即座に表示します。大規模なタグソースでは UI の停止を防ぐため自動的に使用されます"

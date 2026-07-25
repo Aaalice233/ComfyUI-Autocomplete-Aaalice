@@ -1,6 +1,7 @@
 const VIEWPORT_INSET = 8;
 const ANCHOR_GAP = 8;
 const MIN_HORIZONTAL_PANEL_WIDTH = 280;
+const MIN_AUTOCOMPLETE_PANEL_HEIGHT = 256;
 
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
@@ -39,10 +40,13 @@ export function calculateAutocompletePlacement({
     const belowSpace = Math.max(bounds.bottom - belowTop, 0);
     const aboveSpace = Math.max(caretTop - ANCHOR_GAP - bounds.top, 0);
     const placeBelow = preferredHeight <= belowSpace || belowSpace >= aboveSpace;
-    const height = Math.min(preferredHeight, placeBelow ? belowSpace : aboveSpace);
+    const availableHeight = Math.max(bounds.bottom - bounds.top, 0);
+    const sideSpace = placeBelow ? belowSpace : aboveSpace;
+    const minimumUsefulHeight = Math.min(MIN_AUTOCOMPLETE_PANEL_HEIGHT, availableHeight);
+    const height = Math.min(preferredHeight, Math.max(sideSpace, minimumUsefulHeight), availableHeight);
     const y = placeBelow
-        ? belowTop
-        : Math.max(caretTop - ANCHOR_GAP - height, bounds.top);
+        ? clamp(belowTop, bounds.top, bounds.bottom - height)
+        : clamp(caretTop - ANCHOR_GAP - height, bounds.top, bounds.bottom - height);
 
     return { x, y, width, height, side: placeBelow ? 'below' : 'above' };
 }

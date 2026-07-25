@@ -321,6 +321,17 @@ app.registerExtension({
 
         // --- Autocomplete Settings ---
         {
+            id: id + ".Autocompletion.EnableChineseCompletion",
+            name: "Enable Chinese autocomplete",
+            tooltip: "Search the Simplified Chinese dictionary with Chinese input and insert the matching English tag.",
+            type: "boolean",
+            defaultValue: true,
+            category: [name, "Autocompletion", "Chinese autocomplete"],
+            onChange: (newVal, oldVal) => {
+                settingValues.enableChineseCompletion = newVal;
+            }
+        },
+        {
             id: id + ".Autocompletion.UseFastSearch",
             name: "Use Fast Search",
             tooltip: "Tag search processing during text input operates faster, improving responsiveness.",

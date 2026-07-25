@@ -19,6 +19,7 @@ Main differences:
 #### Data and completion
 
 - Uses a local-first workflow: bundled CSV results appear immediately, while LoRA Manager and Danbooru can supplement missing or newer results in the background.
+- Simplified Chinese users can type a Chinese name such as `无职转生`, find its English tag, and insert `mushoku_tensei`; exact Chinese matches rank before prefix and contains matches.
 - Merges duplicate candidates predictably and shows a compact source badge, so users can tell whether the displayed data came from CSV, LoRA Manager, or Danbooru.
 - Keeps the selected tag stable while background results arrive, avoiding accidental selection changes.
 - Improves insertion around commas, spaces, and line breaks; existing tags are recognized instead of being inserted twice.
@@ -56,6 +57,7 @@ git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 Type in a text input to open tag suggestions. Use the arrow keys to select a result and press Enter or Tab to insert it.
 
 - Searches tag names and aliases.
+- With **Chinese autocomplete** enabled in a Simplified Chinese interface, Chinese input searches the ffdkj dictionary while insertion still uses the English tag.
 - Supports Danbooru categories, LoRA, Embedding, Wildcard, and optional e621 results.
 - Existing tags are dimmed instead of inserted twice.
 - Click the Wiki control, or press `F1` on the keyboard-selected tag, to open its Wiki page.
@@ -112,7 +114,7 @@ e621 data is not downloaded automatically. Add an `e621_tags.csv` file manually;
 
 Open ComfyUI settings and find **Autocomplete Plus**.
 
-- Choose enabled tag sources, result limits, comma insertion, underscore replacement, and LoRA/Embedding completion.
+- Choose enabled tag sources, Chinese autocomplete, result limits, comma insertion, underscore replacement, and LoRA/Embedding completion.
 - Configure related-tag triggers, panel direction, alias display, and auto formatting.
 - Use **Online Services** to manage Danbooru caching, the Chinese dictionary, and DeepSeek.
 

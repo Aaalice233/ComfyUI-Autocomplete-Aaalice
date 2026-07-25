@@ -154,6 +154,8 @@ describe('unified autocomplete candidate ranking', () => {
             resolvedTranslationLocales: new Set(['zh']),
             resolvedTranslations: new Map([['zh', '02 (Darling in the Franxx)']]),
             resolvedTranslationSources: new Map([['zh', 'ffdkj']]),
+            chineseMatchType: 'exact',
+            matchedChineseText: '02 (Darling in the Franxx)',
         };
 
         const [merged] = mergeDuplicateCandidates([csv, dictionary]);
@@ -162,6 +164,33 @@ describe('unified autocomplete candidate ranking', () => {
         expect(merged.resolvedTranslationLocales).toContain('zh');
         expect(merged.resolvedTranslations.get('zh')).toBe('02 (Darling in the Franxx)');
         expect(merged.resolvedTranslationSources.get('zh')).toBe('ffdkj');
+        expect(merged.chineseMatchType).toBe('exact');
+    });
+
+    test('ranks Chinese dictionary matches by exact, prefix, then contains', () => {
+        const ranked = rankCompletionCandidates([
+            {
+                ...candidate('popular_character', 'danbooru', 100000, ['角色（无职转生）']),
+                origin: 'chinese_dictionary',
+                chineseMatchType: 'contains',
+            },
+            {
+                ...candidate('mushoku_game', 'danbooru', 100, ['无职转生：游戏']),
+                origin: 'chinese_dictionary',
+                chineseMatchType: 'prefix',
+            },
+            {
+                ...candidate('mushoku_tensei', 'danbooru', 1, ['无职转生']),
+                origin: 'chinese_dictionary',
+                chineseMatchType: 'exact',
+            },
+        ], new Set(['无职转生']), { limit: 10 });
+
+        expect(ranked.map(item => item.tag)).toEqual([
+            'mushoku_tensei',
+            'mushoku_game',
+            'popular_character',
+        ]);
     });
 
     test('classifies direct and alias matches consistently', () => {
