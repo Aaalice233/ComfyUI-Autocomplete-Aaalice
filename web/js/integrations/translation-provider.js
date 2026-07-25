@@ -134,6 +134,12 @@ export function getCandidateTranslationState(candidate, locale) {
 function setCandidateTranslationState(candidate, locale, state) {
     if (!candidate?.tag) return;
     translationStates.set(cacheKey(locale, candidate.tag), state);
+    // Remember definitive failures on the candidate so the list can echo the
+    // original text instead of leaving the alias column blank.
+    if (state === "failed") {
+        candidate.translationFailedLocales ??= new Set();
+        candidate.translationFailedLocales.add(normalizeInterfaceLocale(locale));
+    }
 }
 
 function addTranslationToCandidate(candidate, locale, translation, source = "ai_cache") {

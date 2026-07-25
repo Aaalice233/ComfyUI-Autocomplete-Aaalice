@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 import sqlite3
@@ -169,6 +170,22 @@ class TranslationStoreTests(unittest.TestCase):
             reopened = TranslationStore(database_path)
             self.assertEqual(reopened.get_many("zh", ["legacy_artist"]), {})
 
+    def test_failure_records_are_scoped_to_model_and_prompt_and_cleared_by_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            items = [{"name": "neuro-sama", "category": 4, "post_count": 485, "origin": "local"}]
+            store.save_failures("zh", items, ["neuro-sama"], "deepseek-v4", "hash-a")
+
+            self.assertEqual(
+                store.get_failures("zh", ["neuro-sama"], "deepseek-v4", "hash-a"),
+                {"neuro-sama"},
+            )
+            self.assertEqual(store.get_failures("zh", ["neuro-sama"], "deepseek-v4", "hash-b"), set())
+            self.assertEqual(store.get_failures("zh", ["neuro-sama"], "other-model", "hash-a"), set())
+
+            store.save_many("zh", items, {"neuro-sama": "神经大人"}, "deepseek-v4", "hash-b")
+            self.assertEqual(store.get_failures("zh", ["neuro-sama"], "deepseek-v4", "hash-a"), set())
+
 
 class TranslationValidationTests(unittest.TestCase):
     def test_locale_and_items_are_normalized(self):
@@ -312,6 +329,50 @@ class TranslationManagerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 chunks,
                 [{"translations": {}, "sources": {}, "completed": ["14:9", ":3"]}],
+            )
+
+    async def test_failed_translation_is_cached_and_not_requested_again(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
+            factory = IdentityTranslationSessionFactory()
+            manager = TranslationManager(
+                os.path.join(directory, "config.json"),
+                store,
+                session_factory=factory,
+            )
+            manager.save_config({"deepseek": {"api_key": "secret", "max_retries": 0}})
+
+            chunks = [
+                chunk
+                async for chunk in manager.resolve_stream(
+                    "zh",
+                    [{"name": "neuro-sama", "category": 4}],
+                )
+            ]
+            self.assertEqual(factory.posts, 1)
+            self.assertEqual(
+                chunks,
+                [{"translations": {}, "sources": {}, "completed": ["neuro-sama"]}],
+            )
+
+            config = manager.config_store.load()["deepseek"]
+            prompt_hash = hashlib.sha256(config["system_prompt"].encode("utf-8")).hexdigest()
+            self.assertEqual(
+                store.get_failures("zh", ["neuro-sama"], config["model"], prompt_hash),
+                {"neuro-sama"},
+            )
+
+            repeated = [
+                chunk
+                async for chunk in manager.resolve_stream(
+                    "zh",
+                    [{"name": "neuro-sama", "category": 4}],
+                )
+            ]
+            self.assertEqual(factory.posts, 1)
+            self.assertEqual(
+                repeated,
+                [{"translations": {}, "sources": {}, "completed": ["neuro-sama"]}],
             )
 
     async def test_stream_publishes_completed_tags_before_the_whole_job_finishes(self):
@@ -613,6 +674,33 @@ class DeepSeekSessionFactory:
         self.headers.append(headers)
         self.post_payload = json
         return StubResponse({"choices": [{"message": {"content": "OK"}}]}, 200)
+
+
+class IdentityTranslationSessionFactory:
+    """Answers every batch with the untranslated tag, which validation rejects."""
+
+    def __init__(self):
+        self.posts = 0
+
+    def __call__(self, **_kwargs):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def post(self, _url, json=None, headers=None):
+        import json as json_module
+
+        self.posts += 1
+        tags = [item["tag"] for item in json_module.loads(json["messages"][1]["content"])["tags"]]
+        content = json_module.dumps({"translations": [{"tag": tag, "translation": tag} for tag in tags]})
+        return StubResponse(
+            {"choices": [{"message": {"content": content}, "finish_reason": "stop"}]},
+            200,
+        )
 
 
 class TranslationSession:

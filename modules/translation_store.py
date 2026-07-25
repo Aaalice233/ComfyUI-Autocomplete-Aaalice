@@ -66,6 +66,18 @@ class TranslationStore:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS translation_failures (
+                    tag_name TEXT NOT NULL,
+                    locale TEXT NOT NULL,
+                    model TEXT,
+                    prompt_hash TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(tag_name, locale)
+                )
+                """
+            )
             invalid_rows = [
                 (row["tag_name"], row["locale"])
                 for row in connection.execute(
@@ -100,6 +112,46 @@ class TranslationStore:
                     ).fetchall()
                 )
         return {row["tag_name"]: dict(row) for row in rows}
+
+    def get_failures(self, locale, tag_names, model, prompt_hash):
+        names = list(dict.fromkeys(tag_names))
+        if not names:
+            return set()
+        found = set()
+        with self._connect() as connection:
+            for index in range(0, len(names), SQLITE_LOOKUP_CHUNK_SIZE):
+                chunk = names[index : index + SQLITE_LOOKUP_CHUNK_SIZE]
+                placeholders = ",".join("?" for _ in chunk)
+                rows = connection.execute(
+                    f"SELECT tag_name FROM translation_failures"
+                    f" WHERE locale = ? AND model = ? AND prompt_hash = ? AND tag_name IN ({placeholders})",
+                    (locale, model, prompt_hash, *chunk),
+                ).fetchall()
+                found.update(row["tag_name"] for row in rows)
+        return found
+
+    def save_failures(self, locale, items, tag_names, model, prompt_hash):
+        known = {item["name"] for item in items}
+        now = utc_now()
+        rows = [
+            (tag_name, locale, model, prompt_hash, now)
+            for tag_name in tag_names
+            if tag_name in known
+        ]
+        if not rows:
+            return
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO translation_failures(tag_name, locale, model, prompt_hash, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(tag_name, locale) DO UPDATE SET
+                    model = excluded.model,
+                    prompt_hash = excluded.prompt_hash,
+                    updated_at = excluded.updated_at
+                """,
+                rows,
+            )
 
     def catalog(self, locale):
         with self._connect() as connection:
@@ -156,6 +208,11 @@ class TranslationStore:
                     updated_at = excluded.updated_at
                 """,
                 rows,
+            )
+            # A successful translation supersedes any recorded failure.
+            connection.executemany(
+                "DELETE FROM translation_failures WHERE tag_name = ? AND locale = ?",
+                [(row[0], row[1]) for row in rows],
             )
 
     def count(self):

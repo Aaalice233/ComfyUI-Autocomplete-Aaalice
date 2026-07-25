@@ -299,6 +299,8 @@ describe('on-demand translation provider', () => {
 
         expect(getCandidateTranslationState(first, 'zh')).toBe('translated');
         expect(getCandidateTranslationState(second, 'zh')).toBe('failed');
+        expect(second.translationFailedLocales?.has('zh')).toBe(true);
+        expect(first.translationFailedLocales).toBeUndefined();
     });
 
     test('stops the loading indicator for a failed batch while later batches continue', async () => {

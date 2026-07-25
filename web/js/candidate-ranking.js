@@ -102,6 +102,10 @@ export function mergeDuplicateCandidate(primary, duplicate) {
         ...(duplicate.resolvedTranslationSources || []),
         ...(primary.resolvedTranslationSources || []),
     ]);
+    const translationFailedLocales = new Set([
+        ...(primary.translationFailedLocales || []),
+        ...(duplicate.translationFailedLocales || []),
+    ]);
     const primaryChineseMatchTier = CHINESE_MATCH_TIER[primary.chineseMatchType] || 0;
     const duplicateChineseMatchTier = CHINESE_MATCH_TIER[duplicate.chineseMatchType] || 0;
     const chineseMatchType = duplicateChineseMatchTier > primaryChineseMatchTier
@@ -118,6 +122,7 @@ export function mergeDuplicateCandidate(primary, duplicate) {
         && resolvedTranslationLocales.size === (primary.resolvedTranslationLocales?.size || 0)
         && resolvedTranslations.size === (primary.resolvedTranslations?.size || 0)
         && resolvedTranslationSources.size === (primary.resolvedTranslationSources?.size || 0)
+        && translationFailedLocales.size === (primary.translationFailedLocales?.size || 0)
         && chineseMatchType === primary.chineseMatchType
         && matchedChineseText === primary.matchedChineseText
     ) {
@@ -131,6 +136,7 @@ export function mergeDuplicateCandidate(primary, duplicate) {
         resolvedTranslationLocales,
         resolvedTranslations,
         resolvedTranslationSources,
+        translationFailedLocales,
         chineseMatchType,
         matchedChineseText,
     });

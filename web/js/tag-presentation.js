@@ -174,6 +174,9 @@ export function getCandidateAliasText(tagData, locale = getCurrentInterfaceLocal
     // instead of leaving the column blank.
     const tagText = String(tagData?.tag || "");
     if (tagText && !hasTranslatableText(tagText)) return tagText;
+    // Proper nouns the translator could not render (translation identical to
+    // the original) fall back to the original text as well.
+    if (tagData?.translationFailedLocales?.has(normalizedLocale)) return tagText;
     if (
         normalizedLocale === "zh"
         && tagData?.origin !== "chinese_dictionary"

@@ -326,6 +326,19 @@ class TranslationManager:
         if skipped:
             yield {"translations": {}, "sources": {}, "completed": skipped}
         missing = [item for item in missing if has_translatable_characters(item["name"])]
+        # Tags that already exhausted retries with this model and prompt are
+        # treated as resolved-without-translation instead of being re-asked.
+        prompt_hash = hashlib.sha256(config["system_prompt"].encode("utf-8")).hexdigest()
+        known_failures = await asyncio.to_thread(
+            self.store.get_failures,
+            locale,
+            [item["name"] for item in missing],
+            config["model"],
+            prompt_hash,
+        )
+        if known_failures:
+            yield {"translations": {}, "sources": {}, "completed": sorted(known_failures)}
+            missing = [item for item in missing if item["name"] not in known_failures]
         if not config["api_key"] or not missing:
             return
 
@@ -441,13 +454,22 @@ class TranslationManager:
                         await self._finish_inflight_batch(locale, batch, {})
                         continue
                     translations.update(result.translations)
+                    prompt_hash = hashlib.sha256(config["system_prompt"].encode("utf-8")).hexdigest()
                     if result.translations:
-                        prompt_hash = hashlib.sha256(config["system_prompt"].encode("utf-8")).hexdigest()
                         await asyncio.to_thread(
                             self.store.save_many,
                             locale,
                             batch,
                             result.translations,
+                            config["model"],
+                            prompt_hash,
+                        )
+                    if result.failures:
+                        await asyncio.to_thread(
+                            self.store.save_failures,
+                            locale,
+                            batch,
+                            result.failures,
                             config["model"],
                             prompt_hash,
                         )

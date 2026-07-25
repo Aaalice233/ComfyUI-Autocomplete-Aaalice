@@ -133,6 +133,19 @@ describe('tag category presentation', () => {
         expect(getCandidateAliasText(kaomoji, 'zh-CN')).toBe(':3');
     });
 
+    test('echoes the original text when translation definitively failed', () => {
+        const properNoun = {
+            tag: 'neuro-sama',
+            categoryText: 'character',
+            alias: [],
+            resolvedTranslationLocales: new Set(),
+            translationFailedLocales: new Set(['zh']),
+        };
+        expect(getCandidateAliasText(properNoun, 'zh-CN')).toBe('neuro-sama');
+        // Other locales without a recorded failure keep the blank behavior.
+        expect(getCandidateAliasText(properNoun, 'ja-JP')).toBe('');
+    });
+
     test('displays a source-confirmed dictionary value even when it has no Han characters', () => {
         const tag = {
             tag: 'strong_zero',
