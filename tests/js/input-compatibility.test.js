@@ -1,4 +1,6 @@
 import {
+    EXTERNAL_INPUT_SELECTOR,
+    isAttachableTextInput,
     isInputOwnedByAnotherExtension,
     parseExcludedNodeTypes,
     registerInputOwnershipRule,
@@ -45,5 +47,27 @@ describe('input ownership compatibility', () => {
         expect(isInputOwnedByAnotherExtension(args)).toBe(true);
         unregister();
         expect(isInputOwnedByAnotherExtension(args)).toBe(false);
+    });
+});
+
+
+describe('external input opt-in', () => {
+    test('accepts plain textareas without the opt-in attribute', () => {
+        expect(isAttachableTextInput({ tagName: 'TEXTAREA', matches: () => false })).toBe(true);
+    });
+
+    test('rejects inputs and textareas that are read-only or missing', () => {
+        expect(isAttachableTextInput(null)).toBe(false);
+        expect(isAttachableTextInput({ tagName: 'TEXTAREA', readOnly: true })).toBe(false);
+    });
+
+    test('rejects inputs without the opt-in attribute', () => {
+        const input = { tagName: 'INPUT', matches: () => false };
+        expect(isAttachableTextInput(input)).toBe(false);
+    });
+
+    test('accepts inputs carrying data-autocomplete-plus', () => {
+        const input = { tagName: 'INPUT', matches: selector => selector === EXTERNAL_INPUT_SELECTOR };
+        expect(isAttachableTextInput(input)).toBe(true);
     });
 });

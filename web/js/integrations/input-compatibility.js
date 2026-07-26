@@ -38,3 +38,21 @@ registerInputOwnershipRule(({ element, nodeInfo }) => {
     if (element?.closest?.(".autocomplete-text-widget")) return true;
     return String(nodeInfo?.nodeType || "").toLowerCase().endsWith("(loramanager)");
 });
+
+
+/**
+ * Opt-in selector for inputs owned by other extensions. Elements carrying
+ * `data-autocomplete-plus` are discovered like node textareas and receive the
+ * same completion, Chinese completion, and related-tag handlers.
+ */
+export const EXTERNAL_INPUT_SELECTOR = 'input[data-autocomplete-plus], textarea[data-autocomplete-plus]';
+
+/**
+ * Whether the element may receive autocomplete listeners: node textareas always
+ * qualify, other elements only through the explicit opt-in attribute.
+ */
+export function isAttachableTextInput(element) {
+    if (!element || element.readOnly) return false;
+    if (element.tagName === 'TEXTAREA') return true;
+    return Boolean(element.matches?.(EXTERNAL_INPUT_SELECTOR));
+}

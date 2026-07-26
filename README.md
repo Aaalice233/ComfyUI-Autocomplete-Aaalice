@@ -110,6 +110,11 @@ Quoted tag combinations can be inserted as one preset:
 
 e621 data is not downloaded automatically. Add an `e621_tags.csv` file manually; e621 related tags are not currently supported.
 
+## Integration for other extensions
+
+Other ComfyUI extensions can opt their own text inputs into completion by adding a `data-autocomplete-plus` attribute to an `input` or `textarea`. The element is discovered automatically and receives the same tag completion, Chinese completion, and related tags as node textareas. While the candidate panel is open, the element carries a `data-autocomplete-plus-open` attribute so the host interface can yield Enter, Escape, and arrow keys to the panel.
+
+
 ## Settings
 
 Open ComfyUI settings and find **Autocomplete Plus**.

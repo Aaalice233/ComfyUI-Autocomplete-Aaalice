@@ -8,7 +8,7 @@ import { RelatedTagsEventHandler } from "./related-tags.js";
 import { AutoFormatterEventHandler } from "./auto-formatter.js";
 import { NodeInfo, VUE_NODE_TEXTAREA_SELECTOR, getVueTextareaNodeInfo } from "./node-info.js";
 import { createOnlineServicesSetting } from "./online-settings.js";
-import { isInputOwnedByAnotherExtension } from "./integrations/input-compatibility.js";
+import { EXTERNAL_INPUT_SELECTOR, isAttachableTextInput, isInputOwnedByAnotherExtension } from "./integrations/input-compatibility.js";
 import { getCurrentInterfaceLocale, getInterfaceText, setInterfaceLocalizationApp } from "./localization.js";
 import { loadTranslationCatalog } from "./integrations/translation-provider.js";
 import { loadOnlineServiceFeatures } from "./online-service-state.js";
@@ -32,7 +32,7 @@ const attachedElementNodeInfoMap = new WeakMap(); // Map to track attached eleme
 function initializeEventHandlers() {
     // Function to attach listeners
     function attachListeners(element, nodeInfo) {
-        if (element.tagName !== 'TEXTAREA' || element.readOnly) return;
+        if (!isAttachableTextInput(element)) return;
         if (isInputOwnedByAnotherExtension({
             element,
             nodeInfo,
@@ -84,7 +84,7 @@ function initializeEventHandlers() {
         };
     }
 
-    const targetSelectors = [VUE_NODE_TEXTAREA_SELECTOR];
+    const targetSelectors = [VUE_NODE_TEXTAREA_SELECTOR, EXTERNAL_INPUT_SELECTOR];
     if (settingValues._useFallbackAttachmentForEventListener) {
         targetSelectors.push('.comfy-multiline-input');
     }

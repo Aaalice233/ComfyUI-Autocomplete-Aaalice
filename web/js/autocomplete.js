@@ -649,6 +649,7 @@ class AutocompleteUI {
         if (updatePosition) this.#updatePosition();
 
         this.root.style.display = 'block'; // Make it visible
+        this.#setOpenMarker(this.target);
         this.virtualList.render();
 
         // Highlight the selected item
@@ -656,7 +657,21 @@ class AutocompleteUI {
         this.#highlightItem(updatePosition);
     }
 
+    /** Marks the owning input while the panel is open so host UIs can yield keys. */
+    #setOpenMarker(element) {
+        if (this._openMarkedElement === element) return;
+        this.#clearOpenMarker();
+        this._openMarkedElement = element ?? null;
+        this._openMarkedElement?.setAttribute?.('data-autocomplete-plus-open', '');
+    }
+
+    #clearOpenMarker() {
+        this._openMarkedElement?.removeAttribute?.('data-autocomplete-plus-open');
+        this._openMarkedElement = null;
+    }
+
     #hideDisplay() {
+        this.#clearOpenMarker();
         this.root.style.display = 'none';
         this.selectedIndex = -1;
         this.candidates = [];
