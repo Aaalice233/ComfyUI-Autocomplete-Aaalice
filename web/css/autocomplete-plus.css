@@ -379,25 +379,8 @@ body.dark-theme {
   overflow: hidden;
   min-width: 0;
   align-items: center;
-  color: color-mix(in srgb, var(--input-text) 66%, transparent);
+  color: var(--input-text);
   gap: 4px;
-}
-
-.autocomplete-plus-footer-status[data-state="ready"],
-.autocomplete-plus-footer-status[data-state="configured"],
-.autocomplete-plus-footer-status[data-state="success"] {
-  color: color-mix(in srgb, var(--p-green-500) 78%, var(--input-text));
-}
-
-.autocomplete-plus-footer-status[data-state="update"],
-.autocomplete-plus-footer-status[data-state="downloading"],
-.autocomplete-plus-footer-status[data-state="checking"],
-.autocomplete-plus-footer-status[data-state="loading"] {
-  color: color-mix(in srgb, var(--p-yellow-500) 82%, var(--input-text));
-}
-
-.autocomplete-plus-footer-status[data-state="error"] {
-  color: var(--error-text);
 }
 
 .autocomplete-plus-footer-icon {
@@ -1530,7 +1513,17 @@ body.dark-theme {
 }
 
 .autocomplete-plus-online-link {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
   text-decoration: none;
+}
+
+.autocomplete-plus-online-brand-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
 }
 
 .autocomplete-plus-online-button {
