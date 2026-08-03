@@ -12,6 +12,8 @@ import { invalidateChineseDictionarySearchCache } from "./integrations/chinese-d
 import { clearDanbooruSessionCache } from "./integrations/danbooru-provider.js";
 
 const API_ROOT = "/autocomplete-plus/translation";
+const PROJECT_URL = "https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice";
+const DISCORD_URL = "https://discord.gg/R48n6GwXzD";
 export const ONLINE_SERVICES_UPDATED_EVENT = "autocomplete-plus:online-services-updated";
 
 function notifyOnlineServicesUpdated() {
@@ -464,6 +466,18 @@ function button(label, className = "") {
         label,
     );
     result.type = "button";
+    return result;
+}
+
+function externalLink(label, href) {
+    const result = element(
+        "a",
+        "p-button p-component autocomplete-plus-online-button autocomplete-plus-online-link",
+        label,
+    );
+    result.href = href;
+    result.target = "_blank";
+    result.rel = "noopener noreferrer";
     return result;
 }
 
@@ -952,6 +966,11 @@ export async function openOnlineServicesPanel(_app) {
     selectPage("danbooru");
 
     const actions = element("footer", "autocomplete-plus-online-actions");
+    const links = element("div", "autocomplete-plus-online-links");
+    links.append(
+        externalLink("GitHub", PROJECT_URL),
+        externalLink("Discord", DISCORD_URL),
+    );
     const close = button(text.cancel);
     close.onclick = () => dialog.close();
     const save = button(text.save, "is-primary");
@@ -1092,7 +1111,7 @@ export async function openOnlineServicesPanel(_app) {
             message.dataset.tone = "error";
         }
     };
-    actions.append(close, save);
+    actions.append(links, close, save);
     panel.append(actions);
     dialog.tabIndex = -1;
     dialog.showModal();

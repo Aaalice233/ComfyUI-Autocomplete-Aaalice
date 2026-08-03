@@ -123,6 +123,13 @@ describe('online services settings panel', () => {
             .querySelector('select');
 
         expect(dialog).not.toBeNull();
+        const links = [...dialog.querySelectorAll('.autocomplete-plus-online-link')];
+        expect(links.map(link => [link.textContent, link.href])).toEqual([
+            ['GitHub', 'https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice'],
+            ['Discord', 'https://discord.gg/R48n6GwXzD'],
+        ]);
+        expect(links.every(link =>
+            link.target === '_blank' && link.rel === 'noopener noreferrer')).toBe(true);
         expect(details.open).toBe(false);
         expect(thinking.value).toBe('disabled');
         expect(dialog.textContent).toContain('Waiting for first completion');
