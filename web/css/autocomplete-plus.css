@@ -52,6 +52,7 @@ body.dark-theme {
   display: none;
   overflow: hidden;
   width: min(var(--autocomplete-plus-popup-width), calc(100vw - 24px));
+  flex-direction: column;
   border-radius: 8px;
   background-color: var(--comfy-input-bg);
   box-shadow:
@@ -120,6 +121,7 @@ body.dark-theme {
 #autocomplete-plus-list {
   display: grid;
   overflow: hidden auto;
+  min-height: 0;
   contain: layout paint;
   grid-auto-rows: auto;
   grid-template-columns: minmax(10rem, 1fr) 2.25rem var(--autocomplete-plus-alias-column-width) 4.5rem 3.25rem;
@@ -344,6 +346,110 @@ body.dark-theme {
   pointer-events: none;
 }
 
+.autocomplete-plus-footer {
+  display: flex;
+  min-height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 3px 6px 3px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 55%, transparent);
+  background-color: color-mix(in srgb, var(--comfy-input-bg) 90%, var(--input-text));
+  color: color-mix(in srgb, var(--input-text) 62%, transparent);
+  font-size: 11px;
+  line-height: 1;
+  user-select: none;
+}
+
+.autocomplete-plus-footer[hidden] {
+  display: none;
+}
+
+.autocomplete-plus-footer-statuses {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  color: color-mix(in srgb, var(--input-text) 66%, transparent);
+  gap: 10px;
+}
+
+.autocomplete-plus-footer-status {
+  display: inline-flex;
+  overflow: hidden;
+  min-width: 0;
+  align-items: center;
+  color: color-mix(in srgb, var(--input-text) 66%, transparent);
+  gap: 4px;
+}
+
+.autocomplete-plus-footer-status[data-state="ready"],
+.autocomplete-plus-footer-status[data-state="configured"],
+.autocomplete-plus-footer-status[data-state="success"] {
+  color: color-mix(in srgb, var(--p-green-500) 78%, var(--input-text));
+}
+
+.autocomplete-plus-footer-status[data-state="update"],
+.autocomplete-plus-footer-status[data-state="downloading"],
+.autocomplete-plus-footer-status[data-state="checking"],
+.autocomplete-plus-footer-status[data-state="loading"] {
+  color: color-mix(in srgb, var(--p-yellow-500) 82%, var(--input-text));
+}
+
+.autocomplete-plus-footer-status[data-state="error"] {
+  color: var(--error-text);
+}
+
+.autocomplete-plus-footer-icon {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.autocomplete-plus-footer-status-label {
+  color: color-mix(in srgb, currentcolor 76%, transparent);
+  white-space: nowrap;
+}
+
+.autocomplete-plus-footer-status-value {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autocomplete-plus-footer-settings {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: color-mix(in srgb, var(--input-text) 68%, transparent);
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.autocomplete-plus-footer-settings:hover {
+  background-color: color-mix(in srgb, var(--input-text) 10%, transparent);
+  color: var(--input-text);
+}
+
+.autocomplete-plus-footer-settings:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--p-blue-500) 72%, transparent);
+  outline-offset: 1px;
+}
+
 /* Related Tags UI Styles */
 #related-tags-root {
   position: absolute;
@@ -353,6 +459,7 @@ body.dark-theme {
   display: none;
   overflow: hidden;
   width: min(var(--autocomplete-plus-popup-width), calc(100vw - 24px));
+  flex-direction: column;
   border-radius: 8px;
   background-color: var(--comfy-input-bg);
   box-shadow:
@@ -494,6 +601,7 @@ body.dark-theme {
 #related-tags-list {
   display: grid;
   overflow: hidden auto;
+  min-height: 0;
   contain: layout paint;
   grid-auto-rows: auto;
   grid-template-columns: minmax(10rem, 1fr) 2.25rem var(--autocomplete-plus-alias-column-width) 4.5rem 3.25rem;
@@ -649,6 +757,19 @@ body.dark-theme {
   .related-tags-header-text-container {
     gap: 6px;
   }
+
+  .autocomplete-plus-footer {
+    gap: 6px;
+    padding-inline-start: 8px;
+  }
+
+  .autocomplete-plus-footer-statuses {
+    gap: 6px;
+  }
+
+  .autocomplete-plus-footer-status {
+    gap: 3px;
+  }
 }
 
 @container (max-width: 23rem) {
@@ -675,6 +796,14 @@ body.dark-theme {
   .related-tags-header-tag-alias {
     overflow: hidden;
     max-height: 2.5em;
+  }
+
+  .autocomplete-plus-footer-status-label {
+    display: none;
+  }
+
+  .autocomplete-plus-footer-statuses {
+    gap: 8px;
   }
 }
 

@@ -115,7 +115,11 @@ export async function ensureChineseDictionary(locale, options = {}) {
 }
 
 export async function getChineseDictionaryStatus(options = {}) {
-    return requestJson("/status", {}, options.fetchImpl || fetch);
+    return requestJson(
+        "/status",
+        { signal: options.signal },
+        options.fetchImpl || fetch,
+    );
 }
 
 export async function searchChineseDictionaryCandidates(query, options = {}) {

@@ -254,6 +254,17 @@ export async function loadTranslationCatalog(locale, options = {}) {
     }
 }
 
+export async function getTranslationServiceStatus(options = {}) {
+    const { fetchImpl = fetch, signal } = options;
+    const response = await fetchImpl('/autocomplete-plus/translation/status', {
+        cache: 'no-store',
+        signal,
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    return payload;
+}
+
 export function invalidateTranslationCatalog(locale) {
     const normalizedLocale = normalizeInterfaceLocale(locale);
     const prefix = `${normalizedLocale}\0`;

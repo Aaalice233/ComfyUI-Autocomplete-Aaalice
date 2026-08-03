@@ -44,6 +44,8 @@ import {
 import { rankCompletionCandidates } from './candidate-ranking.js';
 import { applyTextInsertionEdit, buildAutocompleteInsertionEdit } from './tag-insertion.js';
 import { VirtualKeyedList } from './list-utils.js';
+import { createAutocompleteFooter } from './autocomplete-footer.js';
+import { getScaledCaretAnchor } from './caret-position.js';
 import { getCurrentInterfaceLocale, getInterfaceText, normalizeInterfaceLocale } from './localization.js';
 
 export const AUTOCOMPLETE_TAG_INSERTED_EVENT = 'autocomplete-plus:tag-inserted';
@@ -425,6 +427,8 @@ class AutocompleteUI {
         this.tagsList = document.createElement('div');
         this.tagsList.id = 'autocomplete-plus-list';
         this.root.appendChild(this.tagsList);
+        this.footer = createAutocompleteFooter();
+        this.root.appendChild(this.footer.element);
         this.virtualList = new VirtualKeyedList(this.tagsList, {
             getKey: tagData => `${tagData.source}\0${tagData.tag}`,
             getSignature: () => '',
@@ -462,7 +466,7 @@ class AutocompleteUI {
             this._resizeFrame = requestAnimationFrame(() => {
                 this._resizeFrame = null;
                 this.#updatePosition();
-                this.root.style.display = 'block';
+                this.root.style.display = 'flex';
             });
         }, { passive: true });
 
@@ -644,11 +648,12 @@ class AutocompleteUI {
         }
 
         this.#updateContent();
+        this.footer.setVisible(true);
 
         // Calculate caret position using the helper function (returns viewport-relative coordinates)
         if (updatePosition) this.#updatePosition();
 
-        this.root.style.display = 'block'; // Make it visible
+        this.root.style.display = 'flex'; // Make it visible
         this.#setOpenMarker(this.target);
         this.virtualList.render();
 
@@ -672,6 +677,7 @@ class AutocompleteUI {
 
     #hideDisplay() {
         this.#clearOpenMarker();
+        this.footer.setVisible(false);
         this.root.style.display = 'none';
         this.selectedIndex = -1;
         this.candidates = [];
@@ -848,7 +854,7 @@ class AutocompleteUI {
     #updatePosition() {
         // Measure the element size without causing reflow
         this.root.style.visibility = 'hidden';
-        this.root.style.display = 'block';
+        this.root.style.display = 'flex';
         this.root.style.width = '';
         this.root.style.maxWidth = '';
         this.tagsList.style.maxHeight = 'min(320px, calc(100vh - 24px))';
@@ -864,16 +870,13 @@ class AutocompleteUI {
         const viewportHeight = window.innerHeight;
         const margin = getViewportMargin();
 
-        const targetElmOffset = this.#calculateElementOffset(this.target);
-
-        const { top: caretTop, left: caretLeft, lineHeight: caretLineHeight } = this.#getCaretCoordinates(this.target);
-
-        const scaledCaretLeft = targetElmOffset.left + (caretLeft - targetElmOffset.left) * scale;
-        const scaledCaretTop = targetElmOffset.top + (caretTop - targetElmOffset.top) * scale;
+        const { left: scaledCaretLeft, top: scaledCaretTop, lineHeight: scaledLineHeight } = (
+            getScaledCaretAnchor(this.target, scale)
+        );
         const placement = calculateAutocompletePlacement({
             caretLeft: scaledCaretLeft,
             caretTop: scaledCaretTop,
-            caretBottom: scaledCaretTop + caretLineHeight * scale,
+            caretBottom: scaledCaretTop + scaledLineHeight,
             preferredWidth: rootRect.width,
             preferredHeight: rootRect.height,
             viewportWidth,
@@ -886,7 +889,8 @@ class AutocompleteUI {
         this.root.style.top = `${placement.y}px`;
         this.root.style.width = `${placement.width}px`;
         this.root.style.maxWidth = `${placement.width}px`;
-        this.tagsList.style.maxHeight = `${placement.height}px`;
+        const footerHeight = this.footer.getHeight();
+        this.tagsList.style.maxHeight = `${Math.max(0, placement.height - footerHeight)}px`;
     }
 
     /** Highlights the item (row) at the given index */
@@ -915,214 +919,6 @@ class AutocompleteUI {
         this.hide();
     }
 
-    /**
-     * Gets the pixel coordinates of the caret in the input element.
-     * Uses a temporary div to calculate the position accurately.
-     * Based on https://github.com/component/textarea-caret-position
-     * @param {HTMLTextAreaElement} element The textarea element.
-     * @returns {{ top: number, left: number, lineHeight: number }}
-     */
-    #getCaretCoordinates(element) {
-        const properties = [
-            'direction', // RTL support
-            'boxSizing',
-            'width', // on Chrome and IE, exclude the scrollbar, so the mirror div wraps exactly as the textarea does
-            'height',
-            'overflowX',
-            'overflowY', // copy the scrollbar for IE
-
-            'borderTopWidth',
-            'borderRightWidth',
-            'borderBottomWidth',
-            'borderLeftWidth',
-            'borderStyle',
-
-            'paddingTop',
-            'paddingRight',
-            'paddingBottom',
-            'paddingLeft',
-
-            // https://developer.mozilla.org/en-US/docs/Web/CSS/font
-            'fontStyle',
-            'fontVariant',
-            'fontWeight',
-            'fontStretch',
-            'fontSize',
-            'fontSizeAdjust',
-            'lineHeight',
-            'fontFamily',
-
-            'textAlign',
-            'textTransform',
-            'textIndent',
-            'textDecoration', // might not make a difference, but better be safe
-
-            'letterSpacing',
-            'wordSpacing',
-
-            'tabSize',
-            'MozTabSize' // Firefox
-        ];
-
-        const isBrowser = typeof window !== 'undefined';
-        const isFirefox = isBrowser && window.mozInnerScreenX != null;
-
-        var debug = false;
-        if (debug) {
-            var el = document.querySelector("#input-textarea-caret-position-mirror-div");
-            if (el) el.parentNode.removeChild(el);
-        }
-
-        // The mirror div will replicate the textarea's style
-        const div = document.createElement('div');
-        div.id = 'input-textarea-caret-position-mirror-div';
-        document.body.appendChild(div);
-
-        const style = div.style;
-        const computed = window.getComputedStyle(element);
-        const isInput = element.nodeName === 'INPUT';
-
-        // Default textarea styles
-        style.whiteSpace = 'pre-wrap';
-        if (!isInput) style.wordWrap = 'break-word'; // only for textarea-s
-
-        // Position off-screen
-        style.position = 'absolute'; // required to return coordinates properly
-        if (!debug) style.visibility = 'hidden'; // not 'display: none' because we want rendering
-
-        // Transfer the element's properties to the div
-        properties.forEach(prop => {
-            if (isInput && prop === "lineHeight") {
-                // Special case for <input>s because text is rendered centered and line height may be != height
-                if (computed.boxSizing === "border-box") {
-                    var height = parseInt(computed.height);
-                    var outerHeight =
-                        parseInt(computed.paddingTop) +
-                        parseInt(computed.paddingBottom) +
-                        parseInt(computed.borderTopWidth) +
-                        parseInt(computed.borderBottomWidth);
-                    var targetHeight = outerHeight + parseInt(computed.lineHeight);
-                    if (height > targetHeight) {
-                        style.lineHeight = height - outerHeight + "px";
-                    } else if (height === targetHeight) {
-                        style.lineHeight = computed.lineHeight;
-                    } else {
-                        style.lineHeight = 0;
-                    }
-                } else {
-                    style.lineHeight = computed.height;
-                }
-            } else {
-                style[prop] = computed[prop];
-            }
-        });
-
-        // Calculate lineHeight more robustly
-        let computedLineHeight = computed.lineHeight;
-        let numericLineHeight;
-        if (computedLineHeight === 'normal') {
-            // Calculate fallback based on font size
-            // const fontSize = parseFloat(computed.fontSize);
-            // numericLineHeight = Math.round(fontSize * 1.2); // Common approximation
-            numericLineHeight = this.#calculateLineHeightPx(element.nodeName, computed);
-        } else {
-            numericLineHeight = parseFloat(computedLineHeight); // Use parseFloat for pixel values like "16px"
-        }
-
-        if (isFirefox) {
-            // Firefox lies about the overflow property for textareas: https://bugzilla.mozilla.org/show_bug.cgi?id=984275
-            if (element.scrollHeight > parseInt(computed.height)) style.overflowY = 'scroll';
-        } else {
-            style.overflow = 'hidden'; // for Chrome to not render a scrollbar; IE keeps overflowY = 'scroll'
-        }
-
-        div.textContent = element.value.substring(0, element.selectionStart);
-        // The second special handling for input type=text doesn't need to be copied:
-        // If isInput then usage is https://github.com/component/textarea-caret-position#usage-input-typetext
-
-        const span = document.createElement('span');
-        // Wrapping must be replicated *exactly*, including whitespace spaces and carriage returns
-        span.textContent = element.value.substring(element.selectionStart) || '.'; // || '.' because a completely empty faux span doesn't render at all
-        div.appendChild(span);
-
-        const coordinates = {
-            top: span.offsetTop + (parseInt(computed['borderTopWidth']) || 0),
-            left: span.offsetLeft + (parseInt(computed['borderLeftWidth']) || 0),
-            lineHeight: numericLineHeight // Use the calculated numeric lineHeight
-        };
-
-        // Calculate the bounding rect of the input element relative to the viewport
-        const rect = element.getBoundingClientRect();
-
-        // Adjust the coordinates to be relative to the viewport
-        coordinates.top = rect.top + element.scrollTop + coordinates.top;
-        coordinates.left = rect.left + element.scrollLeft + coordinates.left;
-
-        if (debug) {
-            span.style.backgroundColor = "#aaa";
-        } else {
-            document.body.removeChild(div);
-        }
-
-        return coordinates;
-    }
-
-    /**
-     * Returns calculated line-height of the given node in pixels.
-     */
-    #calculateLineHeightPx(nodeName, computedStyle) {
-        const body = document.body;
-        if (!body) return 0;
-
-        const tempNode = document.createElement(nodeName);
-        tempNode.innerHTML = "&nbsp;";
-        Object.assign(tempNode.style, {
-            fontSize: computedStyle.fontSize,
-            fontFamily: computedStyle.fontFamily,
-            padding: "0",
-            position: "absolute",
-        });
-        body.appendChild(tempNode);
-
-        // Make sure textarea has only 1 row
-        if (tempNode instanceof HTMLTextAreaElement) {
-            tempNode.rows = 1;
-        }
-
-        // Assume the height of the element is the line-height
-        const height = tempNode.offsetHeight;
-        body.removeChild(tempNode);
-
-        return height;
-    }
-
-    /**
-     * calculates the offset of the given element relative to the viewport.
-     * @param {HTMLElement} element
-     * @returns {{ top: number, left: number }}
-     */
-    #calculateElementOffset(element) {
-        const rect = element.getBoundingClientRect();
-        const owner = element.ownerDocument;
-        if (owner == null) {
-            throw new Error("Given element does not belong to document");
-        }
-
-        const { defaultView, documentElement } = owner;
-        if (defaultView == null) {
-            throw new Error("Given element does not belong to window");
-        }
-
-        const offset = {
-            top: rect.top + defaultView.pageYOffset,
-            left: rect.left + defaultView.pageXOffset,
-        };
-        if (documentElement) {
-            offset.top -= documentElement.clientTop;
-            offset.left -= documentElement.clientLeft;
-        }
-        return offset;
-    }
 }
 
 // --- Autocomplete Event Handling Class ---

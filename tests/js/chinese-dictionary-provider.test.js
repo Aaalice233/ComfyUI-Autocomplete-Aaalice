@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import {
     __test__,
     ensureChineseDictionary,
+    getChineseDictionaryStatus,
     invalidateChineseDictionarySearchCache,
     isChineseCompletionQuery,
     searchChineseDictionaryCandidates,
@@ -28,6 +29,21 @@ describe('Simplified Chinese dictionary provider', () => {
         expect(fetchImpl).toHaveBeenCalledWith(
             '/autocomplete-plus/chinese-dictionary/ensure',
             expect.objectContaining({ method: 'POST' }),
+        );
+    });
+
+    test('loads dictionary status with an abort signal', async () => {
+        const fetchImpl = jest.fn(async () => ({
+            ok: true,
+            json: async () => ({ state: 'ready', installed: true }),
+        }));
+        const controller = new AbortController();
+
+        await expect(getChineseDictionaryStatus({ fetchImpl, signal: controller.signal }))
+            .resolves.toEqual({ state: 'ready', installed: true });
+        expect(fetchImpl).toHaveBeenCalledWith(
+            '/autocomplete-plus/chinese-dictionary/status',
+            expect.objectContaining({ signal: controller.signal }),
         );
     });
 

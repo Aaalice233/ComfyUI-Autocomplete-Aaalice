@@ -12,6 +12,11 @@ import { invalidateChineseDictionarySearchCache } from "./integrations/chinese-d
 import { clearDanbooruSessionCache } from "./integrations/danbooru-provider.js";
 
 const API_ROOT = "/autocomplete-plus/translation";
+export const ONLINE_SERVICES_UPDATED_EVENT = "autocomplete-plus:online-services-updated";
+
+function notifyOnlineServicesUpdated() {
+    globalThis.window?.dispatchEvent(new Event(ONLINE_SERVICES_UPDATED_EVENT));
+}
 
 const TEXT = {
     en: {
@@ -563,6 +568,23 @@ export async function openOnlineServicesPanel(_app) {
     dialog.append(panel);
     document.body.append(dialog);
 
+    let dictionaryPoll = null;
+    let dialogClosed = false;
+    const stopDictionaryPolling = () => {
+        if (dictionaryPoll !== null) {
+            window.clearTimeout(dictionaryPoll);
+            dictionaryPoll = null;
+        }
+    };
+    dialog.addEventListener("click", event => {
+        if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener("close", () => {
+        dialogClosed = true;
+        stopDictionaryPolling();
+        dialog.remove();
+    }, { once: true });
+
     const header = element("header", "autocomplete-plus-online-header");
     const titleGroup = element("div", "autocomplete-plus-online-title");
     titleGroup.append(
@@ -746,7 +768,21 @@ export async function openOnlineServicesPanel(_app) {
     pages.dictionary.append(dictionarySection);
 
     let dictionaryStatus = null;
-    let dictionaryPoll = null;
+    const scheduleDictionaryPoll = () => {
+        if (dictionaryPoll === null && !dialogClosed) {
+            dictionaryPoll = window.setTimeout(pollDictionaryStatus, 750);
+        }
+    };
+    const pollDictionaryStatus = async () => {
+        dictionaryPoll = null;
+        if (dialogClosed) return;
+        try {
+            renderDictionaryStatus(await requestJson("/autocomplete-plus/chinese-dictionary/status"));
+        } catch (_error) {
+            // The next poll or a manual action can recover the status view.
+        }
+        if (dictionaryStatus?.state === "downloading") scheduleDictionaryPoll();
+    };
     const dictionaryStateText = state => ({
         missing: text.dictionaryMissing,
         downloading: text.dictionaryDownloading,
@@ -792,20 +828,12 @@ export async function openOnlineServicesPanel(_app) {
             invalidateChineseDictionarySearchCache();
             invalidateTranslationCatalog("zh");
             void loadTranslationCatalog("zh");
+            notifyOnlineServicesUpdated();
         }
-        if (nextStatus.state === "downloading" && dictionaryPoll === null) {
-            dictionaryPoll = window.setInterval(async () => {
-                try {
-                    renderDictionaryStatus(await requestJson("/autocomplete-plus/chinese-dictionary/status"));
-                } catch (_error) {
-                    // The next poll or a manual action can recover the status view.
-                }
-                if (dictionaryStatus?.state !== "downloading") {
-                    window.clearInterval(dictionaryPoll);
-                    dictionaryPoll = null;
-                }
-            }, 750);
+        if (nextStatus.state !== "downloading" && dictionaryPoll !== null) {
+            stopDictionaryPolling();
         }
+        if (nextStatus.state === "downloading") scheduleDictionaryPoll();
     };
     if (showDictionary) {
         try {
@@ -824,6 +852,7 @@ export async function openOnlineServicesPanel(_app) {
                 renderDictionaryStatus(nextStatus);
                 message.textContent = successMessage(nextStatus);
                 message.dataset.tone = "success";
+                notifyOnlineServicesUpdated();
             } catch (error) {
                 setButtonBusy(target, false, "");
                 message.textContent = error.message;
@@ -1055,6 +1084,7 @@ export async function openOnlineServicesPanel(_app) {
             }
             apiKey.value = config.deepseek.api_key;
             await refreshStatus();
+            notifyOnlineServicesUpdated();
             message.textContent = text.saved;
             message.dataset.tone = "success";
         } catch (error) {
@@ -1064,13 +1094,6 @@ export async function openOnlineServicesPanel(_app) {
     };
     actions.append(close, save);
     panel.append(actions);
-    dialog.addEventListener("click", event => {
-        if (event.target === dialog) dialog.close();
-    });
-    dialog.addEventListener("close", () => {
-        if (dictionaryPoll !== null) window.clearInterval(dictionaryPoll);
-        dialog.remove();
-    }, { once: true });
     dialog.tabIndex = -1;
     dialog.showModal();
     dialog.focus({ preventScroll: true });

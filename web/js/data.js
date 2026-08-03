@@ -370,6 +370,7 @@ function processInChunks(lines, startIndex, targetMap, csvUrl, siteName) {
                 autoCompleteData[siteName].baseLoadingProgress.cooccurrence = Math.round((i / lines.length) * 100);
                 setTimeout(processChunk, 0);
             } else {
+                autoCompleteData[siteName].baseLoadingProgress.cooccurrence = 100;
                 resolve();
             }
         }

@@ -4,6 +4,7 @@ import { TextEncoder as NodeTextEncoder } from 'node:util';
 import { TagData, TagSource, autoCompleteData } from '../../web/js/data.js';
 import {
     getCandidateTranslationState,
+    getTranslationServiceStatus,
     loadTranslationCatalog,
     resolveCandidateTranslations,
     resolveCandidateTranslationsProgressively,
@@ -36,6 +37,21 @@ function waitForDeferredIndexing() {
 
 describe('on-demand translation provider', () => {
     beforeEach(resetData);
+
+    test('loads online service status without exposing credentials', async () => {
+        const fetchImpl = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ configured: false, danbooru: { state: 'idle' } }),
+        });
+        const controller = new AbortController();
+
+        await expect(getTranslationServiceStatus({ fetchImpl, signal: controller.signal }))
+            .resolves.toEqual({ configured: false, danbooru: { state: 'idle' } });
+        expect(fetchImpl).toHaveBeenCalledWith(
+            '/autocomplete-plus/translation/status',
+            expect.objectContaining({ cache: 'no-store', signal: controller.signal }),
+        );
+    });
 
     test('applies an in-memory translation before asynchronous enrichment settles', async () => {
         const candidate = new TagData('blue_hair', 0, 100, [], TagSource.Danbooru);

@@ -28,6 +28,8 @@ import {
     openTagWikiUrl
 } from './utils.js';
 import { calculateRelatedTagsPlacement } from './popup-layout.js';
+import { getScaledCaretAnchor } from './caret-position.js';
+import { createAutocompleteFooter } from './autocomplete-footer.js';
 
 // --- RelatedTags Logic ---
 
@@ -253,7 +255,7 @@ class RelatedTagsUI {
 
             this.#updateHeader();
             this.#updatePosition();
-            this.root.style.display = 'block';
+            this.root.style.display = 'flex';
 
             // Prevent default behavior
             e.preventDefault();
@@ -285,6 +287,11 @@ class RelatedTagsUI {
         this.tagsContainer = document.createElement('div');
         this.tagsContainer.id = 'related-tags-list';
         this.root.appendChild(this.tagsContainer);
+        this.footer = createAutocompleteFooter({
+            id: 'related-tags-footer',
+            includeCooccurrence: true,
+        });
+        this.root.appendChild(this.footer.element);
         this.virtualList = new VirtualKeyedList(this.tagsContainer, {
             getKey: tagData => `${tagData.source}\0${tagData.tag}`,
             getSignature: () => '',
@@ -355,7 +362,7 @@ class RelatedTagsUI {
             this._resizeFrame = requestAnimationFrame(() => {
                 this._resizeFrame = null;
                 this.#updatePosition();
-                this.root.style.display = 'block';
+                this.root.style.display = 'flex';
             });
         }, { passive: true });
     }
@@ -366,6 +373,19 @@ class RelatedTagsUI {
      */
     isVisible() {
         return this.root.style.display !== 'none';
+    }
+
+    #getCooccurrenceStatus() {
+        const data = autoCompleteData[TagSource.Danbooru];
+        if (!data) return { state: 'waiting' };
+        if (data.initialized) return { state: 'ready' };
+        if (data.isInitializing) {
+            return {
+                state: 'loading',
+                progress: data.baseLoadingProgress?.cooccurrence ?? 0,
+            };
+        }
+        return { state: 'waiting' };
     }
 
     /**
@@ -412,10 +432,11 @@ class RelatedTagsUI {
 
         this.#updateHeader();
         this.#updateContent();
+        this.footer.setVisible(true);
         this.#updatePosition();
 
         // Make visible
-        this.root.style.display = 'block';
+        this.root.style.display = 'flex';
         this.virtualList.render();
 
         // This function must be called after the content is updated and the root is displayed.
@@ -472,6 +493,7 @@ class RelatedTagsUI {
         this.relatedRequestId++;
         this.relatedAbortController?.abort();
         this.relatedAbortController = null;
+        this.footer.setVisible(false);
         if (this.autoRefreshTimerId) {
             clearTimeout(this.autoRefreshTimerId);
         }
@@ -674,6 +696,7 @@ class RelatedTagsUI {
      * Updates the content of the related tags panel with the provided tags.
      */
     #updateContent() {
+        this.footer.setCooccurrenceStatus(this.#getCooccurrenceStatus());
         if (!autoCompleteData[TagSource.Danbooru].initialized) {
             // Show loading message
             const messageDiv = document.createElement('div');
@@ -807,21 +830,28 @@ class RelatedTagsUI {
 
     /**
      * Updates the position of the related tags panel.
-     * Position is calculated based on the input element, available space,
-     * and the setting `relatedTagsDisplayPosition`.
-     * @param {HTMLElement} inputElement The input element to position
+     * Position is calculated from the active caret, available space, and the
+     * setting `relatedTagsDisplayPosition`.
      */
     #updatePosition() {
         // Measure the element size without causing reflow
         this.root.style.visibility = 'hidden';
-        this.root.style.display = 'block';
+        this.root.style.display = 'flex';
         this.root.style.width = '';
         this.root.style.maxWidth = '';
         this.tagsContainer.style.maxHeight = 'min(320px, calc(100vh - 24px))';
         const rootRect = this.root.getBoundingClientRect();
 
+        const scale = window.app?.canvas?.ds?.scale ?? 1.0;
+        const caret = getScaledCaretAnchor(this.target, scale);
+        const anchorRect = {
+            left: caret.left,
+            right: caret.left,
+            top: caret.top,
+            bottom: caret.top + caret.lineHeight,
+        };
         const placementArea = calculateRelatedTagsPlacement({
-            anchorRect: this.target.getBoundingClientRect(),
+            anchorRect,
             preferredWidth: rootRect.width,
             preferredHeight: rootRect.height,
             viewportWidth: window.innerWidth,
@@ -838,9 +868,11 @@ class RelatedTagsUI {
 
         const newHeaderRect = this.header.getBoundingClientRect();
 
-        if (this.relatedTags.length > 0) {
-            this.tagsContainer.style.maxHeight = `${placementArea.height - newHeaderRect.height}px`;
-        }
+        const footerHeight = this.footer.getHeight();
+        this.tagsContainer.style.maxHeight = `${Math.max(
+            0,
+            placementArea.height - newHeaderRect.height - footerHeight,
+        )}px`;
 
         // Hide it again after measurement
         this.root.style.display = 'none';
