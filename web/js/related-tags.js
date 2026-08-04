@@ -28,6 +28,7 @@ import { mergeDuplicateCandidate } from './candidate-ranking.js';
 import {
     extractTagsFromTextArea,
     findAllTagPositions,
+    formatCountHumanReadable,
     getTagRangeForRelatedTags,
     getViewportMargin,
     isLongText,
@@ -39,6 +40,7 @@ import {
 import { calculatePopupPlacement } from './popup-layout.js';
 import { getScaledCaretAnchor } from './caret-position.js';
 import { createAutocompleteFooter } from './autocomplete-footer.js';
+import { createPopupCloseButton } from './autocomplete-header.js';
 
 // --- RelatedTags Logic ---
 
@@ -227,45 +229,63 @@ class RelatedTagsUI {
         this.root.id = 'related-tags-root';
 
         // Create header row
-        this.header = document.createElement('div');
+        this.header = document.createElement('header');
         this.header.id = 'related-tags-header';
+        this.header.className = 'autocomplete-plus-popup-header related-tags-header';
 
         this.headerTextContainer = document.createElement('div');
-        this.headerTextContainer.className = 'related-tags-header-text-container';
+        this.headerTextContainer.className = 'autocomplete-plus-header-context related-tags-header-text-container';
         this.header.appendChild(this.headerTextContainer);
 
-        // Create header text div for the left side
-        this.headerText = document.createElement('div');
-        this.headerText.className = 'related-tags-header-tag-text';
-        this.headerText.textContent = getInterfaceText('relatedTags');
-        this.headerTextContainer.appendChild(this.headerText);
+        this.headerTitle = document.createElement('span');
+        this.headerTitle.className = 'autocomplete-plus-header-title related-tags-header-title';
+        this.headerTextContainer.appendChild(this.headerTitle);
 
-        // Create header alias div for the 2nd line
-        this.headerAlias = document.createElement('div');
-        this.headerAlias.className = 'related-tags-header-tag-alias';
+        this.headerQuery = document.createElement('code');
+        this.headerQuery.className = 'autocomplete-plus-header-query related-tags-header-query';
+        this.headerQuery.setAttribute('aria-label', getInterfaceText('autocompleteHeaderQueryLabel'));
+        this.headerTextContainer.appendChild(this.headerQuery);
+
+        this.headerAlias = document.createElement('span');
+        this.headerAlias.className = 'autocomplete-plus-header-query related-tags-header-tag-alias';
         this.headerTextContainer.appendChild(this.headerAlias);
 
-        // Create header controls for the right side
+        this.headerCount = document.createElement('span');
+        this.headerCount.className = 'autocomplete-plus-header-count related-tags-header-count';
+        this.headerCount.setAttribute('aria-live', 'polite');
+        this.headerTextContainer.appendChild(this.headerCount);
+
+        this.headerHint = document.createElement('span');
+        this.headerHint.className = 'autocomplete-plus-header-hint related-tags-header-hint';
+        this.headerTextContainer.appendChild(this.headerHint);
+
         this.headerControls = document.createElement('div');
         this.headerControls.className = 'related-tags-header-controls';
 
-        // Create pin button
         this.isPinned = false;
         this.pinBtn = document.createElement('button');
+        this.pinBtn.type = 'button';
         this.pinBtn.className = 'related-tags-pin-toggle';
 
         this.pinBtn.addEventListener('click', (e) => {
             this.isPinned = !this.isPinned;
-            this.pinBtn.classList.toggle('active', this.isPinned); // For styling
+            this.pinBtn.classList.toggle('active', this.isPinned);
             this.#updateHeader();
-
-            // Prevent default behavior
             e.preventDefault();
             e.stopPropagation();
         });
         this.headerControls.appendChild(this.pinBtn);
 
-        this.header.appendChild(this.headerControls);
+        const closeButton = createPopupCloseButton({
+            labelKey: 'relatedTagsClose',
+            onClose: () => {
+                const target = this.target;
+                this.hide();
+                target?.focus?.({ preventScroll: true });
+            },
+        });
+        this.headerControls.appendChild(closeButton.element);
+        this.headerCloseButton = closeButton;
 
         this.root.appendChild(this.header);
 
@@ -305,7 +325,7 @@ class RelatedTagsUI {
         this.autoRefreshTimerId = null;
 
         // Add click handler for wiki link in header tag name
-        this.headerText.addEventListener('mousedown', (e) => {
+        this.headerQuery.addEventListener('mousedown', (e) => {
             const tagNameEl = e.target.closest('.related-tags-header-tag-name');
             if (tagNameEl && !tagNameEl.classList.contains('disabled')) {
                 openTagWikiUrl(tagNameEl.dataset.tagSource, tagNameEl.dataset.tagName);
@@ -636,9 +656,11 @@ class RelatedTagsUI {
         const categoryText = TagCategory[tagData.source][tagData.category] || "unknown";
         const aliasText = getCandidateAliasText(tagData);
 
-        // Update header text with current tag
-        this.headerText.innerHTML = ''; // Clear previous content
-        this.headerText.textContent = `${getInterfaceText('tagsRelatedTo')} `;
+        // Keep the related-tag context compact while preserving its wiki affordance.
+        const locale = getCurrentInterfaceLocale();
+        this.header.setAttribute('aria-label', getInterfaceText('relatedTags', {}, locale));
+        this.headerTitle.textContent = getInterfaceText('relatedTags', {}, locale);
+        this.headerQuery.replaceChildren();
 
         const tagName = document.createElement('span');
         tagName.classList.add('related-tags-header-tag-name', tagData.source);
@@ -658,21 +680,35 @@ class RelatedTagsUI {
             tagName.classList.add('disabled');
         }
 
-        this.headerText.appendChild(tagName);
+        this.headerQuery.appendChild(tagName);
+        this.headerQuery.title = tagData.tag;
 
-        // Clear previous alias
         this.headerAlias.style.display = 'none';
-        this.headerAlias.innerHTML = '';
-
-        // Add alias if available
+        this.headerAlias.textContent = '';
         if (aliasText.length > 0 && !settingValues.hideAlias) {
             this.headerAlias.textContent = aliasText;
-            this.headerAlias.style.display = 'block';
+            this.headerAlias.style.display = 'inline-block';
+            this.headerAlias.title = aliasText;
         }
 
-        // Update pin button
+        const relatedCount = Math.max(this.relatedTags?.length || 0, 0);
+        const resultLabel = getInterfaceText(
+            'autocompleteHeaderResultCount',
+            { count: formatCountHumanReadable(relatedCount) },
+            locale,
+        );
+        this.headerCount.textContent = resultLabel;
+        this.headerCount.title = getInterfaceText(
+            'autocompleteHeaderResultCount',
+            { count: String(relatedCount) },
+            locale,
+        );
+        this.headerCount.setAttribute('aria-label', resultLabel);
+        this.headerHint.textContent = getInterfaceText('autocompleteHeaderHint', {}, locale);
+        this.headerCloseButton.updateLabel();
+
         this.pinBtn.textContent = this.isPinned ? '🎯' : '📌';
-        this.pinBtn.title = getInterfaceText(this.isPinned ? 'unpinRelatedTags' : 'pinRelatedTags');
+        this.pinBtn.title = getInterfaceText(this.isPinned ? 'unpinRelatedTags' : 'pinRelatedTags', {}, locale);
         this.pinBtn.ariaLabel = this.pinBtn.title;
     }
 
@@ -843,6 +879,8 @@ class RelatedTagsUI {
         this.root.style.display = 'flex';
         this.root.style.width = '';
         this.root.style.maxWidth = '';
+        this.root.style.height = '';
+        this.root.style.maxHeight = '';
         this.tagsContainer.style.maxHeight = 'min(320px, calc(100vh - 24px))';
         const rootRect = this.root.getBoundingClientRect();
 
@@ -860,6 +898,9 @@ class RelatedTagsUI {
         this.root.style.top = `${placementArea.y}px`;
         this.root.style.width = `${placementArea.width}px`;
         this.root.style.maxWidth = `${placementArea.width}px`;
+        // Keep virtualized rows from expanding beyond the measured placement.
+        this.root.style.height = `${placementArea.height}px`;
+        this.root.style.maxHeight = `${placementArea.height}px`;
 
         const newHeaderRect = this.header.getBoundingClientRect();
 

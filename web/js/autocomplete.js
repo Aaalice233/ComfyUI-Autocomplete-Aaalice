@@ -45,6 +45,7 @@ import { rankCompletionCandidates } from './candidate-ranking.js';
 import { applyTextInsertionEdit, buildAutocompleteInsertionEdit } from './tag-insertion.js';
 import { VirtualKeyedList } from './list-utils.js';
 import { createAutocompleteFooter } from './autocomplete-footer.js';
+import { createAutocompleteHeader } from './autocomplete-header.js';
 import { getScaledCaretAnchor } from './caret-position.js';
 import { getCurrentInterfaceLocale, getInterfaceText, normalizeInterfaceLocale } from './localization.js';
 
@@ -429,6 +430,15 @@ class AutocompleteUI {
         this.iconSvgDef.innerHTML = IconSvgHtmlString;
         this.root.appendChild(this.iconSvgDef);
 
+        this.header = createAutocompleteHeader({
+            onClose: () => {
+                const target = this.target;
+                this.hide();
+                target?.focus?.({ preventScroll: true });
+            },
+        });
+        this.root.appendChild(this.header.element);
+
         this.tagsList = document.createElement('div');
         this.tagsList.id = 'autocomplete-plus-list';
         this.root.appendChild(this.tagsList);
@@ -652,6 +662,10 @@ class AutocompleteUI {
             this.selectedIndex = 0; // Reset selection to the first item
         }
 
+        this.header.setState({
+            queryText: getCurrentPartialTag(this.target),
+            resultCount: this.candidates.length,
+        });
         this.#updateContent();
         this.footer.setVisible(true);
 
@@ -867,6 +881,8 @@ class AutocompleteUI {
         this.root.style.display = 'flex';
         this.root.style.width = '';
         this.root.style.maxWidth = '';
+        this.root.style.height = '';
+        this.root.style.maxHeight = '';
         this.tagsList.style.maxHeight = 'min(320px, calc(100vh - 24px))';
         const rootRect = this.root.getBoundingClientRect();
         // Hide it again after measurement
@@ -891,8 +907,15 @@ class AutocompleteUI {
         this.root.style.top = `${placement.y}px`;
         this.root.style.width = `${placement.width}px`;
         this.root.style.maxWidth = `${placement.width}px`;
+        // Keep virtualized rows from expanding beyond the measured placement.
+        this.root.style.height = `${placement.height}px`;
+        this.root.style.maxHeight = `${placement.height}px`;
+        const headerHeight = this.header.element.getBoundingClientRect().height;
         const footerHeight = this.footer.getHeight();
-        this.tagsList.style.maxHeight = `${Math.max(0, placement.height - footerHeight)}px`;
+        this.tagsList.style.maxHeight = `${Math.max(
+            0,
+            placement.height - headerHeight - footerHeight,
+        )}px`;
     }
 
     /** Highlights the item (row) at the given index */

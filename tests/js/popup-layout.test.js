@@ -22,6 +22,21 @@ describe('popup layout', () => {
         expect(placement.y + placement.height).toBeLessThanOrEqual(532);
     });
 
+    test('keeps an above popup separated from the caret when the preferred height is too large', () => {
+        const placement = calculatePopupPlacement({
+            viewportWidth: 800,
+            viewportHeight: 600,
+            margin: {},
+            anchorRect: { left: 300, top: 400, bottom: 420 },
+            preferredWidth: 672,
+            preferredHeight: 500,
+        });
+
+        expect(placement.side).toBe('above');
+        expect(placement.y + placement.height).toBe(392);
+        expect(placement.y + placement.height).toBeLessThanOrEqual(400 - 8);
+    });
+
     test('uses all available popup width on a small viewport without overflowing', () => {
         const placement = calculatePopupPlacement({
             viewportWidth: 360,
