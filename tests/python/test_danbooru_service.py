@@ -76,6 +76,14 @@ class DanbooruHttpProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"results": []})
         self.assertEqual(len(sessions), 2)
 
+    async def test_stops_after_eight_total_attempts_by_default(self):
+        provider, sessions = self.provider([FakeResponse(503) for _ in range(8)])
+
+        with self.assertRaisesRegex(RuntimeError, "HTTP 503"):
+            await provider.request_json("https://example.test/tags", {})
+
+        self.assertEqual(len(sessions), 8)
+
     async def test_does_not_retry_permanent_upstream_failure(self):
         provider, sessions = self.provider([FakeResponse(404)], max_attempts=3)
 
