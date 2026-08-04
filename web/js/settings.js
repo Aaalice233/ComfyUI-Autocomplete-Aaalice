@@ -20,8 +20,7 @@ export const settingValues = {
     // Related tags feature settings
     enableRelatedTags: true,
     maxRelatedTags: 25000,
-    relatedTagsDisplayPosition: 'horizontal', // 'horizontal' or 'vertical'
-    relatedTagsTriggerMode: 'click', // Options: 'click', 'ctrl+Click'
+    relatedTagsTriggerMode: 'ctrl+Click', // Options: 'click', 'ctrl+Click'
 
     // Display settings
     hideAlias: false, // Hide alias in the autocomplete and related tags display

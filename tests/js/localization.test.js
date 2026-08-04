@@ -55,7 +55,6 @@ describe('runtime UI localization', () => {
             'formatPromptCommand',
             'relatedTags',
             'tagsRelatedTo',
-            'toggleRelatedTagsLayout',
             'pinRelatedTags',
             'unpinRelatedTags',
             'initializingCooccurrence',

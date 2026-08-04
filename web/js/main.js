@@ -482,25 +482,13 @@ app.registerExtension({
         {
             id: id + ".RelatedTags.RelatedTagsTriggerMode",
             name: "Related Tags Trigger Mode",
-            tooltip: "Which action will trigger displaying related tags for the entered tag (click only, Ctrl+click).",
+            tooltip: "Which action will trigger displaying related tags for the entered tag (Ctrl+click is recommended to avoid accidental popups).",
             type: "combo",
             options: ["click", "ctrl+Click"],
-            defaultValue: "click",
+            defaultValue: "ctrl+Click",
             category: [name, "Related Tags", "Trigger Mode"],
             onChange: (newVal, oldVal) => {
                 settingValues.relatedTagsTriggerMode = newVal;
-            }
-        },
-        {
-            id: id + ".RelatedTags.DisplayPosition",
-            name: "Default Display Position",
-            tooltip: "Display position (relative to Textarea).",
-            type: "combo",
-            options: ["horizontal", "vertical"],
-            defaultValue: "horizontal",
-            category: [name, "Related Tags", "Display Position"],
-            onChange: (newVal, oldVal) => {
-                settingValues.relatedTagsDisplayPosition = newVal;
             }
         },
         {

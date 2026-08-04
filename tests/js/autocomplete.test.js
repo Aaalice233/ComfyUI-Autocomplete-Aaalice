@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import {
     AUTOCOMPLETE_TAG_INSERTED_EVENT,
     AutocompleteEventHandler,
@@ -211,6 +212,19 @@ describe('Autocomplete Functions', () => {
 
         await new Promise(resolve => setTimeout(resolve, 25));
         expect(calls).toEqual([latestTarget]);
+    });
+
+    test('hides instead of searching when the input is clicked', () => {
+        const hide = jest.fn();
+        const updateDisplay = jest.fn();
+        const handler = {
+            hide,
+            autocompleteUI: { updateDisplay },
+        };
+
+        expect(AutocompleteEventHandler.prototype.handleClick.call(handler)).toBe(false);
+        expect(hide).toHaveBeenCalledTimes(1);
+        expect(updateDisplay).not.toHaveBeenCalled();
     });
 
     describe('matchWord', () => {

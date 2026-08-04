@@ -39,4 +39,48 @@ describe('caret position helpers', () => {
         expect(anchor.left).toBeGreaterThanOrEqual(50);
         expect(anchor.top).toBeGreaterThanOrEqual(100);
     });
+
+    test('does not apply the canvas scale to an untransformed sidebar input', () => {
+        Object.defineProperties(textarea, {
+            offsetWidth: { configurable: true, value: 320 },
+            offsetHeight: { configurable: true, value: 100 },
+        });
+        Object.defineProperty(textarea, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({
+                top: 100,
+                left: 50,
+                right: 370,
+                bottom: 200,
+                width: 320,
+                height: 100,
+            }),
+        });
+
+        const anchor = getScaledCaretAnchor(textarea, 1.5);
+
+        expect(anchor.lineHeight).toBe(20);
+    });
+
+    test('uses the rendered scale of a transformed canvas input', () => {
+        Object.defineProperties(textarea, {
+            offsetWidth: { configurable: true, value: 320 },
+            offsetHeight: { configurable: true, value: 100 },
+        });
+        Object.defineProperty(textarea, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({
+                top: 100,
+                left: 50,
+                right: 530,
+                bottom: 250,
+                width: 480,
+                height: 150,
+            }),
+        });
+
+        const anchor = getScaledCaretAnchor(textarea);
+
+        expect(anchor.lineHeight).toBe(30);
+    });
 });

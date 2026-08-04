@@ -873,15 +873,12 @@ class AutocompleteUI {
         this.root.style.display = 'none';
         this.root.style.visibility = 'visible';
 
-        // Get ComfyUI canvas scale if available, otherwise default to 1
-        const scale = window.app?.canvas?.ds?.scale ?? 1.0;
-
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
         const margin = getViewportMargin();
 
         const { left: scaledCaretLeft, top: scaledCaretTop, lineHeight: scaledLineHeight } = (
-            getScaledCaretAnchor(this.target, scale)
+            getScaledCaretAnchor(this.target)
         );
         const placement = calculateAutocompletePlacement({
             caretLeft: scaledCaretLeft,
@@ -1093,14 +1090,11 @@ export class AutocompleteEventHandler {
      * @param {MouseEvent} event 
      * @returns 
      */
-    handleClick(event) {
-        if (!settingValues.enabled) {
-            this.autocompleteUI.hide();
-            return false;
-        }
-
-        this.autocompleteUI.updateDisplay(event.target);
-        return this.autocompleteUI.isVisible();
+    handleClick() {
+        // A click only changes the caret; suggestions should follow typed input,
+        // not reopen for an existing partial tag and cover the editor.
+        this.hide();
+        return false;
     }
 
     refresh() {

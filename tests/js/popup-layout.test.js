@@ -76,32 +76,44 @@ describe('popup layout', () => {
         expect(placement.y).toBe(8);
     });
 
-    test('places horizontal related tags on the larger side with an anchor gap', () => {
+    test('uses the same caret placement for related tags and autocomplete', () => {
         const placement = calculateRelatedTagsPlacement({
             ...viewport,
             anchorRect: { left: 500, right: 760, top: 180, bottom: 380 },
             preferredWidth: 672,
             preferredHeight: 360,
-            orientation: 'horizontal',
+        });
+        const autocompletePlacement = calculateAutocompletePlacement({
+            ...viewport,
+            caretLeft: 500,
+            caretTop: 180,
+            caretBottom: 380,
+            preferredWidth: 672,
+            preferredHeight: 360,
         });
 
-        expect(placement.side).toBe('left');
-        expect(placement.x + placement.width).toBe(492);
-        expect(placement.width).toBe(444);
+        expect(placement).toEqual(autocompletePlacement);
     });
 
-    test('places vertical related tags below when it has more room', () => {
+    test('uses the same caret placement for vertical related tags and autocomplete', () => {
         const placement = calculateRelatedTagsPlacement({
             ...viewport,
             anchorRect: { left: 300, right: 600, top: 80, bottom: 180 },
             preferredWidth: 672,
             preferredHeight: 300,
-            orientation: 'vertical',
+        });
+        const autocompletePlacement = calculateAutocompletePlacement({
+            ...viewport,
+            caretLeft: 300,
+            caretTop: 80,
+            caretBottom: 180,
+            preferredWidth: 672,
+            preferredHeight: 300,
         });
 
+        expect(placement).toEqual(autocompletePlacement);
         expect(placement.side).toBe('below');
         expect(placement.y).toBe(188);
-        expect(placement.x + placement.width).toBeLessThanOrEqual(792);
     });
 
     test('falls back above or below when neither side is usable', () => {
@@ -112,11 +124,11 @@ describe('popup layout', () => {
             anchorRect: { left: 80, right: 440, top: 220, bottom: 380 },
             preferredWidth: 672,
             preferredHeight: 320,
-            orientation: 'horizontal',
         });
 
         expect(['above', 'below']).toContain(placement.side);
-        expect(placement.width).toBe(464);
-        expect(placement.x).toBe(8);
+        expect(placement.width).toBe(360);
+        expect(placement.x).toBeGreaterThanOrEqual(8);
+        expect(placement.x + placement.width).toBeLessThanOrEqual(472);
     });
 });

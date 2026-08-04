@@ -249,30 +249,6 @@ class RelatedTagsUI {
         this.headerControls = document.createElement('div');
         this.headerControls.className = 'related-tags-header-controls';
 
-        // Create layout toggle button
-        this.toggleLayoutBtn = document.createElement('button');
-        this.toggleLayoutBtn.className = 'related-tags-layout-toggle';
-        this.toggleLayoutBtn.title = getInterfaceText('toggleRelatedTagsLayout');
-        this.toggleLayoutBtn.ariaLabel = this.toggleLayoutBtn.title;
-
-        // Add click handler for layout toggle
-        this.toggleLayoutBtn.addEventListener('click', (e) => {
-            // Toggle the layout setting
-            settingValues.relatedTagsDisplayPosition =
-                settingValues.relatedTagsDisplayPosition === 'vertical'
-                    ? 'horizontal'
-                    : 'vertical';
-
-            this.#updateHeader();
-            this.#updatePosition();
-            this.root.style.display = 'flex';
-
-            // Prevent default behavior
-            e.preventDefault();
-            e.stopPropagation();
-        });
-        this.headerControls.appendChild(this.toggleLayoutBtn);
-
         // Create pin button
         this.isPinned = false;
         this.pinBtn = document.createElement('button');
@@ -698,13 +674,6 @@ class RelatedTagsUI {
         this.pinBtn.textContent = this.isPinned ? '🎯' : '📌';
         this.pinBtn.title = getInterfaceText(this.isPinned ? 'unpinRelatedTags' : 'pinRelatedTags');
         this.pinBtn.ariaLabel = this.pinBtn.title;
-        this.toggleLayoutBtn.title = getInterfaceText('toggleRelatedTagsLayout');
-        this.toggleLayoutBtn.ariaLabel = this.toggleLayoutBtn.title;
-
-        // Update the button icon
-        this.toggleLayoutBtn.innerHTML = settingValues.relatedTagsDisplayPosition === 'vertical'
-            ? '↔️' // Click to change display horizontally
-            : '↕️'; // Click to change display vertically
     }
 
     /**
@@ -866,9 +835,7 @@ class RelatedTagsUI {
     }
 
     /**
-     * Updates the position of the related tags panel.
-     * Position is calculated from the active caret, available space, and the
-     * setting `relatedTagsDisplayPosition`.
+     * Updates the position of the related tags panel from the active caret.
      */
     #updatePosition() {
         // Measure the element size without causing reflow
@@ -879,8 +846,7 @@ class RelatedTagsUI {
         this.tagsContainer.style.maxHeight = 'min(320px, calc(100vh - 24px))';
         const rootRect = this.root.getBoundingClientRect();
 
-        const scale = window.app?.canvas?.ds?.scale ?? 1.0;
-        const caret = getScaledCaretAnchor(this.target, scale);
+        const caret = getScaledCaretAnchor(this.target);
         const anchorRect = {
             left: caret.left,
             right: caret.left,
@@ -894,7 +860,6 @@ class RelatedTagsUI {
             viewportWidth: window.innerWidth,
             viewportHeight: window.innerHeight,
             margin: getViewportMargin(),
-            orientation: settingValues.relatedTagsDisplayPosition,
         });
 
         // Apply position and size

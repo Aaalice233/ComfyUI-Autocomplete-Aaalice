@@ -1,6 +1,5 @@
 const VIEWPORT_INSET = 8;
 const ANCHOR_GAP = 8;
-const MIN_HORIZONTAL_PANEL_WIDTH = 280;
 const MIN_AUTOCOMPLETE_PANEL_HEIGHT = 256;
 
 function clamp(value, min, max) {
@@ -52,8 +51,7 @@ export function calculateAutocompletePlacement({
 }
 
 /**
- * Place the related-tags panel beside or above/below its textarea without
- * covering the anchor. The larger side wins when the preferred size cannot fit.
+ * Place the related-tags panel using the same caret placement as autocomplete.
  */
 export function calculateRelatedTagsPlacement({
     anchorRect,
@@ -62,55 +60,15 @@ export function calculateRelatedTagsPlacement({
     viewportWidth,
     viewportHeight,
     margin,
-    orientation,
 }) {
-    const bounds = getViewportBounds(viewportWidth, viewportHeight, margin);
-    const viewportPanelWidth = Math.max(bounds.right - bounds.left, 0);
-    const viewportPanelHeight = Math.max(bounds.bottom - bounds.top, 0);
-
-    if (orientation === 'vertical') {
-        const belowTop = anchorRect.bottom + ANCHOR_GAP;
-        const belowSpace = Math.max(bounds.bottom - belowTop, 0);
-        const aboveSpace = Math.max(anchorRect.top - ANCHOR_GAP - bounds.top, 0);
-        const placeBelow = preferredHeight <= belowSpace || belowSpace >= aboveSpace;
-        const height = Math.min(preferredHeight, placeBelow ? belowSpace : aboveSpace);
-        const width = Math.min(preferredWidth, viewportPanelWidth);
-        return {
-            x: clamp(anchorRect.left, bounds.left, bounds.right - width),
-            y: placeBelow
-                ? belowTop
-                : Math.max(anchorRect.top - ANCHOR_GAP - height, bounds.top),
-            width,
-            height,
-            side: placeBelow ? 'below' : 'above',
-        };
-    }
-
-    const leftSpace = Math.max(anchorRect.left - ANCHOR_GAP - bounds.left, 0);
-    const rightSpace = Math.max(bounds.right - anchorRect.right - ANCHOR_GAP, 0);
-    if (Math.max(leftSpace, rightSpace) < Math.min(MIN_HORIZONTAL_PANEL_WIDTH, viewportPanelWidth)) {
-        return calculateRelatedTagsPlacement({
-            anchorRect,
-            preferredWidth,
-            preferredHeight,
-            viewportWidth,
-            viewportHeight,
-            margin,
-            orientation: 'vertical',
-        });
-    }
-    const placeLeft = leftSpace >= rightSpace;
-    const sideSpace = placeLeft ? leftSpace : rightSpace;
-    const width = Math.min(preferredWidth, sideSpace, viewportPanelWidth);
-    const height = Math.min(preferredHeight, viewportPanelHeight);
-
-    return {
-        x: placeLeft
-            ? anchorRect.left - ANCHOR_GAP - width
-            : anchorRect.right + ANCHOR_GAP,
-        y: clamp(anchorRect.top, bounds.top, bounds.bottom - height),
-        width,
-        height,
-        side: placeLeft ? 'left' : 'right',
-    };
+    return calculateAutocompletePlacement({
+        caretLeft: anchorRect.left,
+        caretTop: anchorRect.top,
+        caretBottom: anchorRect.bottom,
+        preferredWidth,
+        preferredHeight,
+        viewportWidth,
+        viewportHeight,
+        margin,
+    });
 }

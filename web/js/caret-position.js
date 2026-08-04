@@ -147,12 +147,29 @@ export function calculateElementOffset(element) {
     return offset;
 }
 
-export function getScaledCaretAnchor(element, scale = 1) {
-    const elementOffset = calculateElementOffset(element);
-    const caret = getCaretCoordinates(element);
+function getRenderedScale(element, fallbackScale = 1) {
+    const rect = element.getBoundingClientRect();
+    const fallback = Number.isFinite(Number(fallbackScale)) && Number(fallbackScale) > 0
+        ? Number(fallbackScale)
+        : 1;
+    const layoutWidth = Number(element.offsetWidth) || Number(element.clientWidth);
+    const layoutHeight = Number(element.offsetHeight) || Number(element.clientHeight);
+    const renderedWidth = Number.isFinite(rect.width) ? rect.width : rect.right - rect.left;
+    const renderedHeight = Number.isFinite(rect.height) ? rect.height : rect.bottom - rect.top;
+
     return {
-        left: elementOffset.left + (caret.left - elementOffset.left) * scale,
-        top: elementOffset.top + (caret.top - elementOffset.top) * scale,
-        lineHeight: caret.lineHeight * scale,
+        x: layoutWidth > 0 && renderedWidth > 0 ? renderedWidth / layoutWidth : fallback,
+        y: layoutHeight > 0 && renderedHeight > 0 ? renderedHeight / layoutHeight : fallback,
+    };
+}
+
+export function getScaledCaretAnchor(element, scale = 1) {
+    const rect = element.getBoundingClientRect();
+    const caret = getCaretCoordinates(element);
+    const renderedScale = getRenderedScale(element, scale);
+    return {
+        left: rect.left + (caret.left - rect.left) * renderedScale.x,
+        top: rect.top + (caret.top - rect.top) * renderedScale.y,
+        lineHeight: caret.lineHeight * renderedScale.y,
     };
 }

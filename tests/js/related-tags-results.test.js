@@ -1,5 +1,11 @@
+import { jest } from '@jest/globals';
 import { TagData, TagSource, autoCompleteData } from '../../web/js/data.js';
-import { mergeRelatedTagCandidates, searchRelatedTags } from '../../web/js/related-tags.js';
+import { settingValues } from '../../web/js/settings.js';
+import {
+    RelatedTagsEventHandler,
+    mergeRelatedTagCandidates,
+    searchRelatedTags,
+} from '../../web/js/related-tags.js';
 
 describe('co-occurrence result snapshots', () => {
     beforeEach(() => {
@@ -22,6 +28,31 @@ describe('co-occurrence result snapshots', () => {
 
     test('returns the complete bounded snapshot in one calculation', () => {
         expect(searchRelatedTags('base_tag', 40)).toHaveLength(40);
+    });
+
+    test('does not open related tags on a plain click in Ctrl+click mode', () => {
+        const previousTriggerMode = settingValues.relatedTagsTriggerMode;
+        const hide = jest.fn();
+        const show = jest.fn();
+        const handler = {
+            relatedTagsUI: {
+                isPinned: false,
+                hide,
+                show,
+            },
+        };
+
+        settingValues.relatedTagsTriggerMode = 'ctrl+Click';
+        try {
+            expect(RelatedTagsEventHandler.prototype.handleClick.call(handler, {
+                ctrlKey: false,
+                target: {},
+            })).toBe(false);
+            expect(hide).toHaveBeenCalledTimes(1);
+            expect(show).not.toHaveBeenCalled();
+        } finally {
+            settingValues.relatedTagsTriggerMode = previousTriggerMode;
+        }
     });
 
     test('reuses the ranked co-occurrence cache across safety limits', () => {
