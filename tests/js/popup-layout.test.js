@@ -1,7 +1,4 @@
-import {
-    calculateAutocompletePlacement,
-    calculateRelatedTagsPlacement,
-} from '../../web/js/popup-layout.js';
+import { calculatePopupPlacement } from '../../web/js/popup-layout.js';
 
 const viewport = {
     viewportWidth: 800,
@@ -10,12 +7,10 @@ const viewport = {
 };
 
 describe('popup layout', () => {
-    test('keeps autocomplete inside the viewport and places it above a low caret', () => {
-        const placement = calculateAutocompletePlacement({
+    test('keeps a popup inside the viewport and places it above a low caret', () => {
+        const placement = calculatePopupPlacement({
             ...viewport,
-            caretLeft: 770,
-            caretTop: 540,
-            caretBottom: 560,
+            anchorRect: { left: 770, top: 540, bottom: 560 },
             preferredWidth: 672,
             preferredHeight: 320,
         });
@@ -27,14 +22,12 @@ describe('popup layout', () => {
         expect(placement.y + placement.height).toBeLessThanOrEqual(532);
     });
 
-    test('uses all available width on a small viewport without overflowing', () => {
-        const placement = calculateAutocompletePlacement({
+    test('uses all available popup width on a small viewport without overflowing', () => {
+        const placement = calculatePopupPlacement({
             viewportWidth: 360,
             viewportHeight: 480,
             margin: {},
-            caretLeft: 330,
-            caretTop: 100,
-            caretBottom: 120,
+            anchorRect: { left: 330, top: 100, bottom: 120 },
             preferredWidth: 672,
             preferredHeight: 320,
         });
@@ -43,85 +36,53 @@ describe('popup layout', () => {
         expect(placement.x).toBe(8);
     });
 
-    test('keeps a useful list height when neither side of the caret fits the preferred height', () => {
-        const placement = calculateAutocompletePlacement({
+    test('uses only the available side height when neither side fits the preferred height', () => {
+        const placement = calculatePopupPlacement({
             viewportWidth: 800,
             viewportHeight: 340,
             margin: {},
-            caretLeft: 160,
-            caretTop: 92,
-            caretBottom: 112,
+            anchorRect: { left: 160, top: 92, bottom: 112 },
             preferredWidth: 672,
             preferredHeight: 320,
         });
 
-        expect(placement.height).toBe(256);
-        expect(placement.y).toBeGreaterThanOrEqual(8);
+        expect(placement.height).toBe(212);
+        expect(placement.y).toBe(120);
         expect(placement.y + placement.height).toBeLessThanOrEqual(332);
     });
 
-    test('still caps autocomplete height to a genuinely tiny viewport', () => {
-        const placement = calculateAutocompletePlacement({
+    test('keeps the popup clear of the caret in a genuinely tiny viewport', () => {
+        const placement = calculatePopupPlacement({
             viewportWidth: 360,
             viewportHeight: 180,
             margin: {},
-            caretLeft: 120,
-            caretTop: 76,
-            caretBottom: 96,
+            anchorRect: { left: 120, top: 76, bottom: 96 },
             preferredWidth: 672,
             preferredHeight: 320,
         });
 
-        expect(placement.height).toBe(164);
-        expect(placement.y).toBe(8);
+        expect(placement.height).toBe(68);
+        expect(placement.y).toBe(104);
     });
 
-    test('uses the same caret placement for related tags and autocomplete', () => {
-        const placement = calculateRelatedTagsPlacement({
+    test('anchors the shared popup placement below a caret when there is room', () => {
+        const placement = calculatePopupPlacement({
             ...viewport,
-            anchorRect: { left: 500, right: 760, top: 180, bottom: 380 },
-            preferredWidth: 672,
-            preferredHeight: 360,
-        });
-        const autocompletePlacement = calculateAutocompletePlacement({
-            ...viewport,
-            caretLeft: 500,
-            caretTop: 180,
-            caretBottom: 380,
-            preferredWidth: 672,
-            preferredHeight: 360,
-        });
-
-        expect(placement).toEqual(autocompletePlacement);
-    });
-
-    test('uses the same caret placement for vertical related tags and autocomplete', () => {
-        const placement = calculateRelatedTagsPlacement({
-            ...viewport,
-            anchorRect: { left: 300, right: 600, top: 80, bottom: 180 },
-            preferredWidth: 672,
-            preferredHeight: 300,
-        });
-        const autocompletePlacement = calculateAutocompletePlacement({
-            ...viewport,
-            caretLeft: 300,
-            caretTop: 80,
-            caretBottom: 180,
+            anchorRect: { left: 300, top: 80, bottom: 180 },
             preferredWidth: 672,
             preferredHeight: 300,
         });
 
-        expect(placement).toEqual(autocompletePlacement);
         expect(placement.side).toBe('below');
         expect(placement.y).toBe(188);
     });
 
-    test('falls back above or below when neither side is usable', () => {
-        const placement = calculateRelatedTagsPlacement({
+    test('keeps the shared popup inside a small viewport', () => {
+        const placement = calculatePopupPlacement({
             viewportWidth: 480,
             viewportHeight: 600,
             margin: {},
-            anchorRect: { left: 80, right: 440, top: 220, bottom: 380 },
+            anchorRect: { left: 80, top: 220, bottom: 380 },
             preferredWidth: 672,
             preferredHeight: 320,
         });

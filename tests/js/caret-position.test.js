@@ -32,6 +32,24 @@ describe('caret position helpers', () => {
         expect(Number.isFinite(caret.left)).toBe(true);
     });
 
+    test('subtracts the textarea scroll offsets from the visible caret position', () => {
+        const unscrolled = getCaretCoordinates(textarea);
+        textarea.scrollTop = 40;
+        textarea.scrollLeft = 12;
+
+        const scrolled = getCaretCoordinates(textarea);
+
+        expect(scrolled.top).toBe(unscrolled.top - 40);
+        expect(scrolled.left).toBe(unscrolled.left - 12);
+    });
+
+    test('returns a complete viewport-relative caret anchor', () => {
+        const anchor = getScaledCaretAnchor(textarea, 1.5);
+
+        expect(anchor.right).toBe(anchor.left);
+        expect(anchor.bottom).toBe(anchor.top + anchor.lineHeight);
+    });
+
     test('applies ComfyUI canvas scale to the caret offset and line height', () => {
         const anchor = getScaledCaretAnchor(textarea, 1.5);
 

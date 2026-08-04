@@ -118,33 +118,12 @@ export function getCaretCoordinates(element) {
         lineHeight,
     };
     const rect = element.getBoundingClientRect();
-    coordinates.top = rect.top + element.scrollTop + coordinates.top;
-    coordinates.left = rect.left + element.scrollLeft + coordinates.left;
+    // The mirror describes the full unscrolled content, so convert it back to
+    // the visible viewport position before the popup layout uses it.
+    coordinates.top = rect.top - element.scrollTop + coordinates.top;
+    coordinates.left = rect.left - element.scrollLeft + coordinates.left;
     ownerDocument.body.removeChild(mirror);
     return coordinates;
-}
-
-/**
- * Returns the element's document-relative offset used to apply ComfyUI's
- * canvas scale to caret coordinates without changing the input's CSS.
- */
-export function calculateElementOffset(element) {
-    const rect = element.getBoundingClientRect();
-    const ownerDocument = element.ownerDocument;
-    if (ownerDocument == null) throw new Error('Given element does not belong to document');
-
-    const { defaultView, documentElement } = ownerDocument;
-    if (defaultView == null) throw new Error('Given element does not belong to window');
-
-    const offset = {
-        top: rect.top + defaultView.pageYOffset,
-        left: rect.left + defaultView.pageXOffset,
-    };
-    if (documentElement) {
-        offset.top -= documentElement.clientTop;
-        offset.left -= documentElement.clientLeft;
-    }
-    return offset;
 }
 
 function getRenderedScale(element, fallbackScale = 1) {
@@ -163,13 +142,23 @@ function getRenderedScale(element, fallbackScale = 1) {
     };
 }
 
+/**
+ * Returns a viewport-relative, scaled rectangle for the active caret.
+ * `right` equals `left` because the caret has no layout width.
+ */
 export function getScaledCaretAnchor(element, scale = 1) {
     const rect = element.getBoundingClientRect();
     const caret = getCaretCoordinates(element);
     const renderedScale = getRenderedScale(element, scale);
+    const left = rect.left + (caret.left - rect.left) * renderedScale.x;
+    const top = rect.top + (caret.top - rect.top) * renderedScale.y;
+    const lineHeight = caret.lineHeight * renderedScale.y;
+
     return {
-        left: rect.left + (caret.left - rect.left) * renderedScale.x,
-        top: rect.top + (caret.top - rect.top) * renderedScale.y,
-        lineHeight: caret.lineHeight * renderedScale.y,
+        left,
+        top,
+        right: left,
+        bottom: top + lineHeight,
+        lineHeight,
     };
 }

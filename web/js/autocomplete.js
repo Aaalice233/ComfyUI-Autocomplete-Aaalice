@@ -19,7 +19,7 @@ import {
     addWeightToLora,
     openTagWikiUrl
 } from './utils.js';
-import { calculateAutocompletePlacement } from './popup-layout.js';
+import { calculatePopupPlacement } from './popup-layout.js';
 import { settingValues } from './settings.js';
 import {
     isExplicitLoraManagerQuery,
@@ -877,13 +877,8 @@ class AutocompleteUI {
         const viewportHeight = window.innerHeight;
         const margin = getViewportMargin();
 
-        const { left: scaledCaretLeft, top: scaledCaretTop, lineHeight: scaledLineHeight } = (
-            getScaledCaretAnchor(this.target)
-        );
-        const placement = calculateAutocompletePlacement({
-            caretLeft: scaledCaretLeft,
-            caretTop: scaledCaretTop,
-            caretBottom: scaledCaretTop + scaledLineHeight,
+        const placement = calculatePopupPlacement({
+            anchorRect: getScaledCaretAnchor(this.target),
             preferredWidth: rootRect.width,
             preferredHeight: rootRect.height,
             viewportWidth,

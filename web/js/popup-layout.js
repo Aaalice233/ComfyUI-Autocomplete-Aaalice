@@ -1,6 +1,5 @@
 const VIEWPORT_INSET = 8;
 const ANCHOR_GAP = 8;
-const MIN_AUTOCOMPLETE_PANEL_HEIGHT = 256;
 
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
@@ -16,44 +15,10 @@ function getViewportBounds(viewportWidth, viewportHeight, margin = {}) {
 }
 
 /**
- * Place autocomplete near the caret while keeping a small amount of text
- * context visible before it.
+ * Place a caret-anchored popup while keeping a small amount of text context
+ * visible before it. All coordinates are viewport-relative pixels.
  */
-export function calculateAutocompletePlacement({
-    caretLeft,
-    caretTop,
-    caretBottom,
-    preferredWidth,
-    preferredHeight,
-    viewportWidth,
-    viewportHeight,
-    margin,
-}) {
-    const bounds = getViewportBounds(viewportWidth, viewportHeight, margin);
-    const availableWidth = Math.max(bounds.right - bounds.left, 0);
-    const responsiveWidth = Math.max(360, availableWidth * 0.62);
-    const width = Math.min(preferredWidth, availableWidth, responsiveWidth);
-    const leadingContext = Math.min(width * 0.12, 72);
-    const x = clamp(caretLeft - leadingContext, bounds.left, bounds.right - width);
-    const belowTop = caretBottom + ANCHOR_GAP;
-    const belowSpace = Math.max(bounds.bottom - belowTop, 0);
-    const aboveSpace = Math.max(caretTop - ANCHOR_GAP - bounds.top, 0);
-    const placeBelow = preferredHeight <= belowSpace || belowSpace >= aboveSpace;
-    const availableHeight = Math.max(bounds.bottom - bounds.top, 0);
-    const sideSpace = placeBelow ? belowSpace : aboveSpace;
-    const minimumUsefulHeight = Math.min(MIN_AUTOCOMPLETE_PANEL_HEIGHT, availableHeight);
-    const height = Math.min(preferredHeight, Math.max(sideSpace, minimumUsefulHeight), availableHeight);
-    const y = placeBelow
-        ? clamp(belowTop, bounds.top, bounds.bottom - height)
-        : clamp(caretTop - ANCHOR_GAP - height, bounds.top, bounds.bottom - height);
-
-    return { x, y, width, height, side: placeBelow ? 'below' : 'above' };
-}
-
-/**
- * Place the related-tags panel using the same caret placement as autocomplete.
- */
-export function calculateRelatedTagsPlacement({
+export function calculatePopupPlacement({
     anchorRect,
     preferredWidth,
     preferredHeight,
@@ -61,14 +26,25 @@ export function calculateRelatedTagsPlacement({
     viewportHeight,
     margin,
 }) {
-    return calculateAutocompletePlacement({
-        caretLeft: anchorRect.left,
-        caretTop: anchorRect.top,
-        caretBottom: anchorRect.bottom,
-        preferredWidth,
-        preferredHeight,
-        viewportWidth,
-        viewportHeight,
-        margin,
-    });
+    const { left: anchorLeft, top: anchorTop, bottom: anchorBottom } = anchorRect;
+    const bounds = getViewportBounds(viewportWidth, viewportHeight, margin);
+    const availableWidth = Math.max(bounds.right - bounds.left, 0);
+    const responsiveWidth = Math.max(360, availableWidth * 0.62);
+    const width = Math.min(preferredWidth, availableWidth, responsiveWidth);
+    const leadingContext = Math.min(width * 0.12, 72);
+    const x = clamp(anchorLeft - leadingContext, bounds.left, bounds.right - width);
+    const belowTop = anchorBottom + ANCHOR_GAP;
+    const belowSpace = Math.max(bounds.bottom - belowTop, 0);
+    const aboveSpace = Math.max(anchorTop - ANCHOR_GAP - bounds.top, 0);
+    const placeBelow = preferredHeight <= belowSpace || belowSpace >= aboveSpace;
+    const availableHeight = Math.max(bounds.bottom - bounds.top, 0);
+    const sideSpace = placeBelow ? belowSpace : aboveSpace;
+    // Never grow across the caret when neither side can fit the preferred
+    // height; a shorter list is less disruptive than covering the text.
+    const height = Math.min(preferredHeight, sideSpace, availableHeight);
+    const y = placeBelow
+        ? clamp(belowTop, bounds.top, bounds.bottom - height)
+        : clamp(anchorTop - ANCHOR_GAP - height, bounds.top, bounds.bottom - height);
+
+    return { x, y, width, height, side: placeBelow ? 'below' : 'above' };
 }

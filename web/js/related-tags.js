@@ -36,7 +36,7 @@ import {
     normalizeTagToSearch,
     openTagWikiUrl
 } from './utils.js';
-import { calculateRelatedTagsPlacement } from './popup-layout.js';
+import { calculatePopupPlacement } from './popup-layout.js';
 import { getScaledCaretAnchor } from './caret-position.js';
 import { createAutocompleteFooter } from './autocomplete-footer.js';
 
@@ -846,15 +846,8 @@ class RelatedTagsUI {
         this.tagsContainer.style.maxHeight = 'min(320px, calc(100vh - 24px))';
         const rootRect = this.root.getBoundingClientRect();
 
-        const caret = getScaledCaretAnchor(this.target);
-        const anchorRect = {
-            left: caret.left,
-            right: caret.left,
-            top: caret.top,
-            bottom: caret.top + caret.lineHeight,
-        };
-        const placementArea = calculateRelatedTagsPlacement({
-            anchorRect,
+        const placementArea = calculatePopupPlacement({
+            anchorRect: getScaledCaretAnchor(this.target),
             preferredWidth: rootRect.width,
             preferredHeight: rootRect.height,
             viewportWidth: window.innerWidth,
