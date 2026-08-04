@@ -1,4 +1,12 @@
-import { TagCategory, TagData, TagSource, autoCompleteData, getEnabledTagSourceInPriorityOrder } from './data.js';
+import {
+    TagCategory,
+    TagData,
+    TagSource,
+    autoCompleteData,
+    getDataSourceStatus,
+    getEnabledTagSourceInPriorityOrder,
+    loadDataAsync,
+} from './data.js';
 import { settingValues } from './settings.js';
 import {
     createTagOriginMarkers,
@@ -12,6 +20,7 @@ import { getCurrentInterfaceLocale, getInterfaceText } from './localization.js';
 import { searchDanbooruRelatedTags } from './integrations/danbooru-provider.js';
 import {
     getCandidateTranslationState,
+    invalidateTranslationCatalog,
     resolveCandidateTranslationsProgressively,
 } from './integrations/translation-provider.js';
 import { VirtualKeyedList } from './list-utils.js';
@@ -92,12 +101,13 @@ export function searchRelatedTags(tag, resultLimit = settingValues.maxRelatedTag
     const startTime = performance.now(); // Record start time for performance measurement
 
     const tagSource = TagSource.Danbooru; // TODO: Leave the tag source as Danbooru until e621_tags_cooccurrence.csv is ready
+    const data = autoCompleteData[tagSource];
 
-    if (!tag || !autoCompleteData[tagSource].initialized || !autoCompleteData[tagSource].cooccurrenceMap.has(tag)) {
+    if (!tag || !data?.initialized || !data.cooccurrenceMap.has(tag)) {
         return [];
     }
 
-    const cooccurrences = autoCompleteData[tagSource].cooccurrenceMap.get(tag);
+    const cooccurrences = data.cooccurrenceMap.get(tag);
     const cached = relatedTagsCache.get(cooccurrences);
     if (cached) return cached.slice(0, resultLimit);
 
@@ -376,16 +386,7 @@ class RelatedTagsUI {
     }
 
     #getCooccurrenceStatus() {
-        const data = autoCompleteData[TagSource.Danbooru];
-        if (!data) return { state: 'waiting' };
-        if (data.initialized) return { state: 'ready' };
-        if (data.isInitializing) {
-            return {
-                state: 'loading',
-                progress: data.baseLoadingProgress?.cooccurrence ?? 0,
-            };
-        }
-        return { state: 'waiting' };
+        return getDataSourceStatus(TagSource.Danbooru);
     }
 
     /**
@@ -425,7 +426,7 @@ class RelatedTagsUI {
         // Click-triggered related tags should not replace useful autocomplete
         // suggestions with an empty panel. Manual triggers keep the empty-state
         // feedback so the user can tell that the command was handled.
-        if (!showEmptyState && autoCompleteData[TagSource.Danbooru].initialized && this.relatedTags.length === 0) {
+        if (!showEmptyState && autoCompleteData[TagSource.Danbooru]?.initialized && this.relatedTags.length === 0) {
             this.hide();
             return false;
         }
@@ -472,12 +473,13 @@ class RelatedTagsUI {
             this.relatedAbortController.signal,
         );
 
-        // Update initialization status if not already done
-        if (!autoCompleteData[TagSource.Danbooru].initialized) {
+        // Keep the open panel current while the local co-occurrence index is building.
+        if (this.#getCooccurrenceStatus().state === 'loading' || this.#getCooccurrenceStatus().state === 'waiting') {
             if (this.autoRefreshTimerId) {
                 clearTimeout(this.autoRefreshTimerId);
             }
             this.autoRefreshTimerId = setTimeout(() => {
+                this.autoRefreshTimerId = null;
                 this.#refresh();
             }, 500);
         }
@@ -631,6 +633,19 @@ class RelatedTagsUI {
         }
     }
 
+    refresh() {
+        if (this.target) this.#refresh();
+    }
+
+    refreshStatus() {
+        if (!this.target) return;
+        if (this.#getCooccurrenceStatus().state === 'error' && this.autoRefreshTimerId) {
+            clearTimeout(this.autoRefreshTimerId);
+            this.autoRefreshTimerId = null;
+        }
+        this.#updateContent();
+    }
+
     /**
      * Updates header content
      */
@@ -696,14 +711,36 @@ class RelatedTagsUI {
      * Updates the content of the related tags panel with the provided tags.
      */
     #updateContent() {
-        this.footer.setCooccurrenceStatus(this.#getCooccurrenceStatus());
-        if (!autoCompleteData[TagSource.Danbooru].initialized) {
-            // Show loading message
+        const cooccurrenceStatus = this.#getCooccurrenceStatus();
+        this.footer.setCooccurrenceStatus(cooccurrenceStatus);
+        if (cooccurrenceStatus.state !== 'ready') {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'related-tags-message';
-            messageDiv.textContent = getInterfaceText('initializingCooccurrence', {
-                progress: autoCompleteData[TagSource.Danbooru].baseLoadingProgress.cooccurrence,
-            });
+
+            const messageText = document.createElement('span');
+            messageText.textContent = cooccurrenceStatus.state === 'error'
+                ? getInterfaceText('cooccurrenceLoadFailed')
+                : getInterfaceText('initializingCooccurrence', {
+                    progress: cooccurrenceStatus.progress ?? 0,
+                });
+            messageDiv.append(messageText);
+
+            if (cooccurrenceStatus.state === 'error') {
+                const retryButton = document.createElement('button');
+                retryButton.type = 'button';
+                retryButton.className = 'related-tags-retry';
+                retryButton.textContent = getInterfaceText('retry');
+                retryButton.addEventListener('click', () => {
+                    retryButton.disabled = true;
+                    retryButton.setAttribute('aria-busy', 'true');
+                    invalidateTranslationCatalog(getCurrentInterfaceLocale());
+                    void loadDataAsync({ retry: true }).catch(error => {
+                        console.error('[Autocomplete-Plus] Failed to retry data initialization:', error);
+                    });
+                });
+                messageDiv.append(retryButton);
+            }
+
             this.tagsContainer.replaceChildren(messageDiv);
             return;
         }
@@ -931,6 +968,14 @@ export class RelatedTagsEventHandler {
 
     hide() {
         this.relatedTagsUI.hide();
+    }
+
+    refresh() {
+        this.relatedTagsUI.refresh();
+    }
+
+    refreshStatus() {
+        this.relatedTagsUI.refreshStatus();
     }
 
     /**

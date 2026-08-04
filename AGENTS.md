@@ -7,6 +7,7 @@
 - `modules/` 存放 ComfyUI 使用的 Python API 和 CSV 下载器；`__init__.py` 暴露 Web 目录并初始化数据下载。
 - `tests/js/` 存放 Jest 测试，文件命名为 `*.test.js`。
 - `locales/<language>/` 存放界面翻译。
+- `docs/` 存放多语言用户 README 和维护者开发测试说明。
 - `data/` 存放标签和共现 CSV。除非需求明确涉及数据集，否则不要提交下载或重新生成的数据。
 
 ## 构建、测试与开发命令
@@ -37,6 +38,13 @@ JavaScript 使用四空格缩进、分号和现有 ES Module 风格。函数与�
 ## 测试规范
 
 针对解析、光标边界、标签插入和事件协作补充或更新 Jest 测试。测试名应描述可观察行为，例如 `should return the previous tag after a trailing comma`。提交前运行完整 Jest 测试。UI 改动还需在当前版本 ComfyUI 中手动验证；适用时覆盖 Nodes 2.0 输入框。
+
+## 启动初始化约束
+
+- `web/js/main.js` 中扩展的 `setup()` 必须同步返回；ComfyUI 会等待扩展 setup 完成后才关闭全局启动遮罩，禁止在其中 `await` CSV、模型索引、在线服务或其他可延迟任务。
+- `web/js/data.js` 的 `loadDataAsync()` 只负责后台初始化，并通过 `DATA_TAGS_READY_EVENT`、`DATA_TAGS_COMPLETE_EVENT`、`DATA_READY_EVENT` 和 `DATA_STATUS_CHANGED_EVENT` 通知各功能阶段；修改数据加载流程时必须保留分阶段可用、未就绪回退、错误可重试和并发 Promise 去重。
+- `tests/js/data-loading.test.js` 是该生命周期的回归边界，至少覆盖占位数据源、并发调用复用、标签先于共现数据就绪、失败重试和就绪事件；相关改动先运行该测试，再运行完整 Jest。
+- 该约束修复了 fork 前上游已有的启动等待问题，详见 `docs/development/testing.md`。
 
 ## 文档要求
 

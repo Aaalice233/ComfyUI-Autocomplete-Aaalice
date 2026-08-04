@@ -146,7 +146,12 @@ class AutocompleteData {
         this.cooccurrenceMap = new Map();
 
         this.isInitializing = false;
+        this.tagsInitialized = false;
+        this.cooccurrenceInitialized = false;
         this.initialized = false;
+        this.error = null;
+        this.tagsLoadingPromise = null;
+        this.loadingPromise = null;
 
         // Progress of "base" csv loading
         this.baseLoadingProgress = {
@@ -160,6 +165,64 @@ class AutocompleteData {
  */
 export const autoCompleteData = {};
 
+export const DATA_TAGS_READY_EVENT = 'autocomplete-plus:data-tags-ready';
+export const DATA_TAGS_COMPLETE_EVENT = 'autocomplete-plus:data-tags-complete';
+export const DATA_READY_EVENT = 'autocomplete-plus:data-ready';
+export const DATA_STATUS_CHANGED_EVENT = 'autocomplete-plus:data-status-changed';
+
+let dataLoadPromise = null;
+let dataLoadState = 'idle';
+let dataLoadError = null;
+
+function dispatchDataEvent(eventName) {
+    if (typeof globalThis.window?.dispatchEvent !== 'function' || typeof Event !== 'function') return;
+    globalThis.window.dispatchEvent(new Event(eventName));
+}
+
+export function ensureDataSources() {
+    for (const source of [...Object.values(TagSource), ...Object.values(ModelTagSource)]) {
+        if (!autoCompleteData[source]) {
+            autoCompleteData[source] = new AutocompleteData();
+        }
+    }
+
+    autoCompleteData[ModelTagSource.Wildcard].tagsInitialized = true;
+    autoCompleteData[ModelTagSource.Wildcard].cooccurrenceInitialized = true;
+    autoCompleteData[ModelTagSource.Wildcard].initialized = true;
+    return autoCompleteData;
+}
+
+export function getDataSourceStatus(source) {
+    const data = autoCompleteData[source];
+    if (!data) return { state: 'waiting', progress: 0 };
+    const isTagSource = Object.values(TagSource).includes(source);
+    const isReady = isTagSource
+        ? (data.initialized || (data.tagsInitialized && data.cooccurrenceInitialized))
+        : data.initialized;
+    if (isReady) return { state: 'ready', progress: 100 };
+    if (data.error) {
+        return {
+            state: 'error',
+            progress: data.baseLoadingProgress?.cooccurrence ?? 0,
+            error: data.error?.message || String(data.error),
+        };
+    }
+    if (data.isInitializing) {
+        return {
+            state: 'loading',
+            progress: data.baseLoadingProgress?.cooccurrence ?? 0,
+        };
+    }
+    return { state: 'waiting', progress: 0 };
+}
+
+export function getDataLoadStatus() {
+    return {
+        state: dataLoadState,
+        error: dataLoadError?.message || (dataLoadError ? String(dataLoadError) : null),
+    };
+}
+
 // CSV Header for tags
 const TAGS_CSV_HEADER = 'tag,category,count,alias';
 const TAGS_CSV_HEADER_COLUMNS = TAGS_CSV_HEADER.split(',');
@@ -169,7 +232,22 @@ const COUNT_INDEX = TAGS_CSV_HEADER_COLUMNS.indexOf('count');
 const ALIAS_INDEX = TAGS_CSV_HEADER_COLUMNS.indexOf('alias');
 const TAG_PARSE_CHUNK_SIZE = 2000;
 const COOCCURRENCE_PARSE_CHUNK_SIZE = 3000;
+const CHUNK_TIME_BUDGET_MS = 8;
 const MAX_COOCCURRENCES_PER_TAG = 2000;
+
+function scheduleChunk(callback) {
+    if (typeof globalThis.requestIdleCallback === 'function') {
+        globalThis.requestIdleCallback(callback, { timeout: 100 });
+    } else {
+        setTimeout(callback, 0);
+    }
+}
+
+function shouldYieldChunk(startTime, processedCount) {
+    return processedCount >= 100
+        && processedCount % 100 === 0
+        && performance.now() - startTime >= CHUNK_TIME_BUDGET_MS;
+}
 
 // --- Helder Functions ---
 
@@ -204,21 +282,16 @@ export function getEnabledTagSourceInPriorityOrder() {
  * @returns {Promise<void>}
  */
 async function loadTags(csvUrl, siteName) {
-    try {
-        const response = await fetch(csvUrl, { cache: "no-store" });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const csvText = await response.text();
-        const lines = csvText.split('\n');
-
-        const startIndex = lines[0].toLowerCase().startsWith(TAGS_CSV_HEADER) ? 1 : 0;
-
-        await processTagLinesInChunks(lines, startIndex, csvUrl, siteName);
-
-    } catch (error) {
-        console.error(`[Autocomplete-Plus] Failed to fetch or process tags from ${csvUrl}:`, error);
+    const response = await fetch(csvUrl, { cache: "no-store" });
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
     }
+    const csvText = await response.text();
+    const lines = csvText.split('\n');
+
+    const startIndex = lines[0].toLowerCase().startsWith(TAGS_CSV_HEADER) ? 1 : 0;
+
+    await processTagLinesInChunks(lines, startIndex, csvUrl, siteName);
 }
 
 function processTagLinesInChunks(lines, startIndex, csvUrl, siteName) {
@@ -227,7 +300,10 @@ function processTagLinesInChunks(lines, startIndex, csvUrl, siteName) {
 
         function processChunk() {
             const endIndex = Math.min(i + TAG_PARSE_CHUNK_SIZE, lines.length);
+            const chunkStart = i;
+            const chunkStartTime = performance.now();
             for (; i < endIndex; i++) {
+                if (shouldYieldChunk(chunkStartTime, i - chunkStart)) break;
                 const line = lines[i];
                 if (!line.trim()) continue;
                 const columns = parseCSVLine(line);
@@ -255,13 +331,13 @@ function processTagLinesInChunks(lines, startIndex, csvUrl, siteName) {
             }
 
             if (i < lines.length) {
-                setTimeout(processChunk, 0);
+                scheduleChunk(processChunk);
             } else {
                 resolve();
             }
         }
 
-        processChunk();
+        scheduleChunk(processChunk);
     });
 }
 
@@ -290,14 +366,17 @@ async function buildFlexSearchIndex(siteName) {
             function processChunkTasks() {
                 const chunkSize = 1000;
                 const end = Math.min(startIdx + chunkSize, autoCompleteData[siteName].sortedTags.length);
+                const chunkStart = startIdx;
+                const chunkStartTime = performance.now();
                 for (; startIdx < end; startIdx++) {
+                    if (shouldYieldChunk(chunkStartTime, startIdx - chunkStart)) break;
                     const tagData = autoCompleteData[siteName].sortedTags[startIdx];
                     autoCompleteData[siteName].tagIndexMap.set(tagData.tag, startIdx);
                     document.add(startIdx, tagData);
                 }
 
                 if (startIdx < autoCompleteData[siteName].sortedTags.length) {
-                    setTimeout(processChunkTasks, 0);
+                    scheduleChunk(processChunkTasks);
                 } else {
                     autoCompleteData[siteName].flexSearchDocument = document;
                     const endTime = performance.now();
@@ -306,10 +385,11 @@ async function buildFlexSearchIndex(siteName) {
                     resolve();
                 }
             }
-            processChunkTasks();
+            scheduleChunk(processChunkTasks);
         });
     } catch (error) {
         console.error(`[Autocomplete-Plus] Failed to building flexSearch index`, error);
+        throw error;
     }
 }
 
@@ -320,21 +400,17 @@ async function buildFlexSearchIndex(siteName) {
  * @returns {Promise<void>}
  */
 async function loadCooccurrence(csvUrl, siteName) {
-    try {
-        const response = await fetch(csvUrl, { cache: "no-store" });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const csvText = await response.text();
-        const lines = csvText.split('\n');
-
-        const startIndex = lines[0].startsWith('tag_a,tag_b,count') ? 1 : 0;
-
-        await processInChunks(lines, startIndex, autoCompleteData[siteName].cooccurrenceMap, csvUrl, siteName);
-    } catch (error) {
-        console.error(`[Autocomplete-Plus] Failed to fetch or process cooccurrence data from ${csvUrl}:`, error);
+    const response = await fetch(csvUrl, { cache: "no-store" });
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    const csvText = await response.text();
+    const lines = csvText.split('\n');
+
+    const startIndex = lines[0].startsWith('tag_a,tag_b,count') ? 1 : 0;
+
+    await processInChunks(lines, startIndex, autoCompleteData[siteName].cooccurrenceMap, csvUrl, siteName);
 }
 
 /**
@@ -347,8 +423,11 @@ function processInChunks(lines, startIndex, targetMap, csvUrl, siteName) {
 
         function processChunk() {
             const endIndex = Math.min(i + COOCCURRENCE_PARSE_CHUNK_SIZE, lines.length);
+            const chunkStart = i;
+            const chunkStartTime = performance.now();
 
             for (; i < endIndex; i++) {
+                if (shouldYieldChunk(chunkStartTime, i - chunkStart)) break;
                 const line = lines[i];
                 if (!line.trim()) continue;
                 const columns = parseCSVLine(line);
@@ -368,14 +447,14 @@ function processInChunks(lines, startIndex, targetMap, csvUrl, siteName) {
 
             if (i < lines.length) {
                 autoCompleteData[siteName].baseLoadingProgress.cooccurrence = Math.round((i / lines.length) * 100);
-                setTimeout(processChunk, 0);
+                scheduleChunk(processChunk);
             } else {
                 autoCompleteData[siteName].baseLoadingProgress.cooccurrence = 100;
                 resolve();
             }
         }
 
-        processChunk();
+        scheduleChunk(processChunk);
     });
 }
 
@@ -425,198 +504,316 @@ function parseCSVLine(line) {
 
 /**
  * Fetch the list of CSV files from the API endpoint
- * @returns {Promise<void>}
+ * @returns {Promise<Object>}
  */
 async function fetchCsvList() {
-    try {
-        const response = await fetch('/autocomplete-plus/csv');
-        if (!response.ok) {
-            throw new Error(`[Autocomplete-Plus] Failed to fetch CSV list: ${response.status} ${response.statusText}`);
-        }
-        return await response.json();
-    } catch (error) {
-        console.error("[Autocomplete-Plus] Error fetch csv data:", error);
+    const response = await fetch('/autocomplete-plus/csv');
+    if (!response.ok) {
+        throw new Error(`[Autocomplete-Plus] Failed to fetch CSV list: ${response.status} ${response.statusText}`);
     }
-
-    return null;
+    const csvList = await response.json();
+    if (!csvList || typeof csvList !== 'object') {
+        throw new Error('[Autocomplete-Plus] CSV list response was invalid.');
+    }
+    return csvList;
 }
 
 /**
  * Initializes the autocomplete data by fetching the list of CSV files and loading them.
  */
-async function initializeDataFromCSV(csvListData, source) {
-    if (autoCompleteData.hasOwnProperty(source) === false) {
-        autoCompleteData[source] = new AutocompleteData();
-    }
-
-    if (autoCompleteData[source].isInitializing || autoCompleteData[source].initialized) {
-        return;
-    }
+function initializeDataFromCSV(csvListData, source) {
+    ensureDataSources();
+    const data = autoCompleteData[source];
+    if (data.initialized) return data.loadingPromise ?? Promise.resolve();
+    if (data.loadingPromise) return data.loadingPromise;
 
     const startTime = performance.now();
-    autoCompleteData[source].isInitializing = true;
+    data.isInitializing = true;
+    data.error = null;
+    data.baseLoadingProgress.cooccurrence = 0;
 
-    try {
-        // Store functions that return Promises (Promise Factories)
-        // These factories will be called later to start the actual loading.
-        const tagsLoadPromiseFactories = [];
-        const cooccurrenceLoadPromiseFactories = [];
-
-        // Check if siteName exists in csvListData to prevent errors if a sourte is removed or misconfigured
-        if (!csvListData[source]) {
-            console.warn(`[Autocomplete-Plus] CSV list data not found for sourte: ${source}. Skipping.`);
+    const loadingPromise = (async () => {
+        const sourceData = csvListData?.[source];
+        if (!sourceData) {
+            console.warn(`[Autocomplete-Plus] CSV list data not found for source: ${source}. Treating it as empty.`);
+            data.tagsLoadingPromise = Promise.resolve();
+            data.tagsInitialized = true;
+            data.cooccurrenceInitialized = true;
+            data.initialized = true;
+            dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+            dispatchDataEvent(DATA_TAGS_READY_EVENT);
             return;
         }
 
-        const extraTagsFileList = csvListData[source].extra_tags || [];
-        const extraCooccurrenceFileList = csvListData[source].extra_cooccurrence || [];
-
+        const extraTagsFileList = sourceData.extra_tags || [];
+        const extraCooccurrenceFileList = sourceData.extra_cooccurrence || [];
         const tagsUrl = `/autocomplete-plus/csv/${source}/tags`;
         const cooccurrenceUrl = `/autocomplete-plus/csv/${source}/tags_cooccurrence`;
 
-        // Factory for loading tags for the current sourte
-        const siteTagsLoaderFactory = async () => {
-            let promiseChain = Promise.resolve();
+        const loadTagsData = async () => {
             for (let i = 0; i < extraTagsFileList.length; i++) {
-                promiseChain = promiseChain.then(() => loadTags(`${tagsUrl}/extra/${i}`, source));
+                await loadTags(`${tagsUrl}/extra/${i}`, source);
             }
-            if (csvListData[source].base_tags) {
-                promiseChain = promiseChain.then(() => loadTags(`${tagsUrl}/base`, source));
+            if (sourceData.base_tags) {
+                await loadTags(`${tagsUrl}/base`, source);
             }
-            return promiseChain;
         };
-        tagsLoadPromiseFactories.push(siteTagsLoaderFactory);
 
-        // Factory for loading cooccurrence data for the current sourte
-        const siteCooccurrenceLoaderFactory = async () => {
-            let promiseChain = Promise.resolve();
+        const loadCooccurrenceData = async () => {
             for (let i = 0; i < extraCooccurrenceFileList.length; i++) {
-                promiseChain = promiseChain.then(() => loadCooccurrence(`${cooccurrenceUrl}/extra/${i}`, source));
+                await loadCooccurrence(`${cooccurrenceUrl}/extra/${i}`, source);
             }
-            if (csvListData[source].base_cooccurrence) {
-                promiseChain = promiseChain.then(() => loadCooccurrence(`${cooccurrenceUrl}/base`, source));
+            if (sourceData.base_cooccurrence) {
+                await loadCooccurrence(`${cooccurrenceUrl}/base`, source);
             }
-            return promiseChain;
         };
-        cooccurrenceLoadPromiseFactories.push(siteCooccurrenceLoaderFactory);
 
-        // Now, execute all promise factories and wait for their completion.
-        // The actual loading (fetch calls) will start when the factories are invoked here.
-        await Promise.all([
-            Promise.all(tagsLoadPromiseFactories.map(factory => factory()))
-                .then(() => {
-                    // Sort by count in descending order
-                    autoCompleteData[source].sortedTags.sort((a, b) => b.count - a.count);
-
-                    // Build FlexSearch index after tags are loaded
-                    return buildFlexSearchIndex(source);
-                })
-                .then(() => {
-                    const endTime = performance.now();
-                    if (csvListData[source].base_tags) {
-                        console.log(`[Autocomplete-Plus] "${source}" Tags loading complete in ${(endTime - startTime).toFixed(2)}ms`);
-                    }
-                }),
-            Promise.all(cooccurrenceLoadPromiseFactories.map(factory => factory())).then(() => {
-                const endTime = performance.now();
-                if (csvListData[source].base_cooccurrence) {
-                    console.log(`[Autocomplete-Plus] "${source}" Co-occurrence loading complete in ${(endTime - startTime).toFixed(2)}ms.`);
-                }
+        // Co-occurrence data is much larger; autocomplete and translations must not wait for it.
+        const tagsLoadingPromise = loadTagsData()
+            .then(() => {
+                data.sortedTags.sort((a, b) => b.count - a.count);
+                return buildFlexSearchIndex(source);
             })
-        ]);
+            .then(() => {
+                data.tagsInitialized = true;
+                dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+                dispatchDataEvent(DATA_TAGS_READY_EVENT);
+                const endTime = performance.now();
+                if (sourceData.base_tags) {
+                    console.log(`[Autocomplete-Plus] "${source}" Tags loading complete in ${(endTime - startTime).toFixed(2)}ms`);
+                }
+            });
+        data.tagsLoadingPromise = tagsLoadingPromise;
 
-        autoCompleteData[source].initialized = true;
-    } catch (error) {
-        console.error("[Autocomplete-Plus] Error initializing autocomplete data:", error);
-    } finally {
-        autoCompleteData[source].isInitializing = false;
-    }
+        const cooccurrenceLoadingPromise = loadCooccurrenceData().then(() => {
+            data.cooccurrenceInitialized = true;
+            dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+            const endTime = performance.now();
+            if (sourceData.base_cooccurrence) {
+                console.log(`[Autocomplete-Plus] "${source}" Co-occurrence loading complete in ${(endTime - startTime).toFixed(2)}ms.`);
+            }
+        });
+
+        await Promise.all([tagsLoadingPromise, cooccurrenceLoadingPromise]);
+        data.initialized = data.tagsInitialized && data.cooccurrenceInitialized;
+    })()
+        .catch(error => {
+            data.error = error;
+            console.error(`[Autocomplete-Plus] Error initializing ${source} data:`, error);
+            throw error;
+        })
+        .finally(() => {
+            data.isInitializing = false;
+            if (data.loadingPromise === loadingPromise) data.loadingPromise = null;
+            dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+        });
+
+    data.loadingPromise = loadingPromise;
+    return loadingPromise;
 }
 
 /**
  * Load Embeddings data from the API endpoint
  * @returns {Promise<void>}
  */
-async function loadEmbeddings() {
-    try {
+function loadEmbeddings() {
+    ensureDataSources();
+    const source = ModelTagSource.Embeddings;
+    const data = autoCompleteData[source];
+    if (data.initialized) return;
+    if (data.loadingPromise) return data.loadingPromise;
+
+    data.isInitializing = true;
+    data.error = null;
+    const loadingPromise = (async () => {
         const response = await fetch('/autocomplete-plus/embeddings', { cache: "no-store" });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const embeddings = await response.json();
-        const source = ModelTagSource.Embeddings;
-
-        if (autoCompleteData.hasOwnProperty(source) === false) {
-            autoCompleteData[source] = new AutocompleteData();
-        }
 
         embeddings.forEach(embedding => {
-            if (!autoCompleteData[source].tagMap.has(embedding)) {
+            if (!data.tagMap.has(embedding)) {
                 const tagData = new TagData(`embedding:${embedding}`, 0, 0, [], source);
-                autoCompleteData[source].sortedTags.push(tagData);
-                autoCompleteData[source].tagMap.set(embedding, tagData);
-
+                data.sortedTags.push(tagData);
+                data.tagMap.set(embedding, tagData);
                 updateMaxTagLength(embedding.length);
             }
         });
 
-        await buildFlexSearchIndex(ModelTagSource.Embeddings);
-
+        await buildFlexSearchIndex(source);
+        data.tagsInitialized = true;
+        data.cooccurrenceInitialized = true;
+        data.initialized = true;
+        dispatchDataEvent(DATA_TAGS_READY_EVENT);
         console.log(`[Autocomplete-Plus] Loaded ${embeddings.length} Embeddings`);
-    } catch (error) {
-        console.error(`[Autocomplete-Plus] Failed to fetch Embeddings data:`, error);
-    }
+    })()
+        .catch(error => {
+            data.error = error;
+            console.error(`[Autocomplete-Plus] Failed to fetch Embeddings data:`, error);
+        })
+        .finally(() => {
+            data.isInitializing = false;
+            if (data.loadingPromise === loadingPromise) data.loadingPromise = null;
+            dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+        });
+
+    data.loadingPromise = loadingPromise;
+    return loadingPromise;
 }
 
 /**
  * Load LoRA data from the API endpoint
  * @returns {Promise<void>}
  */
-async function loadLoras() {
-    try {
+function loadLoras() {
+    ensureDataSources();
+    const source = ModelTagSource.Lora;
+    const data = autoCompleteData[source];
+    if (data.initialized) return;
+    if (data.loadingPromise) return data.loadingPromise;
+
+    data.isInitializing = true;
+    data.error = null;
+    const loadingPromise = (async () => {
         const response = await fetch('/autocomplete-plus/loras', { cache: "no-store" });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const loraNames = await response.json();
-        const source = ModelTagSource.Lora;
-
-        if (autoCompleteData.hasOwnProperty(source) === false) {
-            autoCompleteData[source] = new AutocompleteData();
-        }
 
         loraNames.forEach(loraName => {
-            if (!autoCompleteData[source].tagMap.has(loraName)) {
+            if (!data.tagMap.has(loraName)) {
                 const tagData = new TagData(`<lora:${loraName}>`, 0, 0, [], source);
-                autoCompleteData[source].sortedTags.push(tagData);
-                autoCompleteData[source].tagMap.set(loraName, tagData);
-
+                data.sortedTags.push(tagData);
+                data.tagMap.set(loraName, tagData);
                 updateMaxTagLength(loraName.length);
             }
         });
 
-        await buildFlexSearchIndex(ModelTagSource.Lora);
-
+        await buildFlexSearchIndex(source);
+        data.tagsInitialized = true;
+        data.cooccurrenceInitialized = true;
+        data.initialized = true;
+        dispatchDataEvent(DATA_TAGS_READY_EVENT);
         console.log(`[Autocomplete-Plus] Loaded ${loraNames.length} LoRA models`);
-    } catch (error) {
-        console.error(`[Autocomplete-Plus] Failed to fetch LoRA data:`, error);
+    })()
+        .catch(error => {
+            data.error = error;
+            console.error(`[Autocomplete-Plus] Failed to fetch LoRA data:`, error);
+        })
+        .finally(() => {
+            data.isInitializing = false;
+            if (data.loadingPromise === loadingPromise) data.loadingPromise = null;
+            dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+        });
+
+    data.loadingPromise = loadingPromise;
+    return loadingPromise;
+}
+
+function resetDataSources() {
+    for (const source of [...Object.values(TagSource), ...Object.values(ModelTagSource)]) {
+        if (source !== ModelTagSource.Wildcard) {
+            autoCompleteData[source] = new AutocompleteData();
+        }
     }
+    ensureDataSources();
+}
+
+function throwFirstRejected(results) {
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure) throw failure.reason;
 }
 
 /**
  * Load all data sources asynchronously.
+ *
+ * The returned promise represents background preparation only. Callers that
+ * initialize the host application must not await it during startup.
+ * @returns {Promise<void>}
  */
-export async function loadDataAsync() {
-    if (!autoCompleteData[ModelTagSource.Wildcard]) {
-        autoCompleteData[ModelTagSource.Wildcard] = new AutocompleteData();
-        autoCompleteData[ModelTagSource.Wildcard].initialized = true;
+export function loadDataAsync({ retry = false } = {}) {
+    ensureDataSources();
+    if (dataLoadPromise) return dataLoadPromise;
+    if (dataLoadState === 'ready') return Promise.resolve();
+    if (dataLoadState === 'error') {
+        if (!retry) return Promise.reject(dataLoadError);
+        resetDataSources();
     }
-    return Promise.all([
-        fetchCsvList().then((csvList) => {
-            return Promise.all(Object.values(TagSource).map((source) =>
-                initializeDataFromCSV(csvList, source)));
-        }),
+
+    dataLoadState = 'loading';
+    dataLoadError = null;
+    for (const source of Object.values(TagSource)) {
+        const data = autoCompleteData[source];
+        if (!data.initialized) {
+            data.isInitializing = true;
+            data.error = null;
+        }
+    }
+    dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+
+    const tagLoadingPromise = fetchCsvList().then(csvList => {
+        const sourceLoadingPromises = Object.values(TagSource).map(source =>
+            initializeDataFromCSV(csvList, source),
+        );
+        const tagsReadyPromise = Promise.all(
+            Object.values(TagSource).map(source =>
+                autoCompleteData[source].tagsLoadingPromise ?? Promise.resolve(),
+            ),
+        ).then(() => {
+            dispatchDataEvent(DATA_TAGS_COMPLETE_EVENT);
+        });
+        const sourcesCompletePromise = Promise.allSettled(sourceLoadingPromises).then(results => {
+            throwFirstRejected(results);
+        });
+        return Promise.allSettled([tagsReadyPromise, sourcesCompletePromise]).then(results => {
+            throwFirstRejected(results);
+        });
+    });
+    const loadingPromise = Promise.allSettled([
+        tagLoadingPromise,
         loadEmbeddings(),
         loadLoras(),
-    ]);
+    ])
+        .then(results => {
+            throwFirstRejected(results);
+            dataLoadState = 'ready';
+            dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+            dispatchDataEvent(DATA_READY_EVENT);
+        })
+        .catch(error => {
+            dataLoadState = 'error';
+            dataLoadError = error;
+            for (const source of Object.values(TagSource)) {
+                const data = autoCompleteData[source];
+                if (!data.initialized) {
+                    data.isInitializing = false;
+                    data.error ??= error;
+                }
+            }
+            dispatchDataEvent(DATA_STATUS_CHANGED_EVENT);
+            throw error;
+        })
+        .finally(() => {
+            if (dataLoadPromise === loadingPromise) dataLoadPromise = null;
+        });
+
+    dataLoadPromise = loadingPromise;
+    return loadingPromise;
 }
+
+const isTestEnvironment = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
+export const __test__ = isTestEnvironment
+    ? {
+        resetDataLoadingState() {
+            dataLoadPromise = null;
+            dataLoadState = 'idle';
+            dataLoadError = null;
+            for (const source of Object.keys(autoCompleteData)) {
+                delete autoCompleteData[source];
+            }
+            ensureDataSources();
+        },
+    }
+    : undefined;

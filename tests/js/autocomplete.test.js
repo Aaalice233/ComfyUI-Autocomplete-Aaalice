@@ -172,6 +172,23 @@ describe('Autocomplete Functions', () => {
         settingValues.useFastSearch = true;
     });
 
+    test('falls back safely while a source is still loading', () => {
+        settingValues.useFastSearch = false;
+        const sourceData = autoCompleteData[TagSource.Danbooru];
+        sourceData.flexSearchDocument = null;
+        sourceData.sortedTags = [new TagData('1girl', 0, 100, [], TagSource.Danbooru)];
+        sourceData.tagMap = new Map([['1girl', sourceData.sortedTags[0]]]);
+
+        expect(() => searchWithFlexSearch('1', new Set(['1']), 10)).not.toThrow();
+        expect(shouldUseFastSearch()).toBe(false);
+        settingValues.useFastSearch = true;
+    });
+
+    test('skips a source that has not been created yet', () => {
+        delete autoCompleteData[TagSource.Danbooru];
+        expect(() => searchWithFlexSearch('1', new Set(['1']), 10)).not.toThrow();
+    });
+
     test('bounds the ranked candidate pool to limit per-keystroke work', () => {
         settingValues.maxSuggestions = 25;
         expect(getSearchCandidateLimit()).toBe(100);

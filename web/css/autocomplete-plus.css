@@ -690,11 +690,33 @@ body.dark-theme {
 }
 
 .related-tags-message {
+  display: flex;
   width: 100%;
+  align-items: center;
   padding: 12px;
   font-style: italic;
+  gap: 8px;
   grid-column: 1 / -1;
   text-align: center;
+}
+
+.related-tags-retry {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--comfy-input-bg) 90%, var(--input-text));
+  color: var(--input-text);
+  cursor: pointer;
+  font-style: normal;
+}
+
+.related-tags-retry:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.related-tags-retry:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--comfy-input-bg) 78%, var(--input-text));
 }
 
 .related-tags-empty {

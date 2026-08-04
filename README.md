@@ -27,6 +27,7 @@ Main differences:
 
 #### Interaction and performance
 
+- Fixes an upstream startup issue: ComfyUI no longer keeps its global loading screen open while large CSV and model indexes finish; indexes are prepared in the background, completion remains available with a safe fallback during preparation, and failed local data can be retried.
 - Supports continued related-tag exploration, panel pinning, cursor-based opening, Wiki links, and keyboard-first operation.
 - Uses virtualized lists and bounded result snapshots to keep large tag collections responsive and prevent list width or scroll position from jumping.
 
@@ -136,7 +137,7 @@ Manual CSV update checks remain available in settings.
 
 ## Known limitations
 
-- Large CSV collections increase browser startup time and memory use.
+- Large CSV collections can take time and memory to finish indexing; autocomplete remains available with a fallback while local indexes are prepared.
 - Dynamic prompts such as `from {above|below|side}` cannot provide reliable related tags before their wildcard value is resolved.
 
 ## Credits

@@ -161,10 +161,13 @@ function preserveSelectedCandidateIndex(candidates, selectedKey, fallbackIndex) 
 }
 
 function shouldUseFastSearch() {
-    if (settingValues.useFastSearch) return true;
-    return getEnabledTagSourceInPriorityOrder().some(source => {
+    const sources = getEnabledTagSourceInPriorityOrder();
+    if (settingValues.useFastSearch) {
+        return sources.some(source => autoCompleteData[source]?.flexSearchDocument);
+    }
+    return sources.some(source => {
         const sourceData = autoCompleteData[source];
-        return sourceData?.sortedTags.length >= 50_000;
+        return sourceData?.sortedTags.length >= 50_000 && sourceData.flexSearchDocument;
     });
 }
 
@@ -183,6 +186,7 @@ function addCandidate(candidate, candidates, addedTags) {
 
 function addExactCandidates(source, queryVariations, candidates, addedTags, locale) {
     const sourceData = autoCompleteData[source];
+    if (!sourceData) return;
     for (const query of queryVariations) {
         addCandidate(sourceData.tagMap.get(query), candidates, addedTags);
         if (locale === "zh" && /[^\x00-\x7f]/u.test(query)) continue;
@@ -264,6 +268,7 @@ function searchWithFlexSearch(partialTag, queryVariations, resultLimit = setting
     const sources = getEnabledTagSourceInPriorityOrder();
     for (const source of sources) {
         const sourceData = autoCompleteData[source];
+        if (!sourceData) continue;
         const locale = normalizeInterfaceLocale(getCurrentInterfaceLocale());
         const isLocalizedChineseQuery = locale === "zh" && /[^\x00-\x7f]/u.test(partialTag);
         const indexes = [
@@ -697,6 +702,11 @@ class AutocompleteUI {
         this.target = null;
     }
 
+    refreshIfActive() {
+        if (!this.target || document.activeElement !== this.target) return;
+        void this.updateDisplay(this.target);
+    }
+
     /** Moves the selection up or down */
     navigate(direction) {
         if (this.candidates.length === 0) return;
@@ -1091,6 +1101,10 @@ export class AutocompleteEventHandler {
 
         this.autocompleteUI.updateDisplay(event.target);
         return this.autocompleteUI.isVisible();
+    }
+
+    refresh() {
+        this.autocompleteUI.refreshIfActive();
     }
 
     hide() {

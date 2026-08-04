@@ -2,7 +2,15 @@ import { app } from "/scripts/app.js";
 import { ComfyWidgets } from "/scripts/widgets.js";
 import { settingValues } from "./settings.js";
 import { loadCSS } from "./utils.js";
-import { TagSource, loadDataAsync } from "./data.js";
+import {
+    DATA_TAGS_READY_EVENT,
+    DATA_TAGS_COMPLETE_EVENT,
+    DATA_READY_EVENT,
+    DATA_STATUS_CHANGED_EVENT,
+    TagSource,
+    ensureDataSources,
+    loadDataAsync,
+} from "./data.js";
 import { AUTOCOMPLETE_TAG_INSERTED_EVENT, AutocompleteEventHandler } from "./autocomplete.js";
 import { RelatedTagsEventHandler } from "./related-tags.js";
 import { AutoFormatterEventHandler } from "./auto-formatter.js";
@@ -24,6 +32,19 @@ const autocompleteEventHandler = new AutocompleteEventHandler();
 const relatedTagsEventHandler = new RelatedTagsEventHandler();
 const autoFormatterEventHandler = new AutoFormatterEventHandler();
 const attachedElementNodeInfoMap = new WeakMap(); // Map to track attached elements and their node info
+let translationCatalogPromise = null;
+
+function loadTranslationCatalogInBackground(locale) {
+    if (translationCatalogPromise) return translationCatalogPromise;
+    translationCatalogPromise = loadTranslationCatalog(locale)
+        .catch(error => {
+            console.error('[Autocomplete-Plus] Failed to load translation catalog:', error);
+        })
+        .finally(() => {
+            translationCatalogPromise = null;
+        });
+    return translationCatalogPromise;
+}
 
 // --- Functions ---
 /**
@@ -121,6 +142,19 @@ function initializeEventHandlers() {
 
     // Start observing the document body for changes
     observer.observe(document.body, { childList: true, subtree: true });
+
+    window.addEventListener(DATA_TAGS_READY_EVENT, () => {
+        autocompleteEventHandler.refresh();
+    });
+    window.addEventListener(DATA_TAGS_COMPLETE_EVENT, () => {
+        void loadTranslationCatalogInBackground(getCurrentInterfaceLocale());
+    });
+    window.addEventListener(DATA_READY_EVENT, () => {
+        relatedTagsEventHandler.refresh();
+    });
+    window.addEventListener(DATA_STATUS_CHANGED_EVENT, () => {
+        relatedTagsEventHandler.refreshStatus();
+    });
 
     /**
      * Get NodeInfo for the event target element
@@ -226,16 +260,25 @@ function initializeEventHandlers() {
 app.registerExtension({
     id: id,
     name: name,
-    async setup() {
+    setup() {
+        // ComfyUI waits for extension setup, so indexing must stay outside this lifecycle.
+        ensureDataSources();
         initializeEventHandlers();
 
         let rootPath = import.meta.url.replace("js/main.js", "");
         loadCSS(rootPath + "css/autocomplete-plus.css"); // Load CSS for autocomplete
 
-        await Promise.all([loadDataAsync(), loadOnlineServiceFeatures()]);
         const locale = getCurrentInterfaceLocale();
-        void ensureChineseDictionary(locale);
-        void loadTranslationCatalog(locale);
+        void loadOnlineServiceFeatures().catch(error => {
+            console.error('[Autocomplete-Plus] Failed to load online service features:', error);
+        });
+        void ensureChineseDictionary(locale).catch(error => {
+            console.error('[Autocomplete-Plus] Failed to initialize Chinese dictionary:', error);
+        });
+        void loadDataAsync().catch(error => {
+            console.error('[Autocomplete-Plus] Background data initialization failed:', error);
+            void loadTranslationCatalogInBackground(locale);
+        });
     },
 
     // --- Commands ---
