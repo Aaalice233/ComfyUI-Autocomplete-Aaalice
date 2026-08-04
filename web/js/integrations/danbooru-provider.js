@@ -1,11 +1,66 @@
 import { TagData, TagSource } from "../data.js";
-import { isDanbooruCompletionEnabled } from "../online-service-state.js";
+import {
+    isDanbooruCompletionEnabled,
+    waitForOnlineServiceFeatures,
+} from "../online-service-state.js";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const REQUEST_MAX_ATTEMPTS = 2;
+const REQUEST_RETRY_DELAY_MS = 250;
 const MAX_CACHE_ENTRIES = 100;
 const cache = new Map();
 const relatedCache = new Map();
 const emptyPage = (state = "skipped") => ({ candidates: [], hasMore: false, cacheState: state });
+
+function throwIfAborted(signal) {
+    if (signal?.aborted) throw signal.reason || new Error("Danbooru request was aborted");
+}
+
+function waitForRetry(signal) {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(signal.reason || new Error("Danbooru request was aborted"));
+            return;
+        }
+        let timer;
+        const onAbort = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", onAbort);
+            reject(signal.reason || new Error("Danbooru request was aborted"));
+        };
+        timer = setTimeout(() => {
+            signal?.removeEventListener("abort", onAbort);
+            resolve();
+        }, REQUEST_RETRY_DELAY_MS);
+        signal?.addEventListener("abort", onAbort, { once: true });
+    });
+}
+
+async function requestDanbooruPage(path, params, fetchImpl, signal) {
+    let lastError;
+    for (let attempt = 0; attempt < REQUEST_MAX_ATTEMPTS; attempt++) {
+        try {
+            throwIfAborted(signal);
+            const requestParams = new URLSearchParams(params);
+            if (attempt > 0) requestParams.set("refresh", "1");
+            const response = await fetchImpl(`${path}?${requestParams}`, {
+                cache: "no-store",
+                signal,
+            });
+            if (!response.ok) throw new Error(`Danbooru request failed with HTTP ${response.status}`);
+            const payload = await response.json();
+            if (payload?.cache?.state === "disabled") return payload;
+            if (payload?.cache?.state === "error") throw new Error("Danbooru request failed");
+            if (!payload || !Array.isArray(payload.results)) throw new Error("Danbooru response was invalid");
+            return payload;
+        } catch (error) {
+            if (signal?.aborted) throw error;
+            lastError = error;
+            if (attempt + 1 < REQUEST_MAX_ATTEMPTS) await waitForRetry(signal);
+        }
+    }
+    throw lastError;
+}
 
 function getCached(key, targetCache = cache) {
     const entry = targetCache.get(key);
@@ -24,10 +79,11 @@ function setCached(key, results, targetCache = cache) {
 }
 
 export async function searchDanbooruCandidates(partialTag, options = {}) {
-    if (!isDanbooruCompletionEnabled()) return emptyPage("disabled");
     const { limit = 10, page = 1, fetchImpl = fetch, signal } = options;
     const normalized = String(partialTag || "").trim().toLowerCase().replaceAll(" ", "_");
     if ((normalized.match(/[a-z0-9]/gi) || []).length < 2 || limit <= 0) return emptyPage();
+    await waitForOnlineServiceFeatures();
+    if (!isDanbooruCompletionEnabled()) return emptyPage("disabled");
     const safeLimit = Math.min(Math.max(Number(limit) || 1, 1), 200);
     const safePage = Math.min(Math.max(Number(page) || 1, 1), 1000);
     const key = `${normalized}\0${safeLimit}\0${safePage}`;
@@ -40,13 +96,14 @@ export async function searchDanbooruCandidates(partialTag, options = {}) {
             limit: String(safeLimit),
             page: String(safePage),
         });
-        const response = await fetchImpl(`/autocomplete-plus/danbooru/search?${params}`, {
-            cache: "no-store",
+        const payload = await requestDanbooruPage(
+            "/autocomplete-plus/danbooru/search",
+            params,
+            fetchImpl,
             signal,
-        });
-        if (!response.ok) return emptyPage("error");
-        const payload = await response.json();
-        const candidates = (Array.isArray(payload.results) ? payload.results : []).flatMap(item => {
+        );
+        if (payload?.cache?.state === "disabled") return emptyPage("disabled");
+        const candidates = payload.results.flatMap(item => {
             const postCount = Number(item?.post_count) || 0;
             if (!item?.name || !Number.isInteger(Number(item.category)) || postCount <= 0) return [];
             return [new TagData(
@@ -71,10 +128,11 @@ export async function searchDanbooruCandidates(partialTag, options = {}) {
 }
 
 export async function searchDanbooruRelatedTags(tag, options = {}) {
-    if (!isDanbooruCompletionEnabled()) return emptyPage("disabled");
     const { limit = 500, fetchImpl = fetch, signal } = options;
     const normalized = String(tag || "").trim().toLowerCase().replaceAll(" ", "_").replaceAll("*", "");
     if ((normalized.match(/[a-z0-9]/gi) || []).length < 2 || limit <= 0) return emptyPage();
+    await waitForOnlineServiceFeatures();
+    if (!isDanbooruCompletionEnabled()) return emptyPage("disabled");
     const safeLimit = Math.min(Math.max(Number(limit) || 1, 1), 500);
     const key = `${normalized}\0${safeLimit}`;
     const cached = getCached(key, relatedCache);
@@ -82,13 +140,14 @@ export async function searchDanbooruRelatedTags(tag, options = {}) {
 
     try {
         const params = new URLSearchParams({ q: normalized, limit: String(safeLimit) });
-        const response = await fetchImpl(`/autocomplete-plus/danbooru/related?${params}`, {
-            cache: "no-store",
+        const payload = await requestDanbooruPage(
+            "/autocomplete-plus/danbooru/related",
+            params,
+            fetchImpl,
             signal,
-        });
-        if (!response.ok) return emptyPage("error");
-        const payload = await response.json();
-        const candidates = (Array.isArray(payload.results) ? payload.results : []).flatMap(item => {
+        );
+        if (payload?.cache?.state === "disabled") return emptyPage("disabled");
+        const candidates = payload.results.flatMap(item => {
             const category = Number(item?.category);
             const postCount = Number(item?.post_count) || 0;
             const similarity = Number(item?.similarity);

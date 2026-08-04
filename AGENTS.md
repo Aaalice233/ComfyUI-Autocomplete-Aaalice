@@ -46,6 +46,13 @@ JavaScript 使用四空格缩进、分号和现有 ES Module 风格。函数与�
 - `tests/js/data-loading.test.js` 是该生命周期的回归边界，至少覆盖占位数据源、并发调用复用、标签先于共现数据就绪、失败重试和就绪事件；相关改动先运行该测试，再运行完整 Jest。
 - 该约束修复了 fork 前上游已有的启动等待问题，详见 `docs/development/testing.md`。
 
+## 在线服务可靠性约束
+
+- `web/js/online-service-state.js` 的在线功能配置请求必须复用进行中的 Promise，并对短暂失败执行有界重试；在线状态未确定时不得让本地补全等待 ComfyUI 启动完成。
+- `modules/danbooru_service.py` 的上游请求必须区分可重试的临时错误和永久错误，使用有界退避并在连续失败后进入冷却；设置菜单的 `refresh=1` 强制检测必须能够绕过冷却和正在进行的普通刷新。
+- `web/js/integrations/danbooru-provider.js` 不得缓存 `error`/`disabled` 页面；自动重试必须保持次数上限、尊重 `AbortSignal`，并在必要时通过 `refresh=1` 避免重复命中服务端冷却。
+- 设置菜单的数据源检测必须检查各探测结果，失败时显示失败状态，不能仅依据请求 Promise 已结束就报告成功。相关回归覆盖 `tests/js/danbooru-provider.test.js`、`tests/js/online-service-state.test.js`、`tests/js/online-settings.test.js` 和 `tests/python/test_danbooru_service.py`。
+
 ## 文档要求
 
 - `README.md` 是面向普通用户的英文入口；`docs/README_zh.md` 和 `docs/README_jp.md` 分别是简体中文和日文用户说明。三份 README 保持相同结构与用户事实，只说明项目用途、核心能力、安装、常用操作、用户可配置项、必要限制与致谢。

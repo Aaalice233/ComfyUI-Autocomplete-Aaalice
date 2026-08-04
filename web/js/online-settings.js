@@ -41,6 +41,8 @@ const TEXT = {
         checkSources: "Check data sources",
         checkingSources: "Checking data sources…",
         sourcesChecked: "Data source check completed",
+        sourcesCheckFailed: "Some data sources could not be checked",
+        danbooruCheckFailed: "Danbooru is temporarily unavailable",
         features: "Online feature switches",
         enableDanbooru: "Enable Danbooru API supplementation",
         danbooruHelp: "Add newer or missing tags after local results are already visible.",
@@ -124,6 +126,8 @@ const TEXT = {
         checkSources: "检测数据源",
         checkingSources: "正在检测数据源…",
         sourcesChecked: "数据源检测完成",
+        sourcesCheckFailed: "部分数据源检测失败",
+        danbooruCheckFailed: "Danbooru 暂时不可用",
         features: "在线能力",
         enableDanbooru: "启用 Danbooru API 补充",
         danbooruHelp: "本地结果显示后，再补充较新或缺失的标签。",
@@ -207,6 +211,8 @@ const TEXT = {
         checkSources: "偵測資料來源",
         checkingSources: "正在偵測資料來源…",
         sourcesChecked: "資料來源偵測完成",
+        sourcesCheckFailed: "部分資料來源偵測失敗",
+        danbooruCheckFailed: "Danbooru 暫時無法使用",
         features: "線上功能",
         enableDanbooru: "啟用 Danbooru API 補充",
         danbooruHelp: "本機結果顯示後，再補充較新或缺少的標籤。",
@@ -290,6 +296,8 @@ const TEXT = {
         checkSources: "データソースを確認",
         checkingSources: "データソースを確認中…",
         sourcesChecked: "データソースの確認が完了しました",
+        sourcesCheckFailed: "一部のデータソースを確認できませんでした",
+        danbooruCheckFailed: "Danbooru は一時的に利用できません",
         features: "オンライン機能",
         enableDanbooru: "Danbooru API 補足を有効化",
         danbooruHelp: "ローカル結果の表示後に、新しいタグや不足しているタグを補います。",
@@ -1057,8 +1065,15 @@ export async function openOnlineServicesPanel(_app) {
             }),
         ];
         if (danbooruEnabled.checked) {
-            checks.push(requestJson("/autocomplete-plus/danbooru/search?q=blue&limit=1&refresh=1"));
-            checks.push(requestJson("/autocomplete-plus/danbooru/related?q=blue_archive&limit=1&refresh=1"));
+            checks.push((async () => {
+                const pages = await Promise.all([
+                    requestJson("/autocomplete-plus/danbooru/search?q=blue&limit=1&refresh=1"),
+                    requestJson("/autocomplete-plus/danbooru/related?q=blue_archive&limit=1&refresh=1"),
+                ]);
+                if (pages.some(page => ["error", "disabled"].includes(page?.cache?.state))) {
+                    throw new Error(text.danbooruCheckFailed);
+                }
+            })());
         }
         if (translationEnabled.checked && (status.configured || apiKey.value.trim())) {
             checks.push(requestJson(`${API_ROOT}/test`, {
@@ -1070,11 +1085,19 @@ export async function openOnlineServicesPanel(_app) {
                 }),
             }));
         }
-        await Promise.allSettled(checks);
+        const checkResults = await Promise.allSettled(checks);
         try {
             await refreshStatus();
-            message.textContent = text.sourcesChecked;
-            message.dataset.tone = "success";
+            const failures = checkResults
+                .filter(result => result.status === "rejected")
+                .map(result => result.reason?.message || text.sourcesCheckFailed);
+            if (failures.length > 0) {
+                message.textContent = `${text.sourcesCheckFailed}: ${failures.join("; ")}`;
+                message.dataset.tone = "error";
+            } else {
+                message.textContent = text.sourcesChecked;
+                message.dataset.tone = "success";
+            }
         } catch (error) {
             message.textContent = error.message;
             message.dataset.tone = "error";

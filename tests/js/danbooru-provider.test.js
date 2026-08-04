@@ -91,6 +91,54 @@ describe('Danbooru fallback provider', () => {
         expect(fetchImpl).not.toHaveBeenCalled();
     });
 
+    test('retries an error payload and returns the recovered page', async () => {
+        const fetchImpl = jest.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ results: [], cache: { state: 'error' } }),
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    results: [{ name: 'blue_hair', category: 0, post_count: 100 }],
+                    cache: { state: 'refreshed' },
+                }),
+            });
+
+        const result = await searchDanbooruCandidates('blue', { fetchImpl });
+
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        expect(fetchImpl.mock.calls[1][0]).toContain('refresh=1');
+        expect(result.candidates[0]).toMatchObject({ tag: 'blue_hair', origin: 'danbooru_api' });
+    });
+
+    test('stops a scheduled retry when the request is aborted', async () => {
+        const controller = new AbortController();
+        const fetchImpl = jest.fn().mockResolvedValue({ ok: false, status: 503 });
+        const request = searchDanbooruCandidates('blue', {
+            fetchImpl,
+            signal: controller.signal,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+        controller.abort();
+        await request;
+
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not cache an error page so a later query can retry', async () => {
+        const fetchImpl = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ results: [], cache: { state: 'error' } }),
+        });
+
+        await searchDanbooruCandidates('blue', { fetchImpl });
+        await searchDanbooruCandidates('blue', { fetchImpl });
+
+        expect(fetchImpl).toHaveBeenCalledTimes(4);
+    });
+
     test('returns an empty page object when the backend request fails', async () => {
         const fetchImpl = jest.fn().mockResolvedValue({ ok: false });
 

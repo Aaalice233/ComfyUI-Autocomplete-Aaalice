@@ -10,6 +10,17 @@ DANBOORU_TAGS_URL = "https://danbooru.donmai.us/tags.json"
 DANBOORU_RELATED_TAG_URL = "https://danbooru.donmai.us/related_tag.json"
 USER_AGENT = "Autocomplete-Plus/1.12"
 SUPPORTED_CATEGORIES = {0, 1, 3, 4, 5}
+RETRYABLE_STATUS_CODES = {408, 425, 429}
+DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_RETRY_DELAY_SECONDS = 0.25
+MAX_RETRY_DELAY_SECONDS = 2
+
+
+class DanbooruRequestError(RuntimeError):
+    def __init__(self, message, retryable=True, retry_after=None):
+        super().__init__(message)
+        self.retryable = retryable
+        self.retry_after = retry_after
 
 
 class AsyncReadRateLimiter:
@@ -35,34 +46,66 @@ SHARED_READ_RATE_LIMITER = AsyncReadRateLimiter()
 
 
 class DanbooruHttpProvider:
-    def __init__(self, session_factory=None, timeout_seconds=3, cooldown_seconds=30, rate_limiter=None):
+    def __init__(
+        self,
+        session_factory=None,
+        timeout_seconds=3,
+        cooldown_seconds=30,
+        rate_limiter=None,
+        max_attempts=DEFAULT_MAX_ATTEMPTS,
+        retry_delay_seconds=DEFAULT_RETRY_DELAY_SECONDS,
+    ):
         self.session_factory = session_factory or aiohttp.ClientSession
         self.timeout_seconds = timeout_seconds
         self.cooldown_seconds = cooldown_seconds
         self.rate_limiter = rate_limiter or SHARED_READ_RATE_LIMITER
+        self.max_attempts = max(int(max_attempts), 1)
+        self.retry_delay_seconds = max(float(retry_delay_seconds), 0)
         self._unavailable_until = 0
 
-    async def request_json(self, url, params):
-        if time.monotonic() < self._unavailable_until:
+    async def request_json(self, url, params, bypass_cooldown=False):
+        if not bypass_cooldown and time.monotonic() < self._unavailable_until:
             raise RuntimeError("Danbooru requests are cooling down after a recent failure")
 
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
+        last_error = None
+        for attempt in range(self.max_attempts):
+            try:
+                await self.rate_limiter.acquire()
+                async with self.session_factory(timeout=timeout) as session:
+                    async with session.get(
+                        url,
+                        params=params,
+                        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+                    ) as response:
+                        if response.status != 200:
+                            retry_after = response.headers.get("Retry-After")
+                            raise DanbooruRequestError(
+                                f"Danbooru returned HTTP {response.status}",
+                                retryable=response.status in RETRYABLE_STATUS_CODES or response.status >= 500,
+                                retry_after=retry_after,
+                            )
+                        payload = await response.json()
+                self._unavailable_until = 0
+                return payload
+            except asyncio.CancelledError:
+                raise
+            except (aiohttp.ClientError, TimeoutError, ValueError, DanbooruRequestError) as error:
+                last_error = error
+                if not getattr(error, "retryable", True) or attempt + 1 >= self.max_attempts:
+                    break
+                await asyncio.sleep(self._retry_delay(attempt, getattr(error, "retry_after", None)))
+
+        self._unavailable_until = time.monotonic() + self.cooldown_seconds
+        raise RuntimeError(str(last_error)) from last_error
+
+    def _retry_delay(self, attempt, retry_after=None):
         try:
-            await self.rate_limiter.acquire()
-            async with self.session_factory(timeout=timeout) as session:
-                async with session.get(
-                    url,
-                    params=params,
-                    headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-                ) as response:
-                    if response.status != 200:
-                        raise RuntimeError(f"Danbooru returned HTTP {response.status}")
-                    payload = await response.json()
-            self._unavailable_until = 0
-            return payload
-        except (aiohttp.ClientError, TimeoutError, RuntimeError, ValueError) as error:
-            self._unavailable_until = time.monotonic() + self.cooldown_seconds
-            raise RuntimeError(str(error)) from error
+            if retry_after is not None:
+                return min(max(float(retry_after), 0), MAX_RETRY_DELAY_SECONDS)
+        except (TypeError, ValueError):
+            pass
+        return min(self.retry_delay_seconds * (2**attempt), MAX_RETRY_DELAY_SECONDS)
 
 
 class DanbooruProvider(DanbooruHttpProvider):
@@ -78,7 +121,7 @@ class DanbooruProvider(DanbooruHttpProvider):
     def is_valid_query(query):
         return len(re.sub(r"[^A-Za-z0-9]", "", query)) >= 2
 
-    async def search(self, normalized, limit, page=1):
+    async def search(self, normalized, limit, page=1, force_refresh=False):
         if len(re.sub(r"[^A-Za-z0-9]", "", normalized)) < 2:
             return {"items": [], "raw_count": 0, "has_more": False}
 
@@ -93,7 +136,11 @@ class DanbooruProvider(DanbooruHttpProvider):
             "limit": str(limit),
             "page": str(page),
         }
-        payload = await self.request_json(DANBOORU_TAGS_URL, params)
+        payload = await self.request_json(
+            DANBOORU_TAGS_URL,
+            params,
+            bypass_cooldown=force_refresh,
+        )
         if not isinstance(payload, list):
             raise RuntimeError("Danbooru returned an invalid response")
         results = []
@@ -135,7 +182,7 @@ class DanbooruRelatedTagProvider(DanbooruHttpProvider):
     def is_valid_query(query):
         return len(re.sub(r"[^A-Za-z0-9]", "", query)) >= 2
 
-    async def search(self, normalized, limit, page=1):
+    async def search(self, normalized, limit, page=1, force_refresh=False):
         if not self.is_valid_query(normalized):
             return {"items": [], "raw_count": 0, "has_more": False}
 
@@ -146,6 +193,7 @@ class DanbooruRelatedTagProvider(DanbooruHttpProvider):
                 "order": "jaccard",
                 "limit": str(limit),
             },
+            bypass_cooldown=force_refresh,
         )
         if not isinstance(payload, dict) or not isinstance(payload.get("related_tags"), list):
             raise RuntimeError("Danbooru returned an invalid related-tag response")

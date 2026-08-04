@@ -290,6 +290,33 @@ describe('online services settings panel', () => {
         expect(checkButton.disabled).toBe(false);
     });
 
+    test('reports a failed Danbooru probe instead of claiming every source is ready', async () => {
+        await openOnlineServicesPanel({});
+        const dialog = document.querySelector('dialog');
+        global.fetch.mockImplementation(async url => {
+            const value = String(url);
+            if (value.startsWith('/autocomplete-plus/danbooru/')) {
+                return {
+                    ok: true,
+                    json: async () => ({ results: [], cache: { state: 'error' } }),
+                };
+            }
+            if (value.endsWith('/status')) return { ok: true, json: async () => status };
+            if (value.startsWith('/api/lm/')) {
+                return { ok: false, status: 404, json: async () => ({}) };
+            }
+            return { ok: true, json: async () => ({}) };
+        });
+
+        const checkButton = [...dialog.querySelectorAll('button')]
+            .find(button => button.textContent === 'Check data sources');
+        checkButton.click();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(dialog.textContent).toContain('Some data sources could not be checked');
+        expect(dialog.textContent).toContain('Danbooru is temporarily unavailable');
+    });
+
     test('saves independent Danbooru and translation switches into runtime state', async () => {
         await openOnlineServicesPanel({});
         const dialog = document.querySelector('dialog');

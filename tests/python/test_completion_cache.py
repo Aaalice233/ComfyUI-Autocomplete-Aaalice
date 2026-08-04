@@ -20,6 +20,7 @@ class StubProvider:
         self.error = error
         self.gate = gate
         self.calls = 0
+        self.force_refresh_calls = []
 
     @staticmethod
     def normalize_query(query):
@@ -29,8 +30,9 @@ class StubProvider:
     def is_valid_query(query):
         return len(query) >= 2
 
-    async def search(self, query, limit, page):
+    async def search(self, query, limit, page, force_refresh=False):
         self.calls += 1
+        self.force_refresh_calls.append(force_refresh)
         if self.gate:
             await self.gate.wait()
         if self.error:
@@ -167,6 +169,32 @@ class CompletionSearchServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(provider.calls, 1)
         self.assertEqual(first_result["items"], second_result["items"])
+
+    async def test_force_refresh_reaches_the_provider(self):
+        provider = StubProvider()
+        service = self.service(provider)
+
+        await service.search("blue", 15)
+        await service.search("blue", 15, force_refresh=True)
+
+        self.assertEqual(provider.force_refresh_calls, [False, True])
+
+    async def test_force_refresh_runs_after_an_existing_normal_refresh(self):
+        gate = asyncio.Event()
+        provider = StubProvider(gate=gate)
+        service = self.service(provider)
+        normal = asyncio.create_task(service.search("blue", 15))
+        for _ in range(100):
+            if provider.calls:
+                break
+            await asyncio.sleep(0)
+        self.assertEqual(provider.calls, 1)
+        forced = asyncio.create_task(service.search("blue", 15, force_refresh=True))
+        gate.set()
+
+        await asyncio.gather(normal, forced)
+
+        self.assertEqual(provider.force_refresh_calls, [False, True])
 
     async def test_force_refresh_failure_uses_existing_stale_page(self):
         provider = StubProvider()

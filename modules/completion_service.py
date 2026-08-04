@@ -44,7 +44,14 @@ class CompletionSearchService:
             self._start_refresh(key, normalized, limit, page, cached)
             self._set_status("success", f"Serving stale cache for {normalized}* page {page}; refresh scheduled")
             return self._cached_page(cached, "stale")
-        return await self._singleflight_refresh(key, normalized, limit, page, cached)
+        return await self._singleflight_refresh(
+            key,
+            normalized,
+            limit,
+            page,
+            cached,
+            force_refresh=force_refresh,
+        )
 
     async def clear_cache(self):
         deleted = await asyncio.to_thread(self.store.clear)
@@ -63,23 +70,70 @@ class CompletionSearchService:
         task = asyncio.create_task(schedule())
         task.add_done_callback(self._consume_background_exception)
 
-    async def _singleflight_refresh(self, key, normalized, limit, page, cached):
+    async def _singleflight_refresh(self, key, normalized, limit, page, cached, force_refresh=False):
         async with self._inflight_lock:
-            task = self._inflight.get(key)
-            if task is None:
-                task = asyncio.create_task(self._refresh(key, normalized, limit, page, cached))
-                self._inflight[key] = task
+            existing = self._inflight.get(key)
+            if existing is None:
+                task = asyncio.create_task(
+                    self._refresh(
+                        key,
+                        normalized,
+                        limit,
+                        page,
+                        cached,
+                        force_refresh=force_refresh,
+                    )
+                )
+                self._inflight[key] = {"task": task, "force_refresh": force_refresh}
                 task.add_done_callback(lambda completed: asyncio.create_task(self._remove_inflight(key, completed)))
+            elif force_refresh and not existing["force_refresh"]:
+                task = asyncio.create_task(
+                    self._refresh_after(
+                        existing["task"],
+                        key,
+                        normalized,
+                        limit,
+                        page,
+                        cached,
+                    )
+                )
+                self._inflight[key] = {"task": task, "force_refresh": True}
+                task.add_done_callback(lambda completed: asyncio.create_task(self._remove_inflight(key, completed)))
+            else:
+                task = existing["task"]
         return await asyncio.shield(task)
 
     async def _remove_inflight(self, key, task):
         async with self._inflight_lock:
-            if self._inflight.get(key) is task:
+            existing = self._inflight.get(key)
+            if existing and existing["task"] is task:
                 self._inflight.pop(key, None)
 
-    async def _refresh(self, key, normalized, limit, page, cached):
+    async def _refresh_after(self, previous_task, key, normalized, limit, page, cached):
         try:
-            completion_page = await self.provider.search(normalized, limit, page)
+            await asyncio.shield(previous_task)
+        except asyncio.CancelledError:
+            if not previous_task.cancelled():
+                raise
+        except Exception:
+            pass
+        return await self._refresh(
+            key,
+            normalized,
+            limit,
+            page,
+            cached,
+            force_refresh=True,
+        )
+
+    async def _refresh(self, key, normalized, limit, page, cached, force_refresh=False):
+        try:
+            completion_page = await self.provider.search(
+                normalized,
+                limit,
+                page,
+                force_refresh=force_refresh,
+            )
             now = self.clock()
             is_empty = not completion_page["items"]
             fresh_seconds = self.policy.empty_fresh_seconds if is_empty else self.policy.fresh_seconds
