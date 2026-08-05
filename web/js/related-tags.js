@@ -674,7 +674,7 @@ class RelatedTagsUI {
         tagName.dataset.tagCategory = categoryText;
         tagName.dataset.tagSource = tagData.source;
         tagName.dataset.tagName = tagData.tag;
-        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition);
+        renderTagNameWithCategoryIcon(tagName, tagData, settingValues.tagSourceIconPosition, false);
 
         if (!tagData.hasWikiPage) {
             tagName.classList.add('disabled');
