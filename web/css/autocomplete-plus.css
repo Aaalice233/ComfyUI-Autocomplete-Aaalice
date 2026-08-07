@@ -22,7 +22,8 @@
   --wiki-icon-opacity-disabled: 0;
 }
 
-/* Dark Theme */
+/* Dark Theme —— 新版前端将 dark-theme 挂在 <html>，旧版挂在 <body> */
+:root.dark-theme body,
 body.dark-theme {
   --autocomplete-plus-text-color-cat-blue: var(--p-blue-400);
   --autocomplete-plus-text-color-cat-red: var(--p-red-400);
