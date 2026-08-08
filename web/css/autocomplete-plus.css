@@ -47,7 +47,9 @@ body.dark-theme {
 
 #autocomplete-plus-root {
   position: fixed;
-  z-index: 1000;
+
+  /* 补全弹层必须压在宿主 Popover/Dialog（z-index 100020 量级）之上，否则在第三方浮层内的输入框中看不到候选。 */
+  z-index: 100040;
   top: 0;
   left: 0;
   display: none;
@@ -61,6 +63,14 @@ body.dark-theme {
     0 8px 28px rgb(0 0 0 / 42%);
   color: var(--input-text);
   container-type: inline-size;
+}
+
+/* 中和 popover UA 默认样式（inset: 0 / margin: auto），避免与 JS 写入的 left/top 冲突。 */
+#autocomplete-plus-root:popover-open {
+  padding: 0;
+  border: none;
+  margin: 0;
+  inset: auto;
 }
 
 .autocomplete-plus-popup-header {
@@ -521,7 +531,9 @@ body.dark-theme {
 /* Related Tags UI Styles */
 #related-tags-root {
   position: fixed;
-  z-index: 1000;
+
+  /* 与 autocomplete-plus-root 同层，避免被宿主 Popover/Dialog 遮挡。 */
+  z-index: 100040;
   top: 0;
   left: 0;
   display: none;
@@ -535,6 +547,13 @@ body.dark-theme {
     0 8px 28px rgb(0 0 0 / 42%);
   color: var(--input-text);
   container-type: inline-size;
+}
+
+#related-tags-root:popover-open {
+  padding: 0;
+  border: none;
+  margin: 0;
+  inset: auto;
 }
 
 #related-tags-root .danbooru[data-tag-category="general"] {

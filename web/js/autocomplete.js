@@ -458,6 +458,9 @@ class AutocompleteUI {
         // Add to DOM
         document.body.appendChild(this.root);
 
+        // top layer 让候选层退出与宿主浮层的 z-index 竞争；CSS z-index 仅作无 Popover API 环境的回退。
+        if (typeof this.root.showPopover === 'function') this.root.popover = 'manual';
+
         this.target = null;
         this.selectedIndex = -1;
         this.candidates = [];
@@ -673,6 +676,7 @@ class AutocompleteUI {
         if (updatePosition) this.#updatePosition();
 
         this.root.style.display = 'flex'; // Make it visible
+        if (this.root.popover === 'manual' && !this.root.matches(':popover-open')) this.root.showPopover();
         this.#setOpenMarker(this.target);
         this.virtualList.render();
 
@@ -697,6 +701,7 @@ class AutocompleteUI {
     #hideDisplay() {
         this.#clearOpenMarker();
         this.footer.setVisible(false);
+        if (this.root.popover === 'manual' && this.root.matches(':popover-open')) this.root.hidePopover();
         this.root.style.display = 'none';
         this.selectedIndex = -1;
         this.candidates = [];
