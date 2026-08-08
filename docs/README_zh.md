@@ -1,4 +1,4 @@
-# ComfyUI-Autocomplete-Plus
+# ComfyUI-Autocomplete-Aaalice
 
 ## [English](../README.md) • 简体中文 • [日本語](README_jp.md)
 
@@ -6,36 +6,24 @@
 
 为 ComfyUI 文本输入框提供标签补全、共现标签、翻译和提示词格式化。支持 Danbooru、可选 e621 数据、新版 ComfyUI、Nodes 2.0 和子图节点提升后的输入框。
 
-## 为什么有这个分支？
-
 本项目是 [newtextdoc1111/ComfyUI-Autocomplete-Plus](https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus) 的持续维护分支。
 
-主要区别：
+## 功能特性
 
-#### 兼容性
+- **自动补全**：输入时搜索 Danbooru 标签和别名，显示分类、引用量和来源徽章；已存在的标签会置灰，不会重复插入。
+- **中文补全**：简体中文界面下可直接输入 `无职转生` 等中文名称，找到并插入英文 Tag `mushoku_tensei`。
+- **共现标签**：探索经常一起出现的标签，支持连续插入、固定面板和直接打开 Wiki 页面。
+- **翻译**：通过 ffdkj 汉化数据库显示标签中文翻译，缺失项和其他语言可由 DeepSeek 翻译。
+- **自动格式化**：离开文本框时自动整理重复空格和逗号，也可以手动触发。
+- **多数据源**：优先使用内置 CSV 数据，LoRA Manager 和 Danbooru 在后台补充缺失或较新的结果；离线时本地结果仍可使用。
+- **多语言界面**：支持英文、简体中文、繁体中文和日文。
+
+### 与上游的区别
 
 - 持续兼容新版 ComfyUI，包括 Nodes 2.0 文本输入框和从子图提升出来的输入。
-
-#### 数据与补全
-
-- 采用本地优先流程：内置 CSV 结果立即显示，LoRA Manager 和 Danbooru 在后台补充缺失或较新的结果。
-- 简体中文用户可直接输入 `无职转生` 等中文名称，找到对应英文 Tag 并插入 `mushoku_tensei`；中文完全匹配优先于前缀和包含匹配。
-- 同名候选按固定规则合并，并显示简洁的来源徽章，方便区分 CSV、LoRA Manager 和 Danbooru 数据。
-- 后台结果到达时会保留当前选中的标签，避免列表更新导致误选。
-- 改进逗号、空格和换行附近的插入行为；已存在的标签会被识别，不会重复插入。
-- 共现标签先显示本地结果，再追加 API 独有结果，不会重排已有列表或移动当前选择。
-
-#### 交互与性能
-
-- 修复上游在启动阶段等待大型 CSV 和模型索引，导致 ComfyUI 全局加载遮罩长时间不消失的问题：扩展注册同步完成，索引在后台构建，准备期间仍可使用安全回退补全，失败的本地数据也可以重试。
-- 支持连续探索共现标签、固定面板、从光标位置打开、Wiki 链接和完整键盘操作。
-- 大型标签列表使用虚拟滚动和有上限的结果快照，输入更流畅，列表宽度和滚动位置不会因异步更新跳动。
-
-#### 在线服务与多语言
-
-- Danbooru 结果可持久缓存，用于快速复用和离线回退；可在**在线服务**中查看状态并手动清理。
-- 简体中文优先使用 ffdkj 汉化数据库，缺失项再交给 DeepSeek；其他支持语言可继续使用 DeepSeek。
-- 提供响应式在线服务管理器，界面支持英文、简体中文、繁体中文和日文。
+- ComfyUI 启动不再被大型 CSV 和模型索引阻塞，索引在后台构建期间补全仍可使用。
+- 本地优先的补全和共现标签，在线结果合入时不会打乱当前列表和选择。
+- 可选的 Danbooru 持久缓存和中文汉化数据库，在**在线服务**中管理。
 
 ## 安装
 
@@ -58,9 +46,7 @@ git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 在文本输入框中输入即可显示标签建议。使用上下方向键选择，按 Enter 或 Tab 插入。
 
 - 可搜索标签名和别名。
-- 简体中文界面启用“中文补全”后，输入中文会检索 ffdkj 汉化数据库，最终仍插入英文 Tag。
 - 支持 Danbooru 分类、LoRA、Embedding、Wildcard 和可选 e621 结果。
-- 已存在的标签会置灰，不会重复插入。
 - 点击 Wiki 按钮，或对键盘选中的标签按 `F1`，可打开 Wiki 页面。
 
 ### 共现标签
@@ -69,9 +55,7 @@ git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 
 选中或确认完整标签后，可以继续查看相关标签。面板支持调整方向、固定和连续插入。
 
-### 自动格式化
-
-离开文本框时可自动整理重复空格和逗号，也可以手动触发或在设置中关闭。
+### 快捷键
 
 | 操作 | 默认快捷键 |
 | --- | --- |
@@ -84,7 +68,7 @@ git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 
 - 内置 Danbooru CSV 是主要本地数据源，可能同时包含 SFW 和 NSFW 标签。
 - 安装 [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) 后，可补充本地标签、LoRA、Embedding 和 Wildcard。
-- Danbooru 匿名接口可补充缺失或较新的标签与共现标签；离线时仍可使用本地结果。
+- Danbooru 匿名接口可补充缺失或较新的标签与共现标签。
 - 简体中文可使用 [ffdkj 汉化数据库](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table)。由于其上游仓库目前没有明确 LICENSE，本插件不会直接分发该数据库，而是在需要时单独下载。
 - DeepSeek 可翻译汉化数据库缺失的标签和其他语言；在**在线服务**中配置。
 - 只有 ComfyUI 使用中文界面时才显示“中文汉化数据库”页面。
@@ -110,11 +94,6 @@ masterpiece,5,9999999,
 ```
 
 e621 数据不会自动下载，需要手动添加 `e621_tags.csv`；目前不支持 e621 共现标签。
-
-## 供其他扩展集成
-
-其他 ComfyUI 扩展可以为自有输入框启用补全：在 `input` 或 `textarea` 上添加 `data-autocomplete-plus` 属性即可被自动发现，获得与节点文本框相同的标签补全、中文补全和相关标签。候选面板打开期间，该元素会带有 `data-autocomplete-plus-open` 属性，宿主界面可据此把回车、Esc 和方向键让给面板。
-
 
 ## 设置
 

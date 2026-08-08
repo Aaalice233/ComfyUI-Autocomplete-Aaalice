@@ -1,41 +1,29 @@
-# ComfyUI-Autocomplete-Plus
+# ComfyUI-Autocomplete-Aaalice
 
 ## English • [简体中文](docs/README_zh.md) • [日本語](docs/README_jp.md)
 
 ![Autocomplete preview](https://github.com/user-attachments/assets/45dd0598-4c04-49ab-85f7-33fc9026921c)
 
-Autocomplete, related tags, translation, and prompt formatting for ComfyUI text inputs. Supports Danbooru tags, optional e621 data, current ComfyUI frontends, Nodes 2.0, and promoted subgraph inputs.
-
-## Why this fork?
+Autocomplete, related tags, translation, and prompt formatting for ComfyUI text inputs. Supports Danbooru tags, optional e621 data, current ComfyUI frontends, Nodes 2.0, and inputs promoted from subgraphs.
 
 This is a maintained fork of [newtextdoc1111/ComfyUI-Autocomplete-Plus](https://github.com/newtextdoc1111/ComfyUI-Autocomplete-Plus).
 
-Main differences:
+## Features
 
-#### Compatibility
+- **Autocomplete**: search Danbooru tags and aliases while typing, with category, count, and source badges. Existing tags are dimmed instead of inserted twice.
+- **Chinese autocomplete**: in a Simplified Chinese UI, type a Chinese name such as `无职转生` to find and insert the English tag `mushoku_tensei`.
+- **Related tags**: explore tags that commonly appear together, insert them repeatedly, pin the panel, and open Wiki pages directly.
+- **Translation**: show Chinese translations next to tags via the ffdkj dictionary, with DeepSeek covering dictionary misses and other languages.
+- **Auto formatter**: clean repeated spaces and commas when leaving a text input, or run it manually.
+- **Multiple data sources**: bundled CSV data first, with LoRA Manager and Danbooru supplementing missing or newer results in the background. Local results keep working offline.
+- **Localized UI**: English, Simplified Chinese, Traditional Chinese, and Japanese.
 
-- Actively maintained for current ComfyUI, including Nodes 2.0 text inputs and inputs promoted from subgraphs.
+### Compared to upstream
 
-#### Data and completion
-
-- Uses a local-first workflow: bundled CSV results appear immediately, while LoRA Manager and Danbooru can supplement missing or newer results in the background.
-- Simplified Chinese users can type a Chinese name such as `无职转生`, find its English tag, and insert `mushoku_tensei`; exact Chinese matches rank before prefix and contains matches.
-- Merges duplicate candidates predictably and shows a compact source badge, so users can tell whether the displayed data came from CSV, LoRA Manager, or Danbooru.
-- Keeps the selected tag stable while background results arrive, avoiding accidental selection changes.
-- Improves insertion around commas, spaces, and line breaks; existing tags are recognized instead of being inserted twice.
-- Opens related tags immediately from local data, then appends API-only results without reordering the visible list or moving the current selection.
-
-#### Interaction and performance
-
-- Fixes an upstream startup issue: ComfyUI no longer keeps its global loading screen open while large CSV and model indexes finish; indexes are prepared in the background, completion remains available with a safe fallback during preparation, and failed local data can be retried.
-- Supports continued related-tag exploration, panel pinning, cursor-based opening, Wiki links, and keyboard-first operation.
-- Uses virtualized lists and bounded result snapshots to keep large tag collections responsive and prevent list width or scroll position from jumping.
-
-#### Online services and languages
-
-- Persists Danbooru results for faster reuse and offline fallback, with cache status and manual clearing available in **Online Services**.
-- For Simplified Chinese, the ffdkj dictionary is preferred and DeepSeek handles missing translations; other supported languages can continue to use DeepSeek.
-- Provides a responsive online-services manager and localized UI in English, Simplified Chinese, Traditional Chinese, and Japanese.
+- Maintained for current ComfyUI, including Nodes 2.0 text inputs and subgraph-promoted inputs.
+- ComfyUI startup is no longer blocked by large CSV and model indexes; completion stays available while indexing finishes in the background.
+- Local-first completion and related tags, with online results merged in without disturbing the current list or selection.
+- Optional persistent Danbooru caching and a Chinese translation dictionary, managed under **Online Services**.
 
 ## Installation
 
@@ -51,16 +39,14 @@ Clone the repository into ComfyUI's `custom_nodes` directory, then restart Comfy
 git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 ```
 
-## Using the extension
+## Usage
 
 ### Autocomplete
 
 Type in a text input to open tag suggestions. Use the arrow keys to select a result and press Enter or Tab to insert it.
 
 - Searches tag names and aliases.
-- With **Chinese autocomplete** enabled in a Simplified Chinese interface, Chinese input searches the ffdkj dictionary while insertion still uses the English tag.
 - Supports Danbooru categories, LoRA, Embedding, Wildcard, and optional e621 results.
-- Existing tags are dimmed instead of inserted twice.
 - Click the Wiki control, or press `F1` on the keyboard-selected tag, to open its Wiki page.
 
 ### Related tags
@@ -69,9 +55,7 @@ Type in a text input to open tag suggestions. Use the arrow keys to select a res
 
 Select or confirm a complete tag to explore related tags. The panel can be repositioned, pinned, and used repeatedly without closing after every insertion.
 
-### Auto formatter
-
-The formatter can clean repeated spaces and commas when leaving a text input. It can also be run manually and disabled in settings.
+### Shortcuts
 
 | Action | Default shortcut |
 | --- | --- |
@@ -84,7 +68,7 @@ The formatter can clean repeated spaces and commas when leaving a text input. It
 
 - The bundled Danbooru CSV is the primary local source and may include SFW and NSFW tags.
 - [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) can provide local tag, LoRA, Embedding, and Wildcard results.
-- Anonymous Danbooru requests can supplement missing or newer tags and related tags. Local results remain available if the service is offline.
+- Anonymous Danbooru requests can supplement missing or newer tags and related tags.
 - Simplified Chinese can use the [ffdkj translation dictionary](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table). It is downloaded separately because its upstream repository does not currently declare a license.
 - DeepSeek can translate dictionary misses and languages not covered by the Chinese dictionary. Configure it under **Online Services**.
 - The Chinese-dictionary page is shown only when ComfyUI uses a Chinese interface.
@@ -110,11 +94,6 @@ Quoted tag combinations can be inserted as one preset:
 ```
 
 e621 data is not downloaded automatically. Add an `e621_tags.csv` file manually; e621 related tags are not currently supported.
-
-## Integration for other extensions
-
-Other ComfyUI extensions can opt their own text inputs into completion by adding a `data-autocomplete-plus` attribute to an `input` or `textarea`. The element is discovered automatically and receives the same tag completion, Chinese completion, and related tags as node textareas. While the candidate panel is open, the element carries a `data-autocomplete-plus-open` attribute so the host interface can yield Enter, Escape, and arrow keys to the panel.
-
 
 ## Settings
 
