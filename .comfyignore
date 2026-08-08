@@ -49,6 +49,8 @@ env/
 
 # 构建产物与本地依赖
 node_modules/
+node.zip
+csv_meta.json
 dist/
 build/
 *.egg-info/
