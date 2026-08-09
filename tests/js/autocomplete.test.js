@@ -30,7 +30,7 @@ const {
 
 
 // Helper function to create mock textarea element
-function createMockTextarea(value, selectionStart, selectionEnd = -1) {
+function createMockTextarea(value, selectionStart, selectionEnd = -1, attributes = {}) {
     return {
         value: value,
         selectionStart: selectionStart,
@@ -50,7 +50,8 @@ function createMockTextarea(value, selectionStart, selectionEnd = -1) {
             defaultView: typeof window !== 'undefined' ? window : {},
             documentElement: typeof document !== 'undefined' ? document.documentElement : {}
         },
-        dispatchEvent: () => { }
+        dispatchEvent: () => { },
+        getAttribute: name => attributes[name] ?? null
     };
 }
 
@@ -437,6 +438,21 @@ describe('Autocomplete Functions', () => {
             }).not.toThrow();
 
             expect(textarea.value).toBe('1girl, blue hair, ');
+        });
+
+        test('should preserve raw booru character tags for tag-query inputs', () => {
+            const input = createMockTextarea('fri', 3, -1, {
+                'data-autocomplete-plus-mode': 'raw-tag'
+            });
+            const tagData = {
+                tag: 'frieren_(sousou_no_frieren)',
+                source: 'danbooru',
+                categoryText: 'character'
+            };
+
+            insertTagToTextArea(input, tagData);
+
+            expect(input.value).toBe('frieren_(sousou_no_frieren)');
         });
 
         test('should complete model tag and add trailing comma', () => {

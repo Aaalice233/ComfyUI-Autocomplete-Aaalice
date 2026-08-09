@@ -1,6 +1,7 @@
 import {
     EXTERNAL_INPUT_SELECTOR,
     isAttachableTextInput,
+    isRawTagInput,
     isInputOwnedByAnotherExtension,
     parseExcludedNodeTypes,
     registerInputOwnershipRule,
@@ -69,5 +70,11 @@ describe('external input opt-in', () => {
     test('accepts inputs carrying data-autocomplete-plus', () => {
         const input = { tagName: 'INPUT', matches: selector => selector === EXTERNAL_INPUT_SELECTOR };
         expect(isAttachableTextInput(input)).toBe(true);
+    });
+
+    test('recognizes raw tag insertion mode explicitly', () => {
+        const input = { getAttribute: name => name === 'data-autocomplete-plus-mode' ? 'raw-tag' : null };
+        expect(isRawTagInput(input)).toBe(true);
+        expect(isRawTagInput({ getAttribute: () => null })).toBe(false);
     });
 });

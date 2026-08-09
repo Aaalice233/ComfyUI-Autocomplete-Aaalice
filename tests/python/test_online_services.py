@@ -612,9 +612,10 @@ class DanbooruRelatedTagTests(unittest.IsolatedAsyncioTestCase):
 
 
 class StubResponse:
-    def __init__(self, payload, status):
+    def __init__(self, payload, status, headers=None):
         self.payload = payload
         self.status = status
+        self.headers = headers or {}
 
     async def __aenter__(self):
         return self

@@ -41,6 +41,7 @@ import { calculatePopupPlacement } from './popup-layout.js';
 import { getScaledCaretAnchor } from './caret-position.js';
 import { createAutocompleteFooter } from './autocomplete-footer.js';
 import { createPopupCloseButton } from './autocomplete-header.js';
+import { isRawTagInput } from './integrations/input-compatibility.js';
 
 // --- RelatedTags Logic ---
 
@@ -193,12 +194,13 @@ export function mergeRelatedTagCandidates(localCandidates, onlineCandidates, res
 function insertTagToTextArea(inputElement, tagToInsert) {
     const text = inputElement.value;
     const cursorPos = inputElement.selectionStart;
+    const normalizedTag = isRawTagInput(inputElement) ? tagToInsert : normalizeTagToInsert(tagToInsert);
 
     // First check if the tag exists anywhere in the textarea and select it if found
     const tagPositions = findAllTagPositions(text);
     for (const { start, end, tag } of tagPositions) {
         const existingTag = tag.trim();
-        if (existingTag === normalizeTagToInsert(tagToInsert)) {
+        if (existingTag === normalizedTag) {
             // Tag already exists, select it and exit
             inputElement.focus();
             inputElement.setSelectionRange(start, end);
@@ -206,7 +208,6 @@ function insertTagToTextArea(inputElement, tagToInsert) {
         }
     }
 
-    const normalizedTag = normalizeTagToInsert(tagToInsert);
     const edit = buildRelatedTagInsertionEdit(
         text,
         cursorPos,

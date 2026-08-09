@@ -26,6 +26,7 @@ import {
     searchLoraManagerCandidates,
 } from './integrations/lora-manager-provider.js';
 import { searchDanbooruCandidates } from './integrations/danbooru-provider.js';
+import { isRawTagInput } from './integrations/input-compatibility.js';
 import {
     isChineseCompletionQuery,
     searchChineseDictionaryCandidates,
@@ -389,8 +390,11 @@ function insertTagToTextArea(inputElement, tagDataToInsert) {
     const text = inputElement.value;
     const cursorPos = inputElement.selectionStart;
 
+    const rawTagInput = isRawTagInput(inputElement);
     let normalizedTag;
-    if (tagDataToInsert.source === ModelTagSource.Lora) {
+    if (rawTagInput) {
+        normalizedTag = tagDataToInsert.tag;
+    } else if (tagDataToInsert.source === ModelTagSource.Lora) {
         // If the tag is from a LoRA source, add weight to it
         normalizedTag = addWeightToLora(tagDataToInsert.tag);
     } else if (Object.values(ModelTagSource).includes(tagDataToInsert.source)) {
@@ -400,12 +404,12 @@ function insertTagToTextArea(inputElement, tagDataToInsert) {
         normalizedTag = normalizeTagToInsert(tagDataToInsert.tag);
     }
 
-    const prefixArtist = tagDataToInsert.categoryText == 'artist' ? settingValues.prefixArtist : '';
+    const prefixArtist = !rawTagInput && tagDataToInsert.categoryText == 'artist' ? settingValues.prefixArtist : '';
     const edit = buildAutocompleteInsertionEdit(
         text,
         cursorPos,
         prefixArtist + normalizedTag,
-        settingValues.autoInsertComma
+        rawTagInput ? false : settingValues.autoInsertComma
     );
     applyTextInsertionEdit(inputElement, text, edit);
 

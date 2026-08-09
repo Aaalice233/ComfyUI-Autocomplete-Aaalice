@@ -46,6 +46,11 @@ registerInputOwnershipRule(({ element, nodeInfo }) => {
  * same completion, Chinese completion, and related-tag handlers.
  */
 export const EXTERNAL_INPUT_SELECTOR = 'input[data-autocomplete-plus], textarea[data-autocomplete-plus]';
+export const RAW_TAG_INPUT_MODE = 'raw-tag';
+
+export function isRawTagInput(element) {
+    return element?.getAttribute?.('data-autocomplete-plus-mode') === RAW_TAG_INPUT_MODE;
+}
 
 /**
  * Whether the element may receive autocomplete listeners: node textareas always
