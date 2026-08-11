@@ -14,7 +14,7 @@ import {
 import { AUTOCOMPLETE_TAG_INSERTED_EVENT, AutocompleteEventHandler } from "./autocomplete.js";
 import { RelatedTagsEventHandler } from "./related-tags.js";
 import { AutoFormatterEventHandler } from "./auto-formatter.js";
-import { NodeInfo, VUE_NODE_TEXTAREA_SELECTOR, getVueTextareaNodeInfo } from "./node-info.js";
+import { NodeInfo, VUE_TEXTAREA_SELECTORS, getVueTextareaNodeInfo } from "./node-info.js";
 import { createOnlineServicesSetting } from "./online-settings.js";
 import { EXTERNAL_INPUT_SELECTOR, isAttachableTextInput, isInputOwnedByAnotherExtension } from "./integrations/input-compatibility.js";
 import { getCurrentInterfaceLocale, getInterfaceText, setInterfaceLocalizationApp } from "./localization.js";
@@ -105,7 +105,7 @@ function initializeEventHandlers() {
         };
     }
 
-    const targetSelectors = [VUE_NODE_TEXTAREA_SELECTOR, EXTERNAL_INPUT_SELECTOR];
+    const targetSelectors = [...VUE_TEXTAREA_SELECTORS, EXTERNAL_INPUT_SELECTOR];
     if (settingValues._useFallbackAttachmentForEventListener) {
         targetSelectors.push('.comfy-multiline-input');
     }

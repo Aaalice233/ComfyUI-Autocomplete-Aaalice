@@ -14,6 +14,11 @@ export class NodeInfo {
 }
 
 export const VUE_NODE_TEXTAREA_SELECTOR = '.lg-node-widget textarea';
+export const VUE_PARAMETER_TEXTAREA_SELECTOR = '[data-testid="section-widgets-list"] textarea';
+export const VUE_TEXTAREA_SELECTORS = [
+    VUE_NODE_TEXTAREA_SELECTOR,
+    VUE_PARAMETER_TEXTAREA_SELECTOR,
+];
 
 const textareaWidgetTypes = new Set(['customtext', 'multiline', 'textarea']);
 
@@ -29,12 +34,22 @@ function getTextareaWidgets(node) {
     );
 }
 
+function getRenderedWidgetRow(element) {
+    return element?.closest?.('.lg-node-widget, .widget-item');
+}
+
+function getRenderedWidgetLabel(row) {
+    return row?.querySelector('label')?.textContent?.trim()
+        || row?.querySelector('.editable-text')?.textContent?.trim()
+        || '';
+}
+
 function findWidget(element, nodeElement, node) {
-    const row = element.closest('.lg-node-widget');
+    const row = getRenderedWidgetRow(element);
     const widgets = getTextareaWidgets(node);
     if (!row || widgets.length === 0) return null;
 
-    const label = row.querySelector('label')?.textContent?.trim();
+    const label = getRenderedWidgetLabel(row);
     if (label) {
         const matchedWidget = widgets.find(widget =>
             String(widget.label ?? widget.name).trim() === label
@@ -47,22 +62,43 @@ function findWidget(element, nodeElement, node) {
     return widgets[textareaRows.indexOf(row)] ?? null;
 }
 
+function resolveLegacyPromotedWidget(node, widget) {
+    if (!('sourceNodeId' in widget) || !('sourceWidgetName' in widget)) return null;
+
+    const sourceNode = getNodeById(node.subgraph, String(widget.sourceNodeId));
+    const sourceWidget = sourceNode?.widgets?.find(candidate =>
+        candidate.name === widget.sourceWidgetName
+    );
+    return sourceNode && sourceWidget ? { node: sourceNode, widget: sourceWidget } : null;
+}
+
+function resolveLinkedPromotedWidget(node, widget) {
+    const input = node.getSlotFromWidget?.(widget);
+    const subgraph = node.subgraph;
+    const inputSlot = subgraph?.inputNode?.slots?.find(candidate => candidate.name === input?.name);
+
+    for (const linkId of inputSlot?.linkIds ?? []) {
+        const target = subgraph.getLink?.(linkId)?.resolve?.(subgraph);
+        const sourceWidget = target?.inputNode?.getWidgetFromSlot?.(target.input);
+        if (sourceWidget) return { node: target.inputNode, widget: sourceWidget };
+    }
+
+    return null;
+}
+
 function resolvePromotedWidget(node, widget) {
     const visited = new Set();
 
-    while (node?.isSubgraphNode?.() && widget && 'sourceNodeId' in widget && 'sourceWidgetName' in widget) {
-        const key = `${node.id}:${widget.sourceNodeId}:${widget.sourceWidgetName}`;
-        if (visited.has(key)) break;
-        visited.add(key);
+    while (node?.isSubgraphNode?.() && widget) {
+        if (visited.has(node)) break;
+        visited.add(node);
 
-        const sourceNode = node.subgraph?.getNodeById?.(widget.sourceNodeId);
-        const sourceWidget = sourceNode?.widgets?.find(candidate =>
-            candidate.name === widget.sourceWidgetName
-        );
-        if (!sourceNode || !sourceWidget) break;
+        const source = resolveLegacyPromotedWidget(node, widget)
+            ?? resolveLinkedPromotedWidget(node, widget);
+        if (!source) break;
 
-        node = sourceNode;
-        widget = sourceWidget;
+        node = source.node;
+        widget = source.widget;
     }
 
     return { node, widget };
@@ -73,16 +109,23 @@ function resolvePromotedWidget(node, widget) {
  * Promoted subgraph widgets are traced to their original inner node.
  */
 export function getVueTextareaNodeInfo(element, graph) {
-    const nodeElement = element?.closest?.('.lg-node[data-node-id]');
-    if (!nodeElement?.dataset.nodeId) return null;
+    const canvasNodeElement = element?.closest?.('.lg-node[data-node-id]');
+    const widgetElement = element?.closest?.('[node-id][node-type]');
+    const nodeElement = canvasNodeElement ?? widgetElement;
+    const nodeId = canvasNodeElement?.dataset.nodeId ?? widgetElement?.getAttribute('node-id');
+    if (!nodeElement || !nodeId) return null;
 
-    const node = getNodeById(graph, nodeElement.dataset.nodeId);
+    const node = getNodeById(graph, nodeId);
     const widget = findWidget(element, nodeElement, node);
-    if (!node || !widget) return null;
+    if (!node || !widget) {
+        const nodeType = widgetElement?.getAttribute('node-type');
+        const inputName = getRenderedWidgetLabel(getRenderedWidgetRow(element));
+        return nodeType && inputName ? new NodeInfo(nodeType, inputName) : null;
+    }
 
     const resolved = resolvePromotedWidget(node, widget);
     const nodeType = resolved.node.comfyClass || resolved.node.type || resolved.node.constructor?.name;
-    if (!nodeType) return null;
+    if (!nodeType || !resolved.widget?.name) return null;
 
     return new NodeInfo(nodeType, resolved.widget.name);
 }
