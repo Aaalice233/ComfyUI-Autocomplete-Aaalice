@@ -52,8 +52,9 @@ class DanbooruHttpProviderTests(unittest.IsolatedAsyncioTestCase):
     def provider(self, responses, **options):
         sessions = []
 
-        def session_factory(**_kwargs):
+        def session_factory(**kwargs):
             session = FakeSession(responses.pop(0))
+            session.options = kwargs
             sessions.append(session)
             return session
 
@@ -75,6 +76,13 @@ class DanbooruHttpProviderTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, {"results": []})
         self.assertEqual(len(sessions), 2)
+
+    async def test_uses_environment_proxy_settings(self):
+        provider, sessions = self.provider([FakeResponse(200, {"results": []})])
+
+        await provider.request_json("https://example.test/tags", {})
+
+        self.assertIs(sessions[0].options["trust_env"], True)
 
     async def test_stops_after_eight_total_attempts_by_default(self):
         provider, sessions = self.provider([FakeResponse(503) for _ in range(8)])

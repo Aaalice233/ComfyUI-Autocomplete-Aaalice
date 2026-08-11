@@ -72,7 +72,7 @@ class DanbooruHttpProvider:
         for attempt in range(self.max_attempts):
             try:
                 await self.rate_limiter.acquire()
-                async with self.session_factory(timeout=timeout) as session:
+                async with self.session_factory(timeout=timeout, trust_env=True) as session:
                     async with session.get(
                         url,
                         params=params,
