@@ -23,6 +23,7 @@ const {
     shouldUseFastSearch,
     getSearchCandidateLimit,
     preserveSelectedCandidateIndex,
+    shouldRefreshCandidatePopupLayout,
     matchWord,
     getCurrentPartialTag,
     insertTagToTextArea
@@ -425,6 +426,12 @@ describe('Autocomplete Functions', () => {
             `${TagSource.Danbooru}\0selected_tag`,
             0,
         )).toBe(1);
+    });
+
+    test('refreshes popup layout when asynchronous providers change the candidate count', () => {
+        expect(shouldRefreshCandidatePopupLayout(3, 40, true)).toBe(true);
+        expect(shouldRefreshCandidatePopupLayout(40, 40, true)).toBe(false);
+        expect(shouldRefreshCandidatePopupLayout(40, 40, false)).toBe(true);
     });
 
     describe('insertTagToTextArea', () => {

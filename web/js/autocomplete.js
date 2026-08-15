@@ -162,6 +162,10 @@ function preserveSelectedCandidateIndex(candidates, selectedKey, fallbackIndex) 
         : Math.min(fallbackIndex, candidates.length - 1);
 }
 
+function shouldRefreshCandidatePopupLayout(previousCount, nextCount, wasVisible) {
+    return !wasVisible || previousCount !== nextCount;
+}
+
 function shouldUseFastSearch() {
     const sources = getEnabledTagSourceInPriorityOrder();
     if (settingValues.useFastSearch) {
@@ -582,7 +586,7 @@ class AutocompleteUI {
             const selectedKey = selectedCandidate
                 ? `${selectedCandidate.source}\0${String(selectedCandidate.tag).toLowerCase()}`
                 : null;
-            const hadCandidates = this.candidates.length > 0;
+            const previousCandidateCount = this.candidates.length;
             const wasVisible = this.root.style.display !== 'none';
             candidatePools[pool] = candidates;
             this.candidates = rankCandidates(
@@ -604,7 +608,11 @@ class AutocompleteUI {
                 );
             }
             if (this.candidates.length > 0) {
-                this.#displayCandidates(!hadCandidates || !wasVisible);
+                this.#displayCandidates(shouldRefreshCandidatePopupLayout(
+                    previousCandidateCount,
+                    this.candidates.length,
+                    wasVisible,
+                ));
             }
         };
         const providerTasks = [
@@ -1145,6 +1153,7 @@ export const __test__ = isTestEnvironment
         shouldUseFastSearch,
         getSearchCandidateLimit,
         preserveSelectedCandidateIndex,
+        shouldRefreshCandidatePopupLayout,
         matchWord,
         getCurrentPartialTag,
         insertTagToTextArea
