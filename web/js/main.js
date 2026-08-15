@@ -14,7 +14,7 @@ import {
 import { AUTOCOMPLETE_TAG_INSERTED_EVENT, AutocompleteEventHandler } from "./autocomplete.js";
 import { RelatedTagsEventHandler } from "./related-tags.js";
 import { AutoFormatterEventHandler } from "./auto-formatter.js";
-import { NodeInfo, VUE_TEXTAREA_SELECTORS, getVueTextareaNodeInfo } from "./node-info.js";
+import { NodeInfo, TEXTAREA_SELECTORS, getTextareaNodeInfo } from "./node-info.js";
 import { createOnlineServicesSetting } from "./online-settings.js";
 import { EXTERNAL_INPUT_SELECTOR, isAttachableTextInput, isInputOwnedByAnotherExtension } from "./integrations/input-compatibility.js";
 import { getCurrentInterfaceLocale, getInterfaceText, setInterfaceLocalizationApp } from "./localization.js";
@@ -105,19 +105,16 @@ function initializeEventHandlers() {
         };
     }
 
-    const targetSelectors = [...VUE_TEXTAREA_SELECTORS, EXTERNAL_INPUT_SELECTOR];
-    if (settingValues._useFallbackAttachmentForEventListener) {
-        targetSelectors.push('.comfy-multiline-input');
-    }
+    const targetSelectors = [...TEXTAREA_SELECTORS, EXTERNAL_INPUT_SELECTOR];
 
     function attachDiscoveredTextarea(element) {
-        const nodeInfo = getVueTextareaNodeInfo(element, app.canvas?.graph)
+        const nodeInfo = getTextareaNodeInfo(element, app.canvas?.graph)
             ?? new NodeInfo('Fallback', 'unknown');
         attachListeners(element, nodeInfo);
     }
 
-    // Nodes 2.0 renders a separate Vue textarea instead of the widget's DOM element.
-    // Observe those elements so regular and promoted subgraph inputs use the same handlers.
+    // Classic promoted widgets bypass ComfyWidgets.STRING, while Nodes 2.0 renders separate Vue textareas.
+    // Observe both paths so regular and promoted subgraph inputs use the same handlers.
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
@@ -173,7 +170,7 @@ function initializeEventHandlers() {
 
     function resolveNodeInfo(element) {
         return attachedElementNodeInfoMap.get(element)
-            ?? getVueTextareaNodeInfo(element, app.canvas?.graph);
+            ?? getTextareaNodeInfo(element, app.canvas?.graph);
     }
 
     function skipOwnedInput(event) {
@@ -294,7 +291,7 @@ app.registerExtension({
                     return;
                 }
 
-                const nodeInfo = getVueTextareaNodeInfo(activeEl, app.canvas?.graph)
+                const nodeInfo = getTextareaNodeInfo(activeEl, app.canvas?.graph)
                     ?? attachedElementNodeInfoMap.get(activeEl);
                 if (!nodeInfo) {
                     console.warn('[Autocomplete-Plus] Format command: Node info not found for focused textarea');

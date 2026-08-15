@@ -1,9 +1,12 @@
 /** @jest-environment jsdom */
 
 import {
+    CLASSIC_TEXTAREA_SELECTOR,
+    TEXTAREA_SELECTORS,
     VUE_NODE_TEXTAREA_SELECTOR,
     VUE_PARAMETER_TEXTAREA_SELECTOR,
     VUE_TEXTAREA_SELECTORS,
+    getTextareaNodeInfo,
     getVueTextareaNodeInfo
 } from "../../web/js/node-info.js";
 
@@ -78,6 +81,7 @@ function createStoreBackedSubgraph(nodeId = 20) {
         }
     };
     const graph = {
+        nodes: [subgraphNode],
         getNodeById: id => Number(id) === Number(nodeId) ? subgraphNode : null
     };
     return graph;
@@ -87,12 +91,18 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-describe('Nodes 2.0 textarea node info', () => {
-    test('includes node and parameter-panel textareas', () => {
+describe('textarea node info', () => {
+    test('includes classic, Nodes 2.0, and parameter-panel textareas', () => {
         expect(VUE_TEXTAREA_SELECTORS).toEqual([
             VUE_NODE_TEXTAREA_SELECTOR,
             VUE_PARAMETER_TEXTAREA_SELECTOR
         ]);
+        expect(TEXTAREA_SELECTORS).toEqual([
+            CLASSIC_TEXTAREA_SELECTOR,
+            ...VUE_TEXTAREA_SELECTORS
+        ]);
+        expect(getVueTextareaNodeInfo).toBe(getTextareaNodeInfo);
+        expect(CLASSIC_TEXTAREA_SELECTOR).toBe('.comfy-multiline-input');
         expect(VUE_NODE_TEXTAREA_SELECTOR).toBe('.lg-node-widget textarea');
         expect(VUE_PARAMETER_TEXTAREA_SELECTOR).toBe('[data-testid="section-widgets-list"] textarea');
     });
@@ -106,7 +116,7 @@ describe('Nodes 2.0 textarea node info', () => {
         };
         const graph = { getNodeById: id => Number(id) === 12 ? node : null };
 
-        expect(getVueTextareaNodeInfo(textarea, graph)).toEqual({
+        expect(getTextareaNodeInfo(textarea, graph)).toEqual({
             nodeType: 'CLIPTextEncode',
             inputName: 'text'
         });
@@ -134,7 +144,7 @@ describe('Nodes 2.0 textarea node info', () => {
         };
         const graph = { getNodeById: id => Number(id) === 20 ? subgraphNode : null };
 
-        expect(getVueTextareaNodeInfo(textarea, graph)).toEqual({
+        expect(getTextareaNodeInfo(textarea, graph)).toEqual({
             nodeType: 'CLIPTextEncode',
             inputName: 'text'
         });
@@ -143,7 +153,7 @@ describe('Nodes 2.0 textarea node info', () => {
     test('traces a store-backed promoted subgraph textarea to its linked source widget', () => {
         const textarea = createNodeTextarea(20, 'Prompt');
 
-        expect(getVueTextareaNodeInfo(textarea, createStoreBackedSubgraph())).toEqual({
+        expect(getTextareaNodeInfo(textarea, createStoreBackedSubgraph())).toEqual({
             nodeType: 'CLIPTextEncode',
             inputName: 'text'
         });
@@ -153,7 +163,21 @@ describe('Nodes 2.0 textarea node info', () => {
         const textarea = createParameterTextarea(20, 'subgraph-type-id', 'Prompt');
 
         expect(textarea.matches(VUE_PARAMETER_TEXTAREA_SELECTOR)).toBe(true);
-        expect(getVueTextareaNodeInfo(textarea, createStoreBackedSubgraph())).toEqual({
+        expect(getTextareaNodeInfo(textarea, createStoreBackedSubgraph())).toEqual({
+            nodeType: 'CLIPTextEncode',
+            inputName: 'text'
+        });
+    });
+
+    test('traces a classic promoted subgraph textarea by its widget element', () => {
+        const textarea = document.createElement('textarea');
+        textarea.className = 'comfy-multiline-input';
+        document.body.appendChild(textarea);
+        const graph = createStoreBackedSubgraph();
+        graph.nodes[0].widgets[0].element = textarea;
+
+        expect(textarea.matches(CLASSIC_TEXTAREA_SELECTOR)).toBe(true);
+        expect(getTextareaNodeInfo(textarea, graph)).toEqual({
             nodeType: 'CLIPTextEncode',
             inputName: 'text'
         });

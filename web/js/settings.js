@@ -33,7 +33,6 @@ export const settingValues = {
 
 
     // Internal logic settings
-    _useFallbackAttachmentForEventListener: false, // Fallback to attach event listener when somthing goes wrong
     _maxTagLength: 100, // Maximum tag length to prevent performance issues with long text input
 
     // Debugging settings (use internally)

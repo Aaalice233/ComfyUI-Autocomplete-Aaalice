@@ -13,11 +13,16 @@ export class NodeInfo {
     }
 }
 
+export const CLASSIC_TEXTAREA_SELECTOR = '.comfy-multiline-input';
 export const VUE_NODE_TEXTAREA_SELECTOR = '.lg-node-widget textarea';
 export const VUE_PARAMETER_TEXTAREA_SELECTOR = '[data-testid="section-widgets-list"] textarea';
 export const VUE_TEXTAREA_SELECTORS = [
     VUE_NODE_TEXTAREA_SELECTOR,
     VUE_PARAMETER_TEXTAREA_SELECTOR,
+];
+export const TEXTAREA_SELECTORS = [
+    CLASSIC_TEXTAREA_SELECTOR,
+    ...VUE_TEXTAREA_SELECTORS,
 ];
 
 const textareaWidgetTypes = new Set(['customtext', 'multiline', 'textarea']);
@@ -60,6 +65,16 @@ function findWidget(element, nodeElement, node) {
     const textareaRows = Array.from(nodeElement.querySelectorAll('.lg-node-widget'))
         .filter(widgetRow => widgetRow.querySelector('textarea'));
     return widgets[textareaRows.indexOf(row)] ?? null;
+}
+
+function findWidgetByElement(element, graph) {
+    for (const node of graph?.nodes ?? graph?._nodes ?? []) {
+        const widget = getTextareaWidgets(node).find(candidate =>
+            (candidate.element ?? candidate.inputEl) === element
+        );
+        if (widget) return { node, widget };
+    }
+    return null;
 }
 
 function resolveLegacyPromotedWidget(node, widget) {
@@ -105,22 +120,30 @@ function resolvePromotedWidget(node, widget) {
 }
 
 /**
- * Resolve Nodes 2.0's rendered textarea back to its LiteGraph node and widget.
+ * Resolve a rendered textarea back to its LiteGraph node and widget.
  * Promoted subgraph widgets are traced to their original inner node.
  */
-export function getVueTextareaNodeInfo(element, graph) {
+export function getTextareaNodeInfo(element, graph) {
     const canvasNodeElement = element?.closest?.('.lg-node[data-node-id]');
     const widgetElement = element?.closest?.('[node-id][node-type]');
     const nodeElement = canvasNodeElement ?? widgetElement;
     const nodeId = canvasNodeElement?.dataset.nodeId ?? widgetElement?.getAttribute('node-id');
-    if (!nodeElement || !nodeId) return null;
+    let node;
+    let widget;
 
-    const node = getNodeById(graph, nodeId);
-    const widget = findWidget(element, nodeElement, node);
-    if (!node || !widget) {
-        const nodeType = widgetElement?.getAttribute('node-type');
-        const inputName = getRenderedWidgetLabel(getRenderedWidgetRow(element));
-        return nodeType && inputName ? new NodeInfo(nodeType, inputName) : null;
+    if (nodeElement && nodeId) {
+        node = getNodeById(graph, nodeId);
+        widget = findWidget(element, nodeElement, node);
+        if (!node || !widget) {
+            const nodeType = widgetElement?.getAttribute('node-type');
+            const inputName = getRenderedWidgetLabel(getRenderedWidgetRow(element));
+            return nodeType && inputName ? new NodeInfo(nodeType, inputName) : null;
+        }
+    } else {
+        const matched = findWidgetByElement(element, graph);
+        if (!matched) return null;
+        node = matched.node;
+        widget = matched.widget;
     }
 
     const resolved = resolvePromotedWidget(node, widget);
@@ -129,3 +152,5 @@ export function getVueTextareaNodeInfo(element, graph) {
 
     return new NodeInfo(nodeType, resolved.widget.name);
 }
+
+export const getVueTextareaNodeInfo = getTextareaNodeInfo;
