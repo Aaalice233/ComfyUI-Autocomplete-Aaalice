@@ -123,12 +123,12 @@ const UI_TEXT = {
         autocompleteClose: '關閉補全選單',
         relatedTagsClose: '關閉共現選單',
         autocompleteFooterAriaLabel: '本機資料、線上服務狀態與設定',
-        autocompleteCooccurrenceLabel: '本地共現',
+        autocompleteCooccurrenceLabel: '本機共現',
         autocompleteCooccurrenceReady: '已就緒',
         autocompleteCooccurrenceLoading: '載入中 {progress}%',
         autocompleteCooccurrenceWaiting: '待載入',
         autocompleteCooccurrenceError: '載入失敗',
-        autocompleteDictionaryLabel: '漢化庫',
+        autocompleteDictionaryLabel: '漢化資料庫',
         autocompleteDictionaryReady: '可用',
         autocompleteDictionaryDownloading: '下載中',
         autocompleteDictionaryChecking: '檢查中',
@@ -205,7 +205,12 @@ export function setInterfaceLocalizationApp(app) {
 
 export function normalizeInterfaceLocale(locale) {
     const normalized = String(locale || 'en').replaceAll('_', '-').toLowerCase();
-    if (['zh-tw', 'zh-hant', 'zh-hk'].includes(normalized)) return 'zh-TW';
+    const localeParts = normalized.split('-');
+    if (normalized.startsWith('zh')
+        && (localeParts.includes('hant') || localeParts.includes('cht')
+            || localeParts.some(part => ['tw', 'hk', 'mo'].includes(part)))) {
+        return 'zh-TW';
+    }
     if (normalized.startsWith('zh')) return 'zh';
     if (normalized.startsWith('ja')) return 'ja';
     return 'en';

@@ -189,7 +189,9 @@ class TranslationStoreTests(unittest.TestCase):
 
 class TranslationValidationTests(unittest.TestCase):
     def test_locale_and_items_are_normalized(self):
-        self.assertEqual(normalize_locale("zh_Hant"), "zh-TW")
+        for locale in ("zh_Hant", "zh-Hant-HK", "zh_MO", "zh-CHT"):
+            with self.subTest(locale=locale):
+                self.assertEqual(normalize_locale(locale), "zh-TW")
         items = normalize_items(
             [
                 {"name": "tag", "category": "4", "post_count": "8", "origin": "danbooru_api"},

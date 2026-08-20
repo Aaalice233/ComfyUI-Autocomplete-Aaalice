@@ -507,7 +507,12 @@ class TranslationManager:
 def normalize_locale(locale):
     normalized = str(locale or "en").replace("_", "-")
     lowered = normalized.lower()
-    if lowered in {"zh-tw", "zh-hant", "zh-hk"}:
+    locale_parts = lowered.split("-")
+    if lowered.startswith("zh") and (
+        "hant" in locale_parts
+        or "cht" in locale_parts
+        or any(part in {"tw", "hk", "mo"} for part in locale_parts)
+    ):
         return "zh-TW"
     if lowered.startswith("zh"):
         return "zh"

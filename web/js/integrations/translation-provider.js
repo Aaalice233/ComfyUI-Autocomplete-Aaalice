@@ -108,7 +108,7 @@ function isUsableTranslation(tag, translation, locale, source = "ai_cache") {
     }
     if (isAuthoritativeTranslationSource(source)) return true;
     const normalizedLocale = normalizeInterfaceLocale(locale);
-    if (normalizedLocale === "zh") {
+    if (["zh", "zh-TW"].includes(normalizedLocale)) {
         return /\p{Script=Han}/u.test(value)
             && !/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(value);
     }

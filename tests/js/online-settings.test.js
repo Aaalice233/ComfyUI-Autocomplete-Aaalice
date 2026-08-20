@@ -112,6 +112,14 @@ describe('online services settings panel', () => {
         document.documentElement.lang = 'zh-CN';
         expect(createOnlineServicesSetting({}, 'Autocomplete Plus', 'AutocompletePlus').category[1])
             .toBe(' 在线服务');
+
+        document.documentElement.lang = 'zh-Hant-HK';
+        const traditionalSetting = createOnlineServicesSetting({}, 'Autocomplete Plus', 'AutocompletePlus');
+        expect(traditionalSetting.category).toEqual([
+            'Autocomplete Plus',
+            ' 線上服務',
+            '線上補全與翻譯',
+        ]);
     });
 
     test('hides the Chinese dictionary page outside Chinese locales', async () => {

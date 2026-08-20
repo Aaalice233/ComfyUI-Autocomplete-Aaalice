@@ -34,7 +34,7 @@
         "tooltip": "使用索引搜尋立即顯示結果。大型標籤來源會自動啟用，以免阻塞介面。"
     },
     "AutocompletePlus_Autocompletion_EnableModels": {
-        "name": "顯示Lora和Embedding"
+        "name": "顯示 LoRA 和 Embedding"
     },
     "AutocompletePlus_Integration_LoRAManager": {
         "name": "LoRA Manager 相容",
@@ -50,16 +50,16 @@
         "tooltip": "以英文逗號分隔節點類型名稱，這些節點的文字方塊將交由其他擴充功能處理。"
     },
     "AutocompletePlus_Autocompletion_PrefixArtist": {
-        "name": "在藝術家標籤前添加的字串",
-        "tooltip": "透過自動完成插入藝術家標籤時，在標籤前添加的文字。\n例： '{'@'}' -> '{'@'}artist_name'."
+        "name": "藝術家標籤前綴",
+        "tooltip": "透過自動補全插入藝術家標籤時，在標籤前加上指定文字。\n例如：設定為 '{'@'}' 後，將插入 '{'@'}artist_name'。"
     },
     "AutocompletePlus_Autocompletion_ReplaceUnderscoreWithSpace": {
-        "name": "將'_'替換為'空格'",
-        "tooltip": "此設定也會影響共現標籤顯示"
+        "name": "將底線替換為空格",
+        "tooltip": "插入標籤時將底線替換為空格；此設定也會影響共現標籤的顯示。"
     },
     "AutocompletePlus_Autocompletion_AutoInsertComma": {
-        "name": "自動插入逗號",
-        "tooltip": "從自動完成插入標籤時自動在標籤後添加逗號"
+        "name": "自動加入逗號",
+        "tooltip": "透過自動補全插入標籤時，自動在標籤末尾加入逗號。"
     },
     "AutocompletePlus_Autocompletion_MaximumResults": {
         "name": "自動完成結果上限",
@@ -93,19 +93,19 @@
     },
     "AutocompletePlus_Display_HideAlias": {
         "name": "隱藏別名",
-        "tooltip": "隱藏自動完成和共現標籤顯示中的別名欄"
+        "tooltip": "隱藏自動補全和共現標籤中的別名欄。"
     },
     "AutocompletePlus_AutoFormatter_Trigger": {
         "name": "自動格式化觸發方式",
-        "tooltip": "自動: 離開文字方塊時自動格式化\n手動: 僅透過鍵盤快速鍵格式化。預設快速鍵: (Alt+Shift+F)",
+        "tooltip": "自動：離開文字方塊時自動格式化\n手動：僅透過鍵盤快速鍵格式化。預設快速鍵：(Alt+Shift+F)",
         "options": {
             "auto": "自動",
             "manual": "手動"
         }
     },
     "AutocompletePlus_AutoFormatter_UseTrailingComma": {
-        "name": "在行末添加逗號",
-        "tooltip": "啟用時，確保所有行都以逗號結尾。\n停用時，移除結尾逗號。"
+        "name": "在行末加入逗號",
+        "tooltip": "啟用時，確保所有行都以逗號結尾。\n停用時，移除結尾的逗號。"
     },
     "AutocompletePlus_AutoFormatter_EnableAutoFormat": {
         "name": "啟用自動格式化"

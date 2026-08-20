@@ -13,7 +13,10 @@ describe('runtime UI localization', () => {
     test.each([
         ['zh_CN', 'zh'],
         ['zh-Hant', 'zh-TW'],
+        ['zh-Hant-HK', 'zh-TW'],
         ['zh-TW', 'zh-TW'],
+        ['zh_MO', 'zh-TW'],
+        ['zh-CHT', 'zh-TW'],
         ['ja-JP', 'ja'],
         ['fr-FR', 'en'],
     ])('normalizes %s to %s', (input, expected) => {

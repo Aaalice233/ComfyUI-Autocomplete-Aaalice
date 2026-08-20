@@ -586,9 +586,9 @@ export function createOnlineServicesSetting(app, extensionName, extensionId) {
     const text = TEXT[getCurrentInterfaceLocale()] || TEXT.en;
     return {
         id: `${extensionId}.OnlineServices.Manager`,
-        name: "Configure online completion and translation",
+        name: text.open,
         // ComfyUI sorts category keys alphabetically; the leading space keeps this entry first.
-        category: [extensionName, ` ${text.category}`, "Online completion and translation"],
+        category: [extensionName, ` ${text.category}`, text.title],
         defaultValue: null,
         type: () => {
             const button = element("button", "p-button p-component p-button-primary", text.open);

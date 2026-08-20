@@ -1,6 +1,6 @@
 # ComfyUI-Autocomplete-Aaalice
 
-## [English](README_en.md) • [简体中文](../README.md) • 日本語
+## [English](README_en.md) • [简体中文](../README.md) • [繁體中文](README_zh-TW.md) • 日本語
 
 ![オートコンプリートのプレビュー](https://github.com/user-attachments/assets/45dd0598-4c04-49ab-85f7-33fc9026921c)
 

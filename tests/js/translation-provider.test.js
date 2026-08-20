@@ -185,6 +185,12 @@ describe('on-demand translation provider', () => {
         }
     });
 
+    test('rejects non-Chinese DeepSeek values for Traditional Chinese', () => {
+        expect(__test__.isUsableTranslation('blue_hair', '藍色頭髮', 'zh-TW')).toBe(true);
+        expect(__test__.isUsableTranslation('blue_hair', 'Blue hair', 'zh-TW')).toBe(false);
+        expect(__test__.isUsableTranslation('blue_hair', 'ブルーヘア', 'zh-TW')).toBe(false);
+    });
+
     test('trusts a non-Han display name from the Simplified Chinese dictionary', async () => {
         const candidate = new TagData(
             'zero_two_(darling_in_the_franxx)',
