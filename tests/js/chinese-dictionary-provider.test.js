@@ -8,27 +8,29 @@ import {
     searchChineseDictionaryCandidates,
 } from '../../web/js/integrations/chinese-dictionary-provider.js';
 
-describe('Simplified Chinese dictionary provider', () => {
+describe('Chinese dictionary provider', () => {
     beforeEach(() => {
         __test__.reset();
     });
 
-    test('automatically ensures the dictionary only for Simplified Chinese', async () => {
+    test('automatically ensures the dictionary for Simplified and Traditional Chinese', async () => {
         const fetchImpl = jest.fn(async () => ({
             ok: true,
             json: async () => ({ state: 'downloading' }),
         }));
 
         await ensureChineseDictionary('en', { fetchImpl });
-        await ensureChineseDictionary('zh-TW', { fetchImpl });
         expect(fetchImpl).not.toHaveBeenCalled();
 
+        await ensureChineseDictionary('zh-TW', { fetchImpl });
         await ensureChineseDictionary('zh-CN', { fetchImpl });
-        await ensureChineseDictionary('zh', { fetchImpl });
         expect(fetchImpl).toHaveBeenCalledTimes(1);
         expect(fetchImpl).toHaveBeenCalledWith(
             '/autocomplete-plus/chinese-dictionary/ensure',
-            expect.objectContaining({ method: 'POST' }),
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({ locale: 'zh-TW' }),
+            }),
         );
     });
 

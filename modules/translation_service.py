@@ -200,7 +200,7 @@ class TranslationManager:
     def catalog(self, locale):
         normalized_locale = normalize_locale(locale)
         catalog = self.store.catalog(normalized_locale)
-        if normalized_locale == "zh" and self.primary_store is not None and catalog:
+        if normalized_locale in {"zh", "zh-TW"} and self.primary_store is not None and catalog:
             primary = self._lookup_primary([row["tag_name"] for row in catalog])
             return [
                 {**row, **primary.get(row["tag_name"], {})}
@@ -309,7 +309,7 @@ class TranslationManager:
         if locale == "en" or not items:
             return
         if (
-            locale == "zh"
+            locale in {"zh", "zh-TW"}
             and self.primary_store is not None
             and self.primary_store.status().get("state") in {"missing", "checking", "downloading"}
         ):
@@ -416,7 +416,7 @@ class TranslationManager:
                     waiter.cancel()
 
     async def _get_primary(self, locale, tag_names):
-        if locale != "zh" or self.primary_store is None or not tag_names:
+        if locale not in {"zh", "zh-TW"} or self.primary_store is None or not tag_names:
             return {}
         return await asyncio.to_thread(self._lookup_primary, tag_names)
 

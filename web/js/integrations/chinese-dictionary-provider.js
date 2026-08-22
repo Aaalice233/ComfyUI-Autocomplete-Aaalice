@@ -12,6 +12,10 @@ function isSimplifiedChinese(locale) {
     return normalizeInterfaceLocale(locale) === "zh";
 }
 
+function isChineseInterface(locale) {
+    return ["zh", "zh-TW"].includes(normalizeInterfaceLocale(locale));
+}
+
 function normalizeSearchQuery(query) {
     return String(query || "").normalize("NFKC").trim().replace(/\s+/gu, " ");
 }
@@ -104,12 +108,13 @@ async function requestJson(path, options = {}, fetchImpl = fetch) {
 }
 
 export async function ensureChineseDictionary(locale, options = {}) {
-    if (!isSimplifiedChinese(locale)) return null;
+    const normalizedLocale = normalizeInterfaceLocale(locale);
+    if (!isChineseInterface(normalizedLocale)) return null;
     if (ensurePromise) return ensurePromise;
     const { fetchImpl = fetch } = options;
     ensurePromise = requestJson("/ensure", {
         method: "POST",
-        body: JSON.stringify({ locale: "zh" }),
+        body: JSON.stringify({ locale: normalizedLocale }),
     }, fetchImpl).catch(() => null);
     return ensurePromise;
 }

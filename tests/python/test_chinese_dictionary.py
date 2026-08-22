@@ -153,11 +153,11 @@ class ChineseDictionaryUpdateTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.temp.cleanup()
 
-    async def test_ensure_only_downloads_once_for_simplified_chinese(self):
+    async def test_ensure_only_downloads_once_for_chinese_interfaces(self):
         service = LocalDownloadDictionaryService(self.install_dir, self.remote_path)
         await service.ensure("en")
         self.assertEqual(service.status()["state"], "missing")
-        await service.ensure("zh-CN")
+        await service.ensure("zh-TW")
         first_task = service._task
         await service.ensure("zh")
         self.assertIs(service._task, first_task)
@@ -222,13 +222,9 @@ class PrimaryTranslationStore:
 class DictionaryTranslationPrecedenceTests(unittest.IsolatedAsyncioTestCase):
     def create_manager(self, directory):
         store = TranslationStore(os.path.join(directory, "translations.sqlite3"))
-        store.save_many(
-            "zh",
-            [{"name": "known_tag", "category": 0, "post_count": 1, "origin": "local"}],
-            {"known_tag": "旧的LLM译名"},
-            "model",
-            "prompt",
-        )
+        item = [{"name": "known_tag", "category": 0, "post_count": 1, "origin": "local"}]
+        store.save_many("zh", item, {"known_tag": "旧的LLM译名"}, "model", "prompt")
+        store.save_many("zh-TW", item, {"known_tag": "舊的 LLM 譯名"}, "model", "prompt")
         config_path = os.path.join(directory, "config.json")
         config_store = OnlineServiceConfig(config_path)
         config_store.save({"deepseek": {"api_key": "not-used"}})
@@ -240,29 +236,32 @@ class DictionaryTranslationPrecedenceTests(unittest.IsolatedAsyncioTestCase):
         )
         return manager
 
-    def test_primary_dictionary_replaces_cached_llm_translation_in_catalog(self):
+    def test_primary_dictionary_replaces_cached_llm_translation_in_chinese_catalogs(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = self.create_manager(directory)
 
-            catalog = manager.catalog("zh")
+            for locale in ("zh", "zh-TW"):
+                with self.subTest(locale=locale):
+                    catalog = manager.catalog(locale)
+                    self.assertEqual(catalog[0]["text"], "数据库译名")
+                    self.assertEqual(catalog[0]["origin"], "ffdkj")
 
-            self.assertEqual(catalog[0]["text"], "数据库译名")
-            self.assertEqual(catalog[0]["origin"], "ffdkj")
-
-    async def test_primary_dictionary_wins_before_cached_or_new_llm_translation(self):
+    async def test_primary_dictionary_wins_for_simplified_and_traditional_chinese(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = self.create_manager(directory)
 
-            chunks = [
-                chunk
-                async for chunk in manager.resolve_stream(
-                    "zh",
-                    [{"name": "known_tag", "category": 0, "post_count": 1}],
-                )
-            ]
-            self.assertEqual(chunks[0]["translations"], {"known_tag": "数据库译名"})
-            self.assertEqual(chunks[0]["sources"], {"known_tag": "ffdkj"})
-            self.assertEqual(len(chunks), 1)
+            for locale in ("zh", "zh-TW"):
+                with self.subTest(locale=locale):
+                    chunks = [
+                        chunk
+                        async for chunk in manager.resolve_stream(
+                            locale,
+                            [{"name": "known_tag", "category": 0, "post_count": 1}],
+                        )
+                    ]
+                    self.assertEqual(chunks[0]["translations"], {"known_tag": "数据库译名"})
+                    self.assertEqual(chunks[0]["sources"], {"known_tag": "ffdkj"})
+                    self.assertEqual(len(chunks), 1)
 
 
 class DanbooruReadRateLimiterTests(unittest.IsolatedAsyncioTestCase):

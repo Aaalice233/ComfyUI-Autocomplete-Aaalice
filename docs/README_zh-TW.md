@@ -69,7 +69,7 @@ git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 - 內建 Danbooru CSV 是主要本機資料來源，可能同時包含 SFW 和 NSFW 標籤。
 - 安裝 [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) 後，可補充本機標籤、LoRA、Embedding 和 Wildcard。
 - Danbooru 匿名介面可補充缺少或較新的標籤與共現標籤。
-- 簡體中文可使用 [ffdkj 漢化資料庫](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table)。由於其上游儲存庫目前沒有明確的 LICENSE，本外掛不會直接散布該資料庫，而是在需要時另外下載。
+- 簡體與繁體中文介面都可使用 [ffdkj 漢化資料庫](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table) 提供的簡中譯名作為本機翻譯；簡中介面另外支援中文反查英文 Tag。由於其上游儲存庫目前沒有明確的 LICENSE，本外掛不會直接散布該資料庫，而是在需要時另外下載。
 - DeepSeek 可翻譯漢化資料庫缺少的標籤和其他語言；請在**線上服務**中設定。
 - 只有 ComfyUI 使用中文介面時才會顯示「中文漢化資料庫」頁面。
 

@@ -69,7 +69,7 @@ Select or confirm a complete tag to explore related tags. The panel can be repos
 - The bundled Danbooru CSV is the primary local source and may include SFW and NSFW tags.
 - [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) can provide local tag, LoRA, Embedding, and Wildcard results.
 - Anonymous Danbooru requests can supplement missing or newer tags and related tags.
-- Simplified Chinese can use the [ffdkj translation dictionary](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table). It is downloaded separately because its upstream repository does not currently declare a license.
+- Both Chinese interfaces use Simplified Chinese display names from the [ffdkj translation dictionary](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table) as a local fallback; the Simplified Chinese interface also supports Chinese-to-English tag lookup. The dictionary is downloaded separately because its upstream repository does not currently declare a license.
 - DeepSeek can translate dictionary misses and languages not covered by the Chinese dictionary. Configure it under **Online Services**.
 - The Chinese-dictionary page is shown only when ComfyUI uses a Chinese interface.
 

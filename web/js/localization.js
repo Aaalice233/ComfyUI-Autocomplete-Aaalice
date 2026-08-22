@@ -113,7 +113,7 @@ const UI_TEXT = {
         danbooruOnlineFallback: '由 Danbooru 線上備援補充',
         loraManagerOrigin: '由 LoRA Manager 提供',
         csvOrigin: '由基礎 CSV 資料集提供',
-        chineseDictionaryOrigin: '由 ffdkj 簡體中文資料庫檢索（僅簡中使用）',
+        chineseDictionaryOrigin: '由 ffdkj 簡體中文資料庫提供',
         translatingTag: '正在翻譯標籤',
         similarity: '相似度',
         autocompleteHeaderTitle: '標籤補全',

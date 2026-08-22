@@ -93,7 +93,8 @@ class ChineseDictionaryService:
 
     async def ensure(self, locale):
         normalized = str(locale or "").replace("_", "-").lower()
-        if normalized not in {"zh", "zh-cn", "zh-hans"}:
+        chinese_locales = {"zh", "zh-cn", "zh-hans", "zh-tw", "zh-hant", "zh-hk", "zh-mo"}
+        if normalized not in chinese_locales:
             return self.status()
         if os.path.exists(self.database_path) or self._auto_attempted:
             return self.status()

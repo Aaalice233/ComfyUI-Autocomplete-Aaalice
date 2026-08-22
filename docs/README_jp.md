@@ -69,7 +69,7 @@ git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 - 同梱の Danbooru CSV が主要なローカルソースで、SFW と NSFW の両方を含む場合があります。
 - [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) からローカルのタグ、LoRA、Embedding、Wildcard を補足できます。
 - Danbooru の匿名 API で不足・更新されたタグと関連タグを補足できます。
-- 簡体字中国語では [ffdkj 翻訳辞書](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table) を利用できます。上流リポジトリに明確な LICENSE がないため、辞書は同梱せず必要時に別途ダウンロードします。
+- 簡体字・繁体字中国語 UI では [ffdkj 翻訳辞書](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table) の簡体字訳をローカル翻訳として利用でき、簡体字中国語 UI では中国語から英語タグへの検索にも対応します。上流リポジトリに明確な LICENSE がないため、辞書は同梱せず必要時に別途ダウンロードします。
 - DeepSeek は辞書にないタグや他言語を翻訳できます。**オンラインサービス**で設定してください。
 - 「中国語辞書」ページは ComfyUI が中国語表示の場合だけ表示されます。
 

@@ -69,7 +69,7 @@ git clone https://github.com/Aaalice233/ComfyUI-Autocomplete-Aaalice.git
 - 内置 Danbooru CSV 是主要本地数据源，可能同时包含 SFW 和 NSFW 标签。
 - 安装 [ComfyUI LoRA Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) 后，可补充本地标签、LoRA、Embedding 和 Wildcard。
 - Danbooru 匿名接口可补充缺失或较新的标签与共现标签。
-- 简体中文可使用 [ffdkj 汉化数据库](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table)。由于其上游仓库目前没有明确 LICENSE，本插件不会直接分发该数据库，而是在需要时单独下载。
+- 简体与繁体中文界面都可使用 [ffdkj 汉化数据库](https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table) 提供的简中译名作为本地汉化；简中界面另外支持中文反查英文 Tag。由于其上游仓库目前没有明确 LICENSE，本插件不会直接分发该数据库，而是在需要时单独下载。
 - DeepSeek 可翻译汉化数据库缺失的标签和其他语言；在**在线服务**中配置。
 - 只有 ComfyUI 使用中文界面时才显示“中文汉化数据库”页面。
 
